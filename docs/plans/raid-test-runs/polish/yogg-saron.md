@@ -123,17 +123,13 @@ a reprisal-held bot first; exit lead 1.2×; the swap deferral covers any Guardia
 by tank deaths within 10 s of a deferral). Diminish Power: a bot tank breaks a Crusher's channel once bots carrying
 its stack are below, without waiting for the rest of the team (Q2, 2026-11-24). Cloud geometry (Q1, 2026-11-24):
 re-derive phase 1 positions from the measured orbits, one navprobed position change per round, the melee core first,
-picked only when it ranks first. Left alone by choice: the shaman's Reincarnation onto the stack, late Guardians woken
+picked only when it ranks first. Phase 3 burn (Q3, 2026-11-25, one window): once Yogg is under 12%, ranged leave the
+Guardians and put everything on him; judged by Yogg's end and the time from 12% to the tank deaths; build in round 25.
+Left alone by choice: the shaman's Reincarnation onto the stack, late Guardians woken
 by the back line, the raid working the next Guardian while a low one waits out its gap.
 
 **Open questions.**
 
-- **Q3, a burn at the end of phase 3** (round 23, unanswered). Should ranged leave the Guardians and put everything
-  on Yogg once he is under ~12%? Ranged spend 83-90% of 71-126k/s on Guardians over 30% and only DoTs on Yogg, so
-  Yogg falls ~0.1%/s on melee. Window 37's uld6 died with Yogg at 1.65% ~100 s after crossing 12%, and uld1 killed
-  as its last raiders died; with the ranged on him the last 12% (~5.3M) takes ~40 s. The risk: Guardians not brought
-  back to 30% swing harder and drain more for those 40 s, so the tanks may fall sooner. **Recommended: yes, for one
-  window, at 12%**, judged by Yogg's end and the time from 12% to the tank deaths.
 - **Q4, Misdirection on fresh Immortal Guardians** (round 24). Should a hunter put Misdirection on a bot tank and
   shoot each fresh Guardian at its spawn, so it opens on the tank instead of the fixed melee? A hit ends the 4 s
   stasis and the redirected threat makes the tank its first victim; today about half go to a melee at +4.0 s (uld4 14
