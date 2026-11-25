@@ -29,7 +29,7 @@ BEFORE = HEAD - datetime.timedelta(hours=2)
 AFTER = HEAD + datetime.timedelta(hours=1)
 T0 = int(HEAD.timestamp() * 1000) + 3_600_000
 POOLS = ["uld1", "uld2", "uld3"]
-ULD_POOLS = [f"uld{n}" for n in range(1, 7)]
+ULD_POOLS = [f"uld{n}" for n in range(1, 31)]
 
 
 class FakeCorpus:
@@ -506,7 +506,7 @@ class ArgsTest(unittest.TestCase):
 
     def test_toc_defaults_to_heroic(self):
         args = self.parse("cycle", "--boss", "northrend-beasts", "--scenario", "toc-beasts", "--raid", "toc")
-        self.assertEqual((args.diff, args.pools), ("25h", [f"toc{n}" for n in range(1, 7)]))
+        self.assertEqual((args.diff, args.pools), ("25h", [f"toc{n}" for n in range(1, 31)]))
 
     def test_overrides(self):
         args = self.parse("cycle", "--boss", "x", "--scenario", "s", "--raid", "toc", "--diff", "25n",

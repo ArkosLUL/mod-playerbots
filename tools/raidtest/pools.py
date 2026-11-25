@@ -19,7 +19,7 @@ from dataclasses import dataclass
 import dc
 from pulls import DIFF_IDS, Corpus, TraceFacts, match_traces
 
-POOLS_PER_RAID = {"uld": 6, "toc": 6}
+POOLS_PER_RAID = {"uld": 30, "toc": 30}
 # Ulduar's hard modes come from the server's toggles, so its default is 25n
 DEFAULT_DIFF = {"uld": "25n", "toc": "25h"}
 SLACK_MS = 60_000

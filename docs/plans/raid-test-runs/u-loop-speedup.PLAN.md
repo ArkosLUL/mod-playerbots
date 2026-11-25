@@ -128,7 +128,7 @@ First step after approval: save this plan as `docs/plans/raid-test-runs/u-loop-s
 (the folder's lane-plan naming). This section is what the loop session follows from the switch on:
 - **Two boss groups take turns**, balanced by fight length: group 1 = Yogg-Saron + Thorim (~21 min
   of pulls), group 2 = Mimiron + Vezax (~20 min; Algalon joins it if it comes back). Rebalance when a
-  boss is done. Cycle: group 1's window runs on build *n* (6 pulls per boss on `uld1-6`) while group 2's
+  boss is done. Cycle: group 1's window runs on build *n* (one pull per boss per pool) while group 2's
   lanes code; once all of group 2's lanes have merged: one rebuild, group 2's window, while group 1's
   lanes code; and so on. A boss whose lane changed nothing stays in its group's window (more data).
   In a group window the boss whose lanes run longer goes first (on 11-24 Algalon before Mimiron,
@@ -140,9 +140,9 @@ First step after approval: save this plan as `docs/plans/raid-test-runs/u-loop-s
   `watch-reports.sh` under Monitor is the trigger. `split_window.py` is no longer needed.
 - **Filler while the server waits** for the other group's lanes: first pending 10-man checks, then
   done bosses whose shared code changed, then extra pulls of the group that just ran on the same build.
-  Running filler pulls finish before the rebuild; no new filler pull starts once the other group's
-  lanes have all merged: a filler window runs with `--stop-file`, touched at that last merge. Never
-  rebuild with runs in flight. Max 6 raids in flight.
+  Running filler pulls finish before the rebuild; no new filler pull starts once the next build is
+  ready: section E's stop file. Never restart with runs in flight. Raids in flight, build ahead and job
+  order: section E.
 - Questions to the user: one numbered batch per full cycle (after both groups reported), never per
   lane.
 - Read lane summaries only; open a polish-log round only when a question needs it (`lane_tail.py`
@@ -150,6 +150,44 @@ First step after approval: save this plan as `docs/plans/raid-test-runs/u-loop-s
 - Plan file: move window narratives from "Resume here" to `docs/plans/raid-test-runs/windows.md`
   (append-only, a few lines per window); keep "Resume here" ≤40 lines; collapse done bosses' table rows
   to one line; update "Polish loop", decisions table ("three pools", done rule, "3 valid pulls").
+
+## E. Ten copies per roster (user, 2026-11-25)
+
+Supersedes the 2026-11-24 pool count and done rule above.
+- **Pools:** `<raid>7`-`<raid>30` copy `<raid>1`-`<raid>3` (pool n is design A, B or C by (n-1) mod
+  3), each created, its death knights respecced and its professions applied like `<raid>4`-`<raid>6`.
+  Name prefixes: Ulduar Uldb-Uldt and Uleb-Ulef, `uld14` Uleg; ToC Tocb-Toct without Toch, then
+  Tcrb-Tcrg. A prefix ending in the first suffix letter (Ulda + aa) breaks the core's
+  three-equal-letters rule, and Uldi and Toch clash with random-bot names.
+- **Done:** on one build every pool has a valid pull and at least 80% of each composition's pulls (8 of
+  10) are clean: a kill with at most 5 deaths, for Ulduar with hard mode triggered. The 10-man check
+  by the same rule (provisional). Each done boss gets one re-check job on all pools as filler; a
+  failing one rejoins the loop (provisional).
+- **Server:** `--max-raids 30` across both raids, so a window with Ulduar and ToC jobs runs them in
+  priority order; the runner starts at most 6 runs per 10 s poll, so bot logins and DC's
+  realm-wide pre-pull refresh (~10 s per 25-man raid) come in waves. `AC_MAP_UPDATE_THREADS` 24 (was 6,
+  `configurationOverrides/ServerPerformance.env`); RaidObs cap `AC_PLAYERBOTS_OBS_MAX_DIR_MB` 204800
+  (was 51200, `Playerbot.env`): traces run ~21 MB a pull. Switched in one go, no stepped load check
+  (user). At 6 raids the worldserver used 1.1-1.65 of 32 cores (6 map threads ~25% busy each, world
+  tick p95 12-19 ms) and 5.4 of 47 GB. If a window overloads (load-line p95 well above ~310 ms, pulls
+  voided for freezes, DC spawn timeouts), lower `--max-raids` for the next one; no code change.
+- **Digest at 30 pulls:** each pull's first 48/pulls deaths in full (2 to 8); boss-reader `--summary`
+  only for each composition's pulls with the fewest and the most deaths; the trend counts
+  clean/kills/pulls per composition.
+- **Build ahead** (the server sat ~5 min idle per rebuild: ~2 min until the build started, ~2.5 min
+  build, ~1 min restart): once every lane for the next build has merged, run
+  `bash docs/plans/raid-test-runs/build.sh <out> <label>` while the window still runs, and write the
+  next jobs file. Merge nothing until it returns (`merge-lane.sh` refuses meanwhile; DC hand merges
+  wait too). It records the commits of the three trees it built; `window.sh <jobs> <head> <out> <label>
+  prebuilt` then only restarts, and refuses if a tree moved since (run it without `prebuilt`).
+- **Job order:** polish jobs first, by the lane rule in section D; then filler (pending 10-man checks,
+  done-boss re-checks, extra pulls), longest runs first, so every window ends on short fights. Median
+  run minutes, 25-man: Anub'arak 13.4, Yogg-Saron 12.5, Mimiron 10.8, Razorscale 10.5, Beasts 9.5,
+  XT-002 9.4, Flame Leviathan 8.7, Faction Champions 8.5, Algalon 7.6, Freya and Thorim 7.2, Assembly
+  6.5, Jaraxxus 6.4, Vezax 6.2, Auriaya 5.6, Twins 5.5, Hodir 4.3, Ignis and Kologarn 4.1. Keep filler
+  queued so the server never waits for merges; `window.sh` passes `--stop-file <out>/<label>.stop`:
+  touch it once the build ahead is done and every polish job has reported, then restart when the
+  window exits.
 
 ## Switch at a break (this session, with the user)
 

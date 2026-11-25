@@ -3,7 +3,7 @@
 
     raidtest.py cycle --boss xt-002 --scenario <dc scenario> --raid uld [--pools uld1,uld2,uld3]
                       [--diff 25n] [--pulls 1] [--cap 2] [--skip-baseline] [--skip-rebuild]
-    raidtest.py window --jobs <file.json> [--head HEAD] [--max-raids 6] [--skip-rebuild] [--report-dir DIR]
+    raidtest.py window --jobs <file.json> [--head HEAD] [--max-raids 30] [--skip-rebuild] [--report-dir DIR]
     raidtest.py report --boss xt-002 --raid uld [--pools ...] [--diff 25n] [--pulls 1] [--runs tr-...,tr-...]
                        [--full] [--out FILE]
 
@@ -11,7 +11,7 @@ A cycle takes the server lock, gets baseline pulls on the live build for every p
 --pulls valid ones from before HEAD, rebuilds and restarts the worldserver, then pulls the boss until
 every pool has --pulls valid pulls built after HEAD or ran --cap pulls. Each round starts one DC run per
 pool still short, all at once, and waits for all of them. A pool's pulls are only counted for, and
-compared with, that pool. --pools defaults to <raid>1-<raid>6 and --diff to 25h for toc and 25n
+compared with, that pool. --pools defaults to <raid>1-<raid>30 and --diff to 25h for toc and 25n
 for uld, whose hard modes come from the server's toggles. The markdown report goes to stdout, progress
 to stderr. Reports are digests (pulls, the done rule per composition, deaths by mechanic, the trend over
 recent builds, each boss reader's --summary); --full prints every pool's sections and readers in full.
@@ -600,7 +600,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     def common(sub: argparse.ArgumentParser) -> None:
         sub.add_argument("--boss", required=True, help="RaidObs trace slug, e.g. xt-002 or northrend-beasts")
         sub.add_argument("--raid", required=True, choices=dc.RAIDS, help="the raid whose roster pools to use")
-        sub.add_argument("--pools", type=pool_list, help="roster pools (default <raid>1-<raid>6)")
+        sub.add_argument("--pools", type=pool_list, help="roster pools (default <raid>1-<raid>30)")
         sub.add_argument("--diff", choices=sorted(DIFF_IDS), help="default 25h for toc, 25n for uld")
         sub.add_argument("--pulls", type=int, default=1, help="valid pulls wanted per pool (default 1)")
         sources(sub, "commit-ish the build must be newer than")
@@ -622,7 +622,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 
     win = commands.add_parser("window", help="a list of jobs on one build: rebuild, pulls, report")
     win.add_argument("--jobs", required=True, help="JSON list of jobs, format in window.py")
-    win.add_argument("--max-raids", type=int, default=6, help="most DC runs in flight at once (default 6)")
+    win.add_argument("--max-raids", type=int, default=30, help="most DC runs in flight at once (default 30)")
     win.add_argument("--report-dir", help="write each job's report here as soon as the job is finished")
     win.add_argument("--stop-file", help="once this file exists, start no new runs: the runs going finish, then "
                                          "the window ends (refused if the file exists already)")

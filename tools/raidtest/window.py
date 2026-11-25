@@ -1,18 +1,18 @@
 """A test window: a list of jobs pulled on one build, each roster pool running one DC run at a time.
 
 Job order is priority. Whenever a pool is free it takes the earliest job that still wants pulls on it,
-and max_raids caps the DC runs in flight across both raids. A job wants pulls on a pool until the pool
-has `pulls` valid pulls built after the job's head or has run `cap` pulls in this window. A refused
-start, or a run that ends without a pull or without a record, fails that job alone; a build older than
-a job's head fails every job whose head it predates. SOAP going away or a crash raises Stop, and every
-run still going is stopped first.
+and max_raids caps the DC runs in flight across both raids, of which at most START_BATCH start per poll.
+A job wants pulls on a pool until the pool has `pulls` valid pulls built after the job's head or has run
+`cap` pulls in this window. A refused start, or a run that ends without a pull or without a record, fails
+that job alone; a build older than a job's head fails every job whose head it predates. SOAP going away
+or a crash raises Stop, and every run still going is stopped first.
 
 The jobs file is a JSON list of objects:
 
     boss      RaidObs trace slug (required)
     scenario  DC scenario token (required)
     raid      uld or toc (required)
-    pools     list of roster pools, default <raid>1-<raid>6
+    pools     list of roster pools, default <raid>1-<raid>30
     diff      10n, 10h, 25n or 25h, default 25n for uld and 25h for toc
     pulls     valid pulls wanted per pool, default 1
     cap       most pulls per pool, default 2
@@ -36,6 +36,7 @@ from server import Stop
 
 FIELDS = ("boss", "scenario", "raid", "pools", "diff", "pulls", "cap", "head", "label")
 POLL_S = 10.0
+START_BATCH = 6
 # SOAP silent this long while runs are going reads as a crash
 DOWN_AFTER_S = 180.0
 # DC writes the record as the run leaves status; past this the run is taken as lost
@@ -250,10 +251,13 @@ class Window:
 
     def start_free_pools(self) -> None:
         # a refused start fails its job and frees the pool for the next job, so plan again
-        while starts := self.plan():
-            for job, pool, count in starts:
+        started = 0
+        while started < START_BATCH and (starts := self.plan()):
+            for job, pool, count in starts[:START_BATCH - started]:
                 if not job.failed:
+                    before = len(self.flights)
                     self.start(job, pool, count)
+                    started += len(self.flights) - before
 
     def start(self, job: Job, pool: str, count: int) -> None:
         command = dc.start_command(job.scenario, pool, job.diff, count)

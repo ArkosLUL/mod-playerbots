@@ -179,29 +179,56 @@ class DigestTest(unittest.TestCase):
     def section(self, text: str, title: str) -> str:
         return text.split(f"\n## {title}\n", 1)[1].split("\n## ", 1)[0]
 
-    def test_done_rule_needs_a_kill_with_five_deaths_or_fewer_per_composition(self):
+    def test_done_rule_needs_eight_of_ten_clean_pulls_per_composition(self):
         after = HEAD + datetime.timedelta(minutes=30)
         five = [died(1000 * n, "Shadow Crash 62659") for n in range(5)]
         six = [died(1000 * n, "Shadow Crash 62659") for n in range(6)]
-        counted = {"uld1": [pull("a1", after, "kill", six)], "uld4": [pull("a4", after, "kill", five)],
-                   "uld2": [pull("b2", after, "kill", [])], "uld5": [pull("b5", after, "wipe", six)],
-                   "uld3": [pull("c3", after, "wipe", five)], "uld6": [pull("c6", after, "kill", six)]}
+        pools = [f"uld{number}" for number in range(1, 31)]
+        counted = {pool: [pull(pool, after, "kill", five)] for pool in pools}
+        counted["uld1"] = [pull("uld1", after, "kill", six)]
+        counted["uld4"] = [pull("uld4", after, "wipe", five)]
+        for pool in ("uld2", "uld5", "uld8"):
+            counted[pool] = [pull(pool, after, "wipe", six)]
+        counted["uld3"] = [facts("uld3", after, outcome="kill", hardmode=False)]
+
+        def done_rule() -> str:
+            state = self.state(counted)
+            state.pools = pools
+            return self.section(self.render(state)[0], "Done rule")
+
+        text = done_rule()
+        self.assertIn("- A (10 pools): 8 of 10 clean, needs 8; not clean: uld1 kill 6, uld4 wipe 5", text)
+        self.assertIn("- B (10 pools): 7 of 10 clean, needs 8; not clean: uld2 wipe 6, uld5 wipe 6, uld8 wipe 6",
+                      text)
+        self.assertIn("- C (10 pools): 9 of 10 clean, needs 8; not clean: uld3 kill 0 hard mode OFF", text)
+        self.assertIn("This build not yet: B.", text)
+        counted["uld8"] = [pull("uld8", after, "kill", [])]
+        self.assertIn("This build passes, if the boss reader shows hard mode triggered in each clean kill.",
+                      done_rule())
+        for found in counted.values():
+            if found[0].hardmode is None:
+                found[0].hardmode = True
+        self.assertIn("This build passes.", done_rule())
+
+    def test_done_rule_needs_every_pool_pulled_and_a_two_copy_roster_both_clean(self):
+        after = HEAD + datetime.timedelta(minutes=30)
+        counted = {"uld1": [pull("a1", after, "kill", [])], "uld4": [pull("a4", after, "kill", [])],
+                   "uld2": [pull("b2", after, "kill", [])], "uld5": [pull("b5", after, "wipe", [])],
+                   "uld3": [pull("c3", after, "kill", [])]}
         text = self.section(self.render(self.state(counted))[0], "Done rule")
-        self.assertIn("- A (uld1, uld4): kill with 5 deaths on uld4 (`a4`)", text)
-        self.assertIn("- B (uld2, uld5): kill with 0 deaths on uld2 (`b2`)", text)
-        self.assertIn("- C (uld3, uld6): no: uld3 wipe 5, uld6 kill 6", text)
-        self.assertIn("This build not yet: C.", text)
-        counted["uld6"] = [pull("c6", after, "kill", five)]
-        self.assertIn("This build passes, if the boss reader shows hard mode triggered",
-                      self.render(self.state(counted))[0])
+        self.assertIn("- A (2 pools): 2 of 2 clean, needs 2", text)
+        self.assertIn("- B (2 pools): 1 of 2 clean, needs 2; not clean: uld5 wipe 0", text)
+        self.assertIn("- C (2 pools): 1 of 1 clean, needs 1; no valid pull on this build from uld6", text)
+        self.assertIn("This build not yet: B, C.", text)
 
     def test_done_rule_reads_only_the_newest_build(self):
         older, newer = HEAD + datetime.timedelta(minutes=30), HEAD + datetime.timedelta(hours=2)
         counted = {"uld1": [pull("a1", newer, "kill", [])], "uld2": [pull("b2", newer, "kill", [])],
                    "uld3": [pull("c3", newer, "wipe", [])], "uld6": [pull("c6", older, "kill", [])]}
         text = self.section(self.render(self.state(counted))[0], "Done rule")
-        self.assertIn("- C (uld3, uld6): no: uld3 wipe 0", text)
-        self.assertIn("This build not yet: C.", text)
+        self.assertIn("- C (2 pools): 0 of 1 clean, needs 1; not clean: uld3 wipe 0; no valid pull on this build "
+                      "from uld6", text)
+        self.assertIn("This build not yet: A, B, C.", text)
 
     def test_done_rule_needs_every_composition_in_the_report(self):
         after = HEAD + datetime.timedelta(minutes=30)
@@ -228,6 +255,16 @@ class DigestTest(unittest.TestCase):
         self.assertIn("- then 4 more from 1:07 to 1:20: melee from General Vezax x3, Shadow Crash 62659 x1",
                       per_pull)
         self.assertIn("**Pull 2** uld2 (B), kill at 2:05: 0 deaths", per_pull)
+        self.assertNotIn("Each pull's first", per_pull)
+
+    def test_thirty_pulls_show_two_deaths_each_in_full(self):
+        after = HEAD + datetime.timedelta(minutes=30)
+        deaths = [died(1000 * (n + 1), "Shadow Crash 62659") for n in range(5)]
+        counted = {f"uld{number}": [pull(f"p{number}", after, "wipe", deaths)] for number in range(1, 31)}
+        per_pull = self.section(self.render(self.state(counted))[0], "Deaths per pull")
+        self.assertTrue(per_pull.lstrip().startswith("Each pull's first 2 deaths, then the rest by mechanic."))
+        self.assertEqual(per_pull.count("\n- 0:0"), 60)
+        self.assertEqual(per_pull.count("\n- then 3 more from 0:03 to 0:05: Shadow Crash 62659 x3"), 30)
 
     def test_trend_over_the_last_four_builds(self):
         builds = [HEAD + datetime.timedelta(hours=hours) for hours in (-4, -3, -2, -1, 1)]
@@ -241,7 +278,8 @@ class DigestTest(unittest.TestCase):
         rows = [line for line in text.splitlines() if line.startswith("| ") and "build" not in line]
         self.assertEqual(len(rows), 4)
         stamp = builds[-1].astimezone().strftime("%m-%d %H:%M")
-        self.assertEqual(rows[0], f"| {stamp} (after HEAD) | 3 | A 1/2, B 0/1 | 1 | 2:05 | Shadow Crash 62659 1.0 |")
+        self.assertEqual(rows[0], f"| {stamp} (after HEAD) | 3 | A 1/1/2, B 0/0/1 | 1 | 2:05 "
+                                  "| Shadow Crash 62659 1.0 |")
         self.assertNotIn(builds[0].astimezone().strftime("%m-%d %H:%M"), text)
 
     def test_reader_summaries_and_no_full_dumps(self):
@@ -251,7 +289,20 @@ class DigestTest(unittest.TestCase):
         (call,) = run.calls
         self.assertEqual((pathlib.Path(call[1]).name, call[-1]), ("general_vezax.py", "--summary"))
         self.assertIn("### uld1 (A): 603_1_general-vezax_1.ndjson", text)
+        self.assertIn("Each valid pull's `--summary`", text)
         self.assertNotIn("DC multiplier vetoes", text)
+
+    def test_reader_summaries_of_each_compositions_fewest_and_most_deaths(self):
+        after = HEAD + datetime.timedelta(minutes=30)
+        crash = [died(1000 * n, "Shadow Crash 62659") for n in range(9)]
+        counted = {"uld1": [pull("a1", after, "wipe", crash[:3])], "uld4": [pull("a4", after, "kill", [])],
+                   "uld7": [pull("a7", after, "wipe", crash)], "uld10": [pull("a10", after, "wipe", crash[:3])],
+                   "uld2": [pull("b2", after, "kill", crash[:1])]}
+        state = self.state(counted)
+        state.pools = ["uld1", "uld2", "uld4", "uld7", "uld10"]
+        text, run = self.render(state)
+        self.assertEqual([pathlib.Path(call[2]).name for call in run.calls], ["b2", "a4", "a7"])
+        self.assertIn("each composition's pulls with the fewest and the most deaths, 3 of 5", text)
 
 
 if __name__ == "__main__":

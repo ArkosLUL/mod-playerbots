@@ -38,14 +38,14 @@ def record(run_id: str, pool: str, instance: int, start: float, end: float, pull
 
 
 class PoolNamesTest(unittest.TestCase):
-    def test_six_pools_per_raid(self):
-        self.assertEqual(pool_names("uld"), ["uld1", "uld2", "uld3", "uld4", "uld5", "uld6"])
-        self.assertEqual(pool_names("toc"), ["toc1", "toc2", "toc3", "toc4", "toc5", "toc6"])
+    def test_thirty_pools_per_raid(self):
+        self.assertEqual(pool_names("uld"), [f"uld{number}" for number in range(1, 31)])
+        self.assertEqual(pool_names("toc"), [f"toc{number}" for number in range(1, 31)])
         self.assertEqual(pool_names("uld", 2), ["uld1", "uld2"])
 
     def test_pool_n_copies_design_n_minus_one_mod_three(self):
-        self.assertEqual([composition(pool) for pool in pool_names("uld")], list("ABCABC"))
-        self.assertEqual([composition(pool) for pool in pool_names("toc")], list("ABCABC"))
+        self.assertEqual([composition(pool) for pool in pool_names("uld")], list("ABC" * 10))
+        self.assertEqual([composition(pool) for pool in pool_names("toc")], list("ABC" * 10))
         self.assertEqual((composition("uld0"), composition("lab"), composition("x9")), ("", "", "C"))
 
 

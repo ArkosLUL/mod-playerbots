@@ -329,6 +329,14 @@ class WindowTest(unittest.TestCase):
         self.assertTrue(all(c.startswith(".dc test start") for c in self.server.commands[:6]))
         self.assertIn("diff=25h", self.server.commands[3])
 
+    def test_at_most_six_runs_start_per_poll(self):
+        with mock.patch.dict(pools.POOLS_PER_RAID, {"uld": 8}):
+            self.assertEqual(self.window([job(XT)]), 0)
+        starts = [index for index, command in enumerate(self.server.commands) if command.startswith(".dc test start")]
+        self.assertEqual(starts[:6], list(range(6)))
+        self.assertEqual(self.server.commands[6], dcmod.STATUS_COMMAND)
+        self.assertEqual(sorted(pool for _, pool in self.started()), sorted(f"uld{n}" for n in range(1, 9)))
+
     def test_a_refused_start_fails_that_job_alone(self):
         self.server.refuse = {(XT, "uld2"): "Test run not started: no roster pool 'uld2'"}
         self.assertEqual(self.window([job(XT), job(IGNIS)]), 3)
@@ -631,7 +639,7 @@ class WindowTest(unittest.TestCase):
         self.assertIn("| 1 | polish | xt-002 | 25n | `abc1234` | done | uld1 1/1, uld2 1/1, uld3 1/1 |", text)
         load = text.split("\n# Window load\n", 1)[1]
         self.assertIn("RaidObs snapshot gaps over 3 traces (60 gaps, cadence 250 ms): mean 263 ms, p95 300, "
-                      "p99 450, max 450, 3 over 400 ms; at most 3 DC runs in flight at once (cap 6).", load)
+                      "p99 450, max 450, 3 over 400 ms; at most 3 DC runs in flight at once (cap 30).", load)
 
 
 class JobsTest(unittest.TestCase):
@@ -646,8 +654,8 @@ class JobsTest(unittest.TestCase):
     def test_defaults(self):
         uld, toc = self.parse(job(XT), job(BEASTS))
         self.assertEqual((uld.number, uld.pools, uld.diff, uld.pulls, uld.cap, uld.head, uld.label),
-                         (1, [f"uld{n}" for n in range(1, 7)], "25n", 1, 2, "HEAD", ""))
-        self.assertEqual((toc.number, toc.pools, toc.diff), (2, [f"toc{n}" for n in range(1, 7)], "25h"))
+                         (1, [f"uld{n}" for n in range(1, 31)], "25n", 1, 2, "HEAD", ""))
+        self.assertEqual((toc.number, toc.pools, toc.diff), (2, [f"toc{n}" for n in range(1, 31)], "25h"))
 
     def test_overrides(self):
         (parsed,) = self.parse(job(BEASTS, pools=["toc2"], diff="10h", pulls=2, cap=4, head="abc", label="check-10"))
@@ -719,7 +727,7 @@ class WindowArgsTest(unittest.TestCase):
 
     def test_defaults(self):
         args = self.parse("window", "--jobs", "jobs.json")
-        self.assertEqual((args.jobs, args.max_raids, args.head, args.skip_rebuild), ("jobs.json", 6, "HEAD", False))
+        self.assertEqual((args.jobs, args.max_raids, args.head, args.skip_rebuild), ("jobs.json", 30, "HEAD", False))
         self.assertIsInstance(args.core, pathlib.Path)
 
     def test_max_raids_at_least_one(self):
