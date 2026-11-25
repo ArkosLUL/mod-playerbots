@@ -8,14 +8,14 @@ The polish loop runs on the user's standing go ("Polish loop" below), scheduled 
 
 **Done** (polished at 25 plus the 10-man check): Jaraxxus, Twin Val'kyr, Northrend Beasts, Faction Champions, Kologarn, Ignis, Razorscale, Auriaya, Iron Assembly, XT-002, Hodir, Freya, Vezax ("Bosses" below).
 
-**Groups:** group 1 = Yogg-Saron (r25 merged) and Thorim (r26 merged), both in window 44; group 2 = Algalon (r15 builds Q6) and Anub'arak (r1 merged, `e7c4988e2`). Mimiron polished at 25n (window 36); his 10n check waits on DC lane AE. Flame Leviathan boards and pulls since DC lane AA (window 44).
+**Groups:** group 1 = Yogg-Saron (r25 merged) and Thorim (r26 merged), both in window 44; group 2 = Algalon (r15 builds Q6) and Anub'arak (r1 merged, `e7c4988e2`). Mimiron polished at 25n (window 36) against a hand-placed spawn; restored 2026-11-25, so his 10n check and a 25n re-check run after the next restart. Flame Leviathan boards and pulls since DC lane AA (window 44).
 
 **Window 44 running** (2026-11-25, rebuild of Custom `229335cd3` with DC `7c55fb5`): Thorim r26, Yogg-Saron r25, Flame Leviathan on uld1, Mimiron 10n on uld1-uld3; reports `scratchpad/window44/window44/window44-<boss>.md`, log `scratchpad/window44/window44.out` (if the scratchpad is gone, rerun the window). Windows 29-44 and fillers: `windows.md`.
 
 **Next:**
-- Running: Thorim r27, Yogg-Saron r26, Algalon r15 (Q6); lane AD (`ad-ritual-walk.PLAN.md`, `build-toc-wt/rt-ad`, branch `rt/ritual-walk`: bots walking to a Ritual of Souls portal pulled Anub'arak during a re-pull's settle in 3 of 6 runs); DC lane AE (`ae-dc-mimiron-10n-spawn.PLAN.md`, `build-toc-wt/rt-dc-w4`, branch `rt/dc-ae`). DC lane AC (`rt/dc-ac`, the boss kept passive until each start) stays unmerged: it would hide the ritual bug the tests should catch.
+- Running: Thorim r27, Yogg-Saron r26, Algalon r15 (Q6); lane AD (`ad-ritual-walk.PLAN.md`, `build-toc-wt/rt-ad`, branch `rt/ritual-walk`: bots walking to a Ritual of Souls portal pulled Anub'arak during a re-pull's settle in 3 of 6 runs); DC lane AE (`ae-dc-mimiron-10n-spawn.PLAN.md`) stopped unneeded: Mimiron's 10n spawn was missing from the live world DB (see Mimiron's row). DC lane AC (`rt/dc-ac`, the boss kept passive until each start) stays unmerged: it would hide the ritual bug the tests should catch.
 - Flame Leviathan joins a group once window 44's report shows the pull; DC's log (`docker logs ac-worldserver`, `TESTRUN <run>` lines) has the board send and the staging move.
-- Once AD, Algalon r15 and DC lane AE have merged: one rebuild, group 2's window (Algalon r15, Anub'arak r1), Mimiron 10n check, Flame Leviathan pulls.
+- Once Algalon r15 has merged (AD is, `21376d9f9`): one rebuild, group 2's window (Algalon r15, Anub'arak r1 with the ritual fix), Mimiron 10n on uld1-uld3 and a 25n re-check on uld4-uld6 (restored spawn), Flame Leviathan pulls.
 - Merges: `merge-lane.sh` refuses DC branches for argument-name and edited comments, DC's own style: merge DC lanes by hand (`git merge-tree`, then `git merge --no-ff -F`) after reading the added comment lines. During a window the server lock's owner is the window, which `merge-lane.sh` allows.
 - Next question batch: none open. Write Yogg-Saron Q4's answer into `polish/yogg-saron.md` once r26 merges (r27 builds it).
 
@@ -46,7 +46,7 @@ Earlier per-boss detail: the old table in `windows.md`.
 | Freya | done: 25n hard-mode kills with 1/2/2 (window 25, r17-r18), 10n hard-mode kills with 0/0/0 (window 25b) |
 | Yogg-Saron | group 1, r25 merged (ranged burn under 12%), window 44; kills within 5 deaths for A (uld1 4, uld4 5 on r22-r23) and C (uld6 3, window 39 on r24), none for B; not all three on one build yet |
 | Thorim | group 1, r26 merged (camp holds a shelter walk until Chain Lightning lands), window 44; hard-mode kills for A (4, 3, 0 deaths) and C (16, 7), none for B; B and C kill only after losing hard mode to a late phase 2; the user: keep polishing, no end condition, stop rules waived |
-| Mimiron | polished at 25n: hard-mode kills with 2/2/3 deaths (window 36, r22); 10n: the button never started the fight in window 37; DC lane AB (DC `7c55fb5`) retries the start and logs why, checked in window 44 |
+| Mimiron | polished at 25n: hard-mode kills with 2/2/3 deaths (window 36, r22). 10n never started (windows 37, 44): the live world DB had the user's hand-placed Mimiron (guid 8000473, spawn mask 2 = 25-man only, at 2748.17, 2577.3) instead of the stock spawn. Restored 2026-11-25 to the base row (guid 137630, mask 3, 2742.53, 2560.99, o 1.39626, respawn 604800; backup `scratchpad/mimiron-spawn-backup.sql`), live after the next restart. Next: 10n check and a 25n re-check |
 | Vezax | done: 25n hard-mode kills with 0/0/0/0/1 and one wipe (window 30, r17), 10n hard-mode kills with 0/0/0/0/0/1 (window 31) |
 | Algalon | group 2, round 13 in window 38: C killed (uld3, 2 deaths), A and B wiped; window 36-37 on r12 had A (4) and B (3); r14 changed no code and asks Q6 (a bigger wave 3 star team); under the normal done rule since 2026-11-24 |
 | Anub'arak | group 2; scenario `totc-anubarak` (DC `ab1bab7`), 25h. The re-pull works (check42): 18 valid pulls on build `f863bb8b6`, all wipes, Nerubian Burrower melee 420 deaths; digest `raidtest.py report --boss anub-arak --raid toc --head f863bb8b6 --pulls 18`. r1 coding; DC lane AC fixes his engaging before a re-pull's start |
@@ -198,6 +198,11 @@ with no human client logged in, and reports from the RaidObs traces.
 - Capped rebuild: memory `worldserver-rebuild`. Server lock: `mkdir
   G:/DevStuff/GitHub/.wave-loop/locks/server` plus an owner file. Effective config:
   `docker exec ac-worldserver env | grep ^AC_`.
+- The live world DB is not the repo's base data: the user's GM edits change spawns (`.npc add` saves
+  only the current difficulty in `spawnMask`; hand-placed rows have guid 8000000 and up; the live
+  `creature` table keys the entry as `id`, the repo's SQL as `id1`). When a boss is missing at one size
+  or behaves unlike its core script, compare `acore_world.creature` with
+  `data/sql/base/db_world/creature.sql` first. A spawn change loads at the next worldserver start.
 
 ## Orchestration rules
 
