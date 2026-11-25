@@ -189,7 +189,7 @@ bool ThorimPhase2PositioningTrigger::IsActive()
         return false;
     }
 
-    return true;
+    return !ThorimRingChainWait(botAI, bot, spot, false);
 }
 
 bool ThorimUnreachableTrigger::IsActive()
@@ -354,7 +354,7 @@ bool ThorimSifBlizzardTrigger::IsActive()
         if (role == ThorimPhase2Role::MeleeRing)
         {
             Position step;
-            return ThorimRingBlizzardStep(botAI, bot, step);
+            return ThorimRingBlizzardStep(botAI, bot, step) && !ThorimRingChainWait(botAI, bot, step, true);
         }
 
         if (role == ThorimPhase2Role::Ranged)

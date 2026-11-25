@@ -698,6 +698,36 @@ void RingStepChainBodies(Player* bot, Unit* boss, std::vector<HazardCircle>& slo
     }
 }
 
+bool RingSpotInOtherGroupJump(Player* bot, Unit* boss, Position const& spot, bool slotPoints)
+{
+    Group* group = bot->GetGroup();
+    ThorimEncounterState const* state = FindState(bot);
+    uint8 ownSlot = 0;
+    if (!group || !state || !state->ringLatched || !MeleeSlotOf(bot, ownSlot))
+        return false;
+
+    float const jump = ULDUAR_THORIM_CHAIN_LIGHTNING_JUMP + ULDUAR_THORIM_RING_CHAIN_MARGIN + bot->GetCombatReach();
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (member == bot || !MemberCounts(member, bot->GetInstanceId()) || !member->IsInWorld() ||
+            member->GetPositionZ() > ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD)
+            continue;
+
+        uint8 slot = 0;
+        bool const ringBody = MeleeSlotOf(member, slot);
+        if (ringBody && slot == ownSlot)
+            continue;
+
+        float const clearance = jump + member->GetCombatReach();
+        if (member->GetExactDist2d(&spot) <= clearance ||
+            (slotPoints && ringBody && RingSlotPoint(*state, boss, slot).GetExactDist2d(&spot) <= clearance))
+            return true;
+    }
+
+    return false;
+}
+
 bool RingSpotBeatsTheDeadband(PlayerbotAI* botAI, Player* bot, Position const& spot)
 {
     bool spotInCone = false;
@@ -822,7 +852,7 @@ bool InLightningChargeConeRanged(float bearing, float coneBearing)
     return AbsAngleDelta(bearing, coneBearing) <= halfWidth;
 }
 
-static float ThorimCampConeReach(Player* bot, uint32 setOffMs)
+static float ThorimConeReach(Player* bot, uint32 setOffMs)
 {
     ThorimEncounterState const* state = FindState(bot);
     if (!state || !state->lightningOrbLitMs)
@@ -836,20 +866,20 @@ static float ThorimCampConeReach(Player* bot, uint32 setOffMs)
     return bot->GetSpeed(MOVE_RUN) * static_cast<float>(warningMs - elapsedMs) / 1000.0f;
 }
 
-static bool ThorimCampShelterInTime(Player* bot, Position const& shelter, uint32 setOffMs)
+static bool ThorimWalkBeatsCone(Player* bot, Position const& spot, uint32 setOffMs)
 {
-    float reach = ThorimCampConeReach(bot, setOffMs);
+    float reach = ThorimConeReach(bot, setOffMs);
     if (!bot->HasAura(SPELL_SIF_BLIZZARD_ZONE_10) && !bot->HasAura(SPELL_SIF_BLIZZARD_ZONE_25) &&
-        ThorimWalkUnderBlizzard(bot, *bot, shelter))
+        ThorimWalkUnderBlizzard(bot, *bot, spot))
         reach *= ULDUAR_THORIM_BLIZZARD_SPEED_FACTOR;
 
-    return bot->GetExactDist2d(&shelter) <= reach;
+    return bot->GetExactDist2d(&spot) <= reach;
 }
 
 static bool ThorimCampConeStep(Player* bot, Unit* boss, Unit* orb, Position const& shelter, Position& out,
                                uint32 setOffMs)
 {
-    float const reach = std::min(ULDUAR_THORIM_CAMP_CONE_STEP_RADIUS, ThorimCampConeReach(bot, setOffMs));
+    float const reach = std::min(ULDUAR_THORIM_CAMP_CONE_STEP_RADIUS, ThorimConeReach(bot, setOffMs));
     if (reach < ULDUAR_THORIM_SWEEP_STEP)
         return false;
 
@@ -923,6 +953,13 @@ bool ThorimChainWaitDue(ThorimEncounterState& state, Unit* boss)
            GetMSTimeDiffToNow(state.lightningOrbLitMs) < ULDUAR_THORIM_CHAIN_WAIT_CAP_MS;
 }
 
+uint32 ThorimChainWaitSetOff(ThorimEncounterState const& state, Unit* boss)
+{
+    int32 remainingMs = 0;
+    return ThorimChainLightningCasting(boss, remainingMs) ? state.chainLightningEndMs
+                                                          : state.lightningOrbLitMs + ULDUAR_THORIM_CHAIN_WAIT_CAP_MS;
+}
+
 bool ThorimCampWalkBridgesChain(Player* bot, uint8 slot, Position const& shelter)
 {
     Group* group = bot->GetGroup();
@@ -968,12 +1005,9 @@ bool ThorimCampChainWait(PlayerbotAI* botAI, Player* bot, Unit* boss, Unit* orb,
         !ThorimCampWalkBridgesChain(bot, slot, shelter))
         return false;
 
-    int32 remainingMs = 0;
-    uint32 const setOffMs = ThorimChainLightningCasting(boss, remainingMs)
-                                ? state.chainLightningEndMs
-                                : state.lightningOrbLitMs + ULDUAR_THORIM_CHAIN_WAIT_CAP_MS;
+    uint32 const setOffMs = ThorimChainWaitSetOff(state, boss);
     Position step;
-    held.chainWait = !ThorimCampSpotInLitCone(botAI, *bot) || ThorimCampShelterInTime(bot, shelter, setOffMs) ||
+    held.chainWait = !ThorimCampSpotInLitCone(botAI, *bot) || ThorimWalkBeatsCone(bot, shelter, setOffMs) ||
                      ThorimCampConeStep(bot, boss, orb, shelter, step, setOffMs);
     return held.chainWait;
 }
@@ -1037,7 +1071,7 @@ bool ThorimRangedSpot(PlayerbotAI* botAI, Player* bot, Unit* boss, uint8 slot, P
 
     if (!held.stepSought && !bot->HasUnitState(UNIT_STATE_ROOT) &&
         bot->GetExactDist2d(&shelter) > ULDUAR_THORIM_PHASE2_SPOT_TOLERANCE && ThorimCampSpotInLitCone(botAI, *bot) &&
-        !ThorimCampShelterInTime(bot, shelter, getMSTime()))
+        !ThorimWalkBeatsCone(bot, shelter, getMSTime()))
     {
         held.stepSought = true;
         held.stepped = ThorimCampConeStep(bot, boss, orb, shelter, held.step, getMSTime());
@@ -3370,13 +3404,35 @@ bool ThorimCampSpotInLitCone(PlayerbotAI* botAI, Position const& spot)
                                        BearingFromBoss(boss, orb->GetPositionX(), orb->GetPositionY()));
 }
 
+static bool ThorimReleaseRingChainHold(Player* bot, ThorimEncounterState::RingChainHold& hold)
+{
+    if (hold.waiting)
+    {
+        hold.waiting = false;
+        hold.released = true;
+        RaidObs::NoteDerived(bot, "thorim.ringchainwait", "none");
+    }
+
+    return false;
+}
+
 void ThorimTickChainLightning(PlayerbotAI* botAI)
 {
     if (!ThorimPhase2Active(botAI))
         return;
 
-    if (Unit* boss = GetThorim(botAI))
-        ThorimNoteChainLightning(ThorimStateFor(botAI->GetBot()), boss);
+    Unit* boss = GetThorim(botAI);
+    if (!boss)
+        return;
+
+    Player* bot = botAI->GetBot();
+    ThorimEncounterState& state = ThorimStateFor(bot);
+    ThorimNoteChainLightning(state, boss);
+
+    auto const hold = state.ringChainHolds.find(bot->GetGUID());
+    if (hold != state.ringChainHolds.end() && hold->second.waiting &&
+        (hold->second.litMs != state.lightningOrbLitMs || !ThorimChainWaitDue(state, boss)))
+        ThorimReleaseRingChainHold(bot, hold->second);
 }
 
 bool ThorimCampWaitingOnChain(PlayerbotAI* botAI, Player* bot)
@@ -3391,6 +3447,52 @@ bool ThorimCampWaitingOnChain(PlayerbotAI* botAI, Player* bot)
 
     Unit* orb = ThorimChargedThunderOrb(botAI, SPELL_THORIM_LIGHTNING_ORB_VISUAL);
     return orb && orb->GetGUID() == held->second.orb && ThorimChainWaitDue(*state, GetThorim(botAI));
+}
+
+bool ThorimRingChainWait(PlayerbotAI* botAI, Player* bot, Position const& destination, bool step)
+{
+    if (!ThorimRingMeleeOnFloor(botAI, bot))
+        return false;
+
+    Unit* boss = GetThorim(botAI);
+    ThorimEncounterState& state = ThorimStateFor(bot);
+    if (!boss || !state.lightningOrbLitMs)
+        return false;
+
+    ThorimEncounterState::RingChainHold& hold = state.ringChainHolds[bot->GetGUID()];
+    if (hold.litMs != state.lightningOrbLitMs)
+        hold = {state.lightningOrbLitMs, false, false};
+
+    if (hold.released || !ThorimChainWaitDue(state, boss) ||
+        bot->GetExactDist2d(&destination) <= ULDUAR_THORIM_RING_CHAIN_MIN_STEP ||
+        bot->HasAura(SPELL_SIF_BLIZZARD_ZONE_10) || bot->HasAura(SPELL_SIF_BLIZZARD_ZONE_25))
+        return ThorimReleaseRingChainHold(bot, hold);
+
+    if (!hold.waiting && (!RingSpotInOtherGroupJump(bot, boss, destination, true) ||
+                          RingSpotInOtherGroupJump(bot, boss, *bot, false)))
+        return false;
+
+    Unit* orb = ThorimChargedThunderOrb(botAI, SPELL_THORIM_LIGHTNING_ORB_VISUAL);
+    if (orb &&
+        InLightningChargeCone(BearingFromBoss(boss, bot->GetPositionX(), bot->GetPositionY()),
+                              BearingFromBoss(boss, orb->GetPositionX(), orb->GetPositionY())) &&
+        !ThorimWalkBeatsCone(bot, destination, ThorimChainWaitSetOff(state, boss)))
+        return ThorimReleaseRingChainHold(bot, hold);
+
+    hold.waiting = true;
+    RaidObs::NoteDerived(bot, "thorim.ringchainwait", step ? "wait step" : "wait walk");
+    return true;
+}
+
+bool ThorimRingWaitingOnChain(PlayerbotAI* botAI, Player* bot)
+{
+    ThorimEncounterState* state = bot ? FindState(bot) : nullptr;
+    if (!state)
+        return false;
+
+    auto const hold = state->ringChainHolds.find(bot->GetGUID());
+    return hold != state->ringChainHolds.end() && hold->second.waiting &&
+           hold->second.litMs == state->lightningOrbLitMs && ThorimChainWaitDue(*state, GetThorim(botAI));
 }
 
 bool ThorimCampBlizzardEscape(PlayerbotAI* botAI, Player* bot, Position& out)
@@ -3448,7 +3550,8 @@ bool ThorimMeleeRingSettled(PlayerbotAI* botAI, Player* bot)
         return false;
 
     ThorimEncounterState const* state = FindState(bot);
-    return state && (state->ringArrived.count(bot->GetGUID()) || state->ringStepped.count(bot->GetGUID()));
+    return state && (state->ringArrived.count(bot->GetGUID()) || state->ringStepped.count(bot->GetGUID()) ||
+                     ThorimRingWaitingOnChain(botAI, bot));
 }
 
 bool ThorimRingMeleeOnFloor(PlayerbotAI* botAI, Player* bot)
@@ -3880,6 +3983,7 @@ void ResetThorimEncounterState(Player* bot, bool clearInstance)
     state->dpsTargets.erase(bot->GetGUID());
     state->rangedSlots.erase(bot->GetGUID());
     state->rangedShelters.erase(bot->GetGUID());
+    state->ringChainHolds.erase(bot->GetGUID());
     state->openingSlots.erase(bot->GetGUID());
     state->balconyHoldSlots.erase(bot->GetGUID());
     state->openingReleased.erase(bot->GetGUID());
@@ -3910,6 +4014,7 @@ void ResetThorimEncounterState(Player* bot, bool clearInstance)
     state->ringOrb.Clear();
     state->ringSolveMs = 0;
     state->rangedShelters.clear();
+    state->ringChainHolds.clear();
     state->chainLightningEndMs = 0;
     state->blizzardSpots.clear();
     state->blizzardBunnies.clear();

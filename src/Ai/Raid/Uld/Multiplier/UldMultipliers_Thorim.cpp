@@ -108,7 +108,7 @@ float ThorimBalconyGuardMultiplier::GetValue(Action* action)
 
 float ThorimChainWaitCastHoldMultiplier::GetValue(Action* action)
 {
-    if (!action || !ThorimCampWaitingOnChain(botAI, bot))
+    if (!action || (!ThorimCampWaitingOnChain(botAI, bot) && !ThorimRingWaitingOnChain(botAI, bot)))
         return 1.0f;
 
     auto const classify = [action]

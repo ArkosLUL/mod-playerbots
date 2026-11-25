@@ -8,7 +8,8 @@ second cast from the camp through a stepped slot 0 into slot 2 pins the chains s
 camp bot dying short of its row and another on a cone step pins the shelters section; the same orb over a held
 ring walk and a ring walker dying past reach pins the ring cone section; a Runic Colossus Smash over a healer on his
 target and one behind him pins the colossus section; orb 1 with two camp walks held until the chain lands pins the
-chain wait section. The shared v14 fixture shows every section reads empty elsewhere.
+chain wait section; a ring walk held until that chain lands and a ring step released by the cap pin the ring wait
+section. The shared v14 fixture shows every section reads empty elsewhere.
 """
 from __future__ import annotations
 
@@ -491,6 +492,33 @@ class ChainWait(unittest.TestCase):
     def test_without_the_probe(self):
         self.assertIn("no thorim.lightningorb probe or no lit orb in phase 2",
                       printed(thorim.show_chainwait, load(pull())))
+
+
+def ring_wait_pull() -> list[dict]:
+    records = chain_wait_pull()
+    records += [
+        {"t": 5100, "e": "note", "g": MELEE, "k": "thorim.ringchainwait", "txt": "wait walk"},
+        {"t": 6100, "e": "note", "g": MELEE, "k": "thorim.ringchainwait", "txt": "none"},
+        {"t": 20000, "e": "note", "g": RANGED, "k": "thorim.lightningorb", "txt": str(THUNDER_ORB)},
+        {"t": 20200, "e": "note", "g": MELEE, "k": "thorim.ringchainwait", "txt": "wait step"},
+        {"t": 21000, "e": "note", "g": MELEE, "k": "thorim.ringchainwait", "txt": "none"},
+    ]
+    return sorted(records, key=lambda rec: rec.get("t", -1))
+
+
+class RingWait(unittest.TestCase):
+    def test_one_wait_released_by_the_landing_and_one_by_the_cap(self):
+        text = printed(thorim.show_ringwait, load(ring_wait_pull()))
+        self.assertIn("+4.0 s: waits 1 (walk 1, step 0; released by the landing 1, by the cap 0); waiters hit by the "
+                      "chain standing 1 / walking 0, dead 0; by the cone 0, dead 0", text)
+        self.assertIn("+19.0 s: waits 1 (walk 0, step 1; released by the landing 0, by the cap 1)", text)
+        self.assertIn("all: lit orbs 2, with a wait 2; waits 2 (walk 1, step 1; released by the landing 1, by the cap "
+                      "1), wait p50 0.8 max 1.0 s; waiters hit by the chain standing 1 / walking 0, dead 0 (0 before "
+                      "the first tank death); by the cone 0, dead 0 (0 before the first tank death)", text)
+
+    def test_without_the_probe(self):
+        self.assertIn("no thorim.ringchainwait probe (a build before it)",
+                      printed(thorim.show_ringwait, load(chain_wait_pull())))
 
 
 class Deaths(unittest.TestCase):

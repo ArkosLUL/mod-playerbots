@@ -297,7 +297,7 @@ each stop lands 10.6 yd behind the Colossus.
 
 | Spell | Id | Detail |
 |---|---|---|
-| Chain Lightning | 62131 / 64390 | 8 targets at **×1.5 per hop** (`EffectChainAmplitude`): the eighth takes ~17× the first. Each hop goes to the unhit target nearest the last victim, within **8 yd** (`spell_jump_distance` 5.0, not the DBC 10, plus both combat reaches); pets count. First cast 13 s after the phase trigger, then every 15 s |
+| Chain Lightning | 62131 / 64390 | 8 targets at **×1.5 per hop** (`EffectChainAmplitude`): the eighth takes ~17× the first. Each hop goes to the unhit target nearest the last victim, within **8 yd** (`spell_jump_distance` 5.0, not the DBC 10, plus both combat reaches); players only (`SPELL_ATTR3_ONLY_ON_PLAYER`, below). First cast 13 s after the phase trigger, then every 15 s |
 | Lightning Charge | 62466 | `spell_cone` **75 degrees**, 150 yd, 17343 base nature, **instant with no cast bar** |
 | Lightning Orb Charged | 62186 | Lands on a Thunder Orb (33378). `SpellInfoCorrections` patches the amplitude to 5000ms, so it ticks once **5s before** the cone — the entire warning |
 | Lightning Charge buff | 62279 | Permanent, one stack per cast: +15% damage and melee haste, **+10% nature damage per stack** |
@@ -386,11 +386,36 @@ the generic movers while `reach melee`, straight at him along one bearing, stays
 Blizzard zone holds too: at its 2.4 yd/s the crossing outlasts the warning. Replayed, a held walk waits
 up to 5 s, about 4 bot-s a pull.
 
+**A ring move under the lit orb waits for the chain** (the user's call, like the
+[camp's](#shelters-and-chain-lightning)). Over 58 hard-mode pulls 27 of 38 ring-crossing chain deaths (the
+opening aside) came in casts whose bridge closed in the 2.5 s before the landing, from walks and steps
+ordered on the lit orb. So while `ThorimChainWaitDue` holds, `ThorimRingChainWait` stands a ring bot whose
+positioning walk or Blizzard step would end within the jump (5.5 yd plus both reaches) of another group's
+floor body (a tank, the camp, a human, another slot's bot) or another slot's point, until the bar ends or,
+with none started, the cap passes. Released, it is not held again under that orb; a walk already under
+way is not stopped. It holds only:
+
+- **from a clear spot:** a bot already in such a body's jump walks, since it bridges either way; held
+  regardless, 7 replayed chains grew, against 1.
+- **while the cone stays escapable:** a bot inside the ring's cone line waits only if its destination is
+  in reach setting off at the bar's end or the cap (`ThorimWalkBeatsCone`, the camp's test).
+- **outside Blizzard:** a bot in a zone (aura 62576/62602) moves at once, and a zone landing on a waiting
+  bot releases it: the bunny walks the 8 yd lead in about a second.
+
+While it waits the movement guard counts it settled, `thorim ring chain wait` blocks `Reach` and `Charge`,
+and `ThorimChainWaitCastHoldMultiplier` holds cast-time spells; `thorim.ringchainwait` reads `wait walk` or
+`wait step`, then `none`. Replayed on those pulls (the player-only hop model, [below](#known-gaps); a held
+bot stands where ordered, then walks straight at its speed): 703 of 3,646 ring orders under a lit orb
+wait, p50 0.86 s, max 1.6, ~10 bot-s a pull, 71 starting out of reach; hits at hop 5 or later fall 48 →
+31, crossings between groups 96 → 74, and on the 360 chains the model reproduces 12 of 44 chain deaths
+go (9 of 29 before the first tank death); 2 held walks newly end in the cone, 8 leave it, and the cone
+test lets 16 walk.
+
 Every melee DPS carries the `behind` strategy from `AiFactory`, so `SetBehindTargetAction` would walk all
 three stacks into one arc behind the boss the moment the ring node yields. The `thorim movement guard` rule
-holds the generic movers, scoped to a **settled** or [stepped-out](#a-covered-slot-steps-out) ring holder
-and exempting `AttackAction` and `ReachTargetAction`: a permanent movement freeze is the Void Reaver
-failure.
+holds the generic movers, scoped to a **settled**, [stepped-out](#a-covered-slot-steps-out) or
+chain-waiting ring holder and exempting `AttackAction` and `ReachTargetAction`: a permanent
+movement freeze is the Void Reaver failure.
 `ThorimMeleeRingSettled` refuses a bot above the floor line: a stale ring latch on the balcony froze two
 bots on the hallway for three minutes.
 
@@ -617,7 +642,7 @@ mid-cast sets off only when the cast ends, and a channel holds it in place throu
 hard-mode pulls, of 146 shelter walks before the first tank death (the opening left out) 51 ended short,
 24 were hit and 13 died, 11 of those on slot 5's rows for orbs 0 and 1 (25.6 and 21.8 yd, across the
 Blizzard track), walked at 2.4-3.5 yd/s or begun 1-3 s late; an Evocation held one 4.4 s.
-`ThorimCampShelterInTime` sets the row's distance against run speed times the time left (lit plus 4.8 s
+`ThorimWalkBeatsCone` sets the row's distance against run speed times the time left (lit plus 4.8 s
 less one scan), cut to 0.35 when the straight walk crosses a zone not yet slowing the bot. Short,
 unrooted and in the lit cone, `ThorimCampConeStep` searches once per orb for the nearest point in the
 uncut reach (at most 20 yd) **45°** off the cone (7.5° past its edge: hits decode to 43.8°), 12-32 yd
@@ -646,10 +671,10 @@ ends; the note reads `slot N orb M wait`.
 - **No cast starts while it waits:** `ThorimChainWaitCastHoldMultiplier` zeroes spells with a cast time or
   channel, or a cast begun in the wait would hold the walk past the landing.
 
-Replayed on those pulls (1,251 orb 1 and 2 walks; the chain re-run hop by hop to the nearest unhit body,
-pets included, within 8 yd): 651 walks wait, 548 of them set off later; the reach test lets 63 walk (2
-chain hits, none dead); all 14 walkers a chain killed stand when it lands; on the 80 chains the hop model
-reproduces, camp hits at hop 5 or later fall from 14 to 4. Cone hits (37.5° off its axis, where every
+Replayed on those pulls (1,251 orb 1 and 2 walks; the chain re-run hop by hop to the nearest unhit body
+within 8 yd, pets wrongly included): 651 walks wait, 548 of them set off later; the reach test lets 63
+walk (2 chain hits, none dead); all 14 walkers a chain killed stand when it lands; on the 80 chains the
+hop model reproduces, camp hits at hop 5 or later fall from 14 to 4. Cone hits (37.5° off its axis, where every
 decoded hit lies): 11 walks newly end inside, 11 others leave it.
 
 `ULDUAR_THORIM_LIGHTNING_CHARGE_RANGED_MARGIN` (2.5°) is deliberately untouched: it already read that
@@ -792,8 +817,9 @@ them tank deaths, and the bridge escape can't clear it (slot 2's point isn't cle
   hard-mode pull, the old spot 30-50. Every sweep covers it for ~12.4 s, and **the waiting tank holds it
   anyway: no step out stays clear of Chain Lightning.** At the 7 casts landing under a sweep (four
   hard-mode phase 2s), the nearest point 11 yd clear lay 8.5-9 yd east, toward Thorim, 2.5-6.4 yd from a
-  pet, the holder or ring melee; a point also beyond the 8 yd hop from every body lay 15.5-18.8 yd out,
-  and in only 3 of 13 sweeps did one fixed point stay both for the whole sweep (1 at Heroism's 8.9 yd).
+  pet (which the chain never hits), the holder or ring melee; a point also beyond the 8 yd hop from every
+  body lay 15.5-18.8 yd out, and in only 3 of 13 sweeps did one fixed point stay both for the whole sweep
+  (1 at Heroism's 8.9 yd).
 - **Melee reach**: 7.1-10.2 yd from his centre, past the 9.0 yd where `reach melee` fires in most
   snapshots of two pulls of six. Reach is exempt from the tank anchor guard, so the waiting tank steps in;
   the positioning row walks him back only past 2.5 yd (its 1 yd is net of his 1.5 reach).
@@ -1200,26 +1226,22 @@ is how a chain crossed the ring, and why the separation floor counts the anchor 
 stacked by construction, accepted: 14 bots share 6 slots, so the tightest occupied pair is **0.00 yd in
 every pull**.
 
-**Pets chain, and the recorder cannot see it**
-([observability](../../systems/observability.md#what-a-trace-cannot-tell-you)), so every hop count here
-is a floor. The core settles what the trace cannot: `WorldObjectSpellTargetCheck` skips **totems and
-nothing else** under `TARGET_CHECK_ENEMY`, so pets and guardians take hops and can be the seed. **24-28
-pet bodies** sit inside 10 yd of him at once, **100% of them within 8 yd of a melee body**, and PetAI
-parks a pet anywhere in a 90° arc behind him, straight into the gaps the slot separation opens. They
-are chased onto a slot bearing instead (`ThorimPetsOffRingSlot`, on the pet leash node), which costs no
-uptime: at ring radius a pet is still inside the 9.1 yd melee reach on any bearing. Army and Feral
-Spirits steer here too, though a player cannot command them
+**Pets never chain.** 62131 and 64390 carry `SPELL_ATTR3_ONLY_ON_PLAYER` (AttributesEx3 0x100): the
+chain search takes players only (`Spell::GetSearcherTypeMask`) and `SpellInfo::CheckTarget` fails any
+other unit, so pets, guardians and totems take no hop, and a seed pick on one fails `CheckCast` while
+the event still repeats in 15 s. So the trace's chains are complete: hop by hop to the nearest unhit
+player within 8 yd reproduces 360 of 446 hard-mode chains' group order, with pets as bodies 281.
+
+`ThorimPetsOffRingSlot` (on the pet leash node) still chases pets onto a slot bearing, a guard against
+hops they cannot take; it costs no uptime, since at ring radius a pet is still inside the 9.1 yd melee
+reach on any bearing. Army and Feral Spirits steer too, though a player cannot command them
 ([pitfalls](../../engine/pitfalls.md#things-the-bot-cannot-see)). Only pets already on him are steered:
 one on an add is doing its job, and one out of the room is the leash's, which runs first and shares the
 throttle, so a pet just sent home isn't redirected. The chase is range 0 like PetAI's, with no command
 or stop, within `ULDUAR_THORIM_PET_SLOT_TOLERANCE` (22.5°, about 3 yd of arc), its bearing converted
-from his live facing every time, since a chase angle is relative to it and he turns with his tank.
-
-**Every bot's pets get a slot, not just a ring melee's**: ranged owners hold 42-48% of the bodies. A
-ring melee uses its own slot, everyone else one off its guid counter modulo 3 (stable per tick and an
-even spread), so a chain held in one cluster spends its late hops on pets rather than reaching the next
-slot's players. **Human-owned pets are 13-30% of the bodies and are not steerable at all**, no
-`PlayerbotAI`. Logging pet damage in `Bot/Obs` is still what it would take to count the real hops.
+from his live facing every time, since a chase angle is relative to it and he turns with his tank. A
+ring melee's pets take its slot, everyone else's one off its guid counter modulo 3; human-owned pets
+are not steerable, no `PlayerbotAI`.
 
 **Who leads the gauntlet: a real player in it, else a bot**, the same code in every raid (user,
 2026-11-22: unattended pulls must test what real raids run). Keying on the raid leader whenever a real
@@ -1435,8 +1457,9 @@ navprobes, not a nudge, and each new point needs the hazard check navprobe does 
 `tools/botobs/bosses/thorim.py <trace>`, reading `thorim.p2start`, `thorim.sifjoined` (hard mode),
 `thorim.ringspot` (each ring bot's slot), `thorim.ringstep` (a ring bot stepped out of Blizzard),
 `thorim.unreach` (whom his cannot-reach flag names), `thorim.lightningorb` (the lit orb),
-`thorim.rangedslot` (the camp), `thorim.shelter` (a camp bot's home, row, cone step or chain wait) and
-`thorim.ringconehold` (a ring walk held for crossing the lit cone):
+`thorim.rangedslot` (the camp), `thorim.shelter` (a camp bot's home, row, cone step or chain wait),
+`thorim.ringconehold` (a ring walk held for crossing the lit cone) and `thorim.ringchainwait` (a ring walk
+or step held for Chain Lightning):
 
 - `--deaths`: deaths by mechanic, phase 1 and phase 2 apart.
 - `--phase2`: what the tank spots are judged on. Chain Lightning casts, hits on the tanks and each ring
@@ -1477,7 +1500,11 @@ navprobes, not a nudge, and each new point needs the hazard check navprobe does 
   the walks that waited for it: released by the landing or the cap, waiters the chain hit standing or
   walking, cone hits and deaths on them, steps after; then totals, with chains of 4+ camp hits and camp
   chain deaths, which traces from before the wait read too.
+- `--ringwait`: per lit orb, the ring walks and steps that waited for Chain Lightning: released by the
+  landing or the cap, waiters the chain hit standing or walking, cone hits and deaths on them; then
+  totals with wait p50 and max, deaths also before the first tank death. Traces without
+  `thorim.ringchainwait` say so.
 
 Per snapshot the holder is the tank he hits and every other living tank on the floor waits; spacing
-counts from 15 s after the drop. Damage rows come in hop order (each hop does 1.5 times the last), and
-pets' hops are not in the trace: a gap past the jump is a pet or snapshot lag.
+counts from 15 s after the drop. Damage rows come in hop order (each hop does 1.5 times the last), every
+hop a player: a gap past the jump is snapshot lag.

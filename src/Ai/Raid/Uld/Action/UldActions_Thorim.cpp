@@ -444,6 +444,9 @@ bool ThorimPhase2PositioningAction::Execute(Event /*event*/)
             return false;
         }
 
+        if (ThorimRingChainWait(botAI, bot, targetPosition, false))
+            return false;
+
         ThorimRingClearArrived(bot);
     }
 
@@ -499,7 +502,7 @@ bool ThorimSifBlizzardAction::Execute(Event event)
     Position escape;
     if (role == ThorimPhase2Role::MeleeRing)
     {
-        if (!ThorimRingBlizzardStep(botAI, bot, escape))
+        if (!ThorimRingBlizzardStep(botAI, bot, escape) || ThorimRingChainWait(botAI, bot, escape, true))
             return false;
     }
     else if (role != ThorimPhase2Role::Ranged)

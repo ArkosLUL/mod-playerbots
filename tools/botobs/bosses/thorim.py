@@ -28,6 +28,9 @@
     thorim.py <file> --chainwait each orb 1 or 2 against the camp: shelter walks held until Chain Lightning
                                  landed, released by the landing or the cap, the chain's camp hops, and what the
                                  chain and the cone did to the waiters
+    thorim.py <file> --ringwait  each lit orb against the melee ring: walks and steps held until Chain Lightning
+                                 landed, released by the landing or the cap, how long, and what the chain and the
+                                 cone did to the waiters
 """
 from __future__ import annotations
 
@@ -121,6 +124,7 @@ WAIT_LOOK_MS = 4800
 CHAIN_LOOK_MS = (-1000, 3000)
 CAMP_CHAIN_BRIDGE = 4
 RELEASE_SLACK_MS = 500
+RING_CHAIN_WAIT = "thorim.ringchainwait"
 
 
 def mine(trace: Trace) -> bool:
@@ -1354,6 +1358,99 @@ def show_chainwait(trace: Trace) -> None:
           f"{total['steps']}")
 
 
+class RingChainWaits:
+    def __init__(self, trace: Trace, start: int):
+        probes = notes(trace, RING_CHAIN_WAIT)
+        self.probed = bool(probes)
+        self.spans: list[tuple] = []
+        opened: dict = {}
+        for note in probes:
+            text = str(note.get("txt"))
+            if text.startswith("wait"):
+                opened.setdefault(note.get("g"), (note["t"], text.split()[-1]))
+            elif note.get("g") in opened:
+                begin, kind = opened.pop(note.get("g"))
+                self.spans.append((note.get("g"), begin, note["t"], kind))
+        self.spans += [(guid, begin, None, kind) for guid, (begin, kind) in opened.items()]
+        self.chains = chain_casts(trace, start, set(trace.roles))
+        self.cones = [rec for rec in trace.of("dmg") if rec.get("sp") == LIGHTNING_CHARGE]
+        self.deaths = [(death["g"], death["t"], blow_spell(death)) for death in combat_deaths(trace)]
+
+    def died(self, guid, when: int, spells) -> bool:
+        return any(g == guid and spell in spells and abs(t - when) <= CHAIN_DEATH_MS for g, t, spell in self.deaths)
+
+    def read(self, lit: int) -> dict:
+        spans = [span for span in self.spans if lit - SHELTER_LEAD_MS <= span[1] <= lit + WAIT_LOOK_MS]
+        chain = next((cast for cast in self.chains if CHAIN_LOOK_MS[0] <= cast[0]["t"] - lit <= CHAIN_LOOK_MS[1]),
+                     [])
+        land = chain[0]["t"] if chain else None
+        hit_at = {rec["d"]: rec["t"] for rec in chain}
+        out = collections.Counter(waits=len(spans))
+        lengths = []
+        for guid, begin, end, kind in spans:
+            out[kind] += 1
+            if end is not None:
+                lengths.append(end - begin)
+            out["landed"] += land is not None and begin <= land and (end is None or land <= end + RELEASE_SLACK_MS)
+            if guid in hit_at:
+                out["standing" if end is None or hit_at[guid] <= end else "walking"] += 1
+                out["chain dead"] += self.died(guid, hit_at[guid], CHAIN_LIGHTNING)
+            cone = next((rec["t"] for rec in self.cones
+                         if rec["d"] == guid and CONE_LEAD_MS[0] <= rec["t"] - lit <= CONE_LEAD_MS[1]), None)
+            if cone is not None:
+                out["cone hit"] += 1
+                out["cone dead"] += self.died(guid, cone, (LIGHTNING_CHARGE,))
+        return {"counts": out, "lengths": lengths}
+
+
+def ring_wait_counts(counts: collections.Counter) -> str:
+    return (f"walk {counts['walk']}, step {counts['step']}; released by the landing {counts['landed']}, by the cap "
+            f"{counts['waits'] - counts['landed']}")
+
+
+def show_ringwait(trace: Trace) -> None:
+    print("RING CHAIN WAITS")
+    if not mine(trace):
+        return
+    start = phase2_start(trace)
+    if start is None:
+        print("  phase 2 never started")
+        return
+    lits = lit_orbs(trace, start)
+    if not lits:
+        print("  no thorim.lightningorb probe or no lit orb in phase 2")
+        return
+    waits = RingChainWaits(trace, start)
+    if not waits.probed:
+        print(f"  no {RING_CHAIN_WAIT} probe (a build before it)")
+        return
+    first_tank = first_tank_death(trace, start)
+    total = collections.Counter()
+    lengths: list[int] = []
+    for lit in lits:
+        read = waits.read(lit)
+        counts = read["counts"]
+        early = first_tank is None or lit < first_tank
+        lengths += read["lengths"]
+        total["lit"] += 1
+        total["with a wait"] += bool(counts["waits"])
+        for key, value in counts.items():
+            total[key] += value
+            if early:
+                total["early " + key] += value
+        if not counts["waits"]:
+            continue
+        print(f"  +{(lit - start) / 1000.0:.1f} s: waits {counts['waits']} ({ring_wait_counts(counts)}); waiters hit "
+              f"by the chain standing {counts['standing']} / walking {counts['walking']}, dead {counts['chain dead']}; "
+              f"by the cone {counts['cone hit']}, dead {counts['cone dead']}")
+    seconds = [value / 1000.0 for value in lengths]
+    print(f"  all: lit orbs {total['lit']}, with a wait {total['with a wait']}; waits {total['waits']} "
+          f"({ring_wait_counts(total)}), wait p50 {yd(quantile(seconds, .5))} max {yd(max(seconds, default=None))} s; "
+          f"waiters hit by the chain standing {total['standing']} / walking {total['walking']}, dead "
+          f"{total['chain dead']} ({total['early chain dead']} before the first tank death); by the cone "
+          f"{total['cone hit']}, dead {total['cone dead']} ({total['early cone dead']} before the first tank death)")
+
+
 def rows_before(trace: Trace, when: int) -> dict:
     last = None
     for snap in frames(trace):
@@ -1431,6 +1528,8 @@ SECTIONS = (
      "each stood, the move that put it there, who it hit", show_colossus),
     ("chainwait", "each orb 1 or 2 against the camp: shelter walks held for Chain Lightning, how they were released, "
      "the chain's camp hops, and what the chain and the cone did to the waiters", show_chainwait),
+    ("ringwait", "each lit orb against the melee ring: walks and steps held for Chain Lightning, how they were "
+     "released, how long, and what the chain and the cone did to the waiters", show_ringwait),
 )
 SUMMARY = ("deaths", "phase2")
 
