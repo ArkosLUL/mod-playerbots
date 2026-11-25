@@ -443,6 +443,16 @@ A pickup or swap due on it lifts the rule, the kite and its constellation taunts
 back to him: kiting 50-60 yd out, it never came back and the holder died at 4 stacks. Constellations are
 excluded from everyone else's pickers.
 
+**Nothing it pulls crosses the raid's holes.** A constellation flies straight at its new victim. Before Big
+Bang 1 the raid's only hole closed in 5 of 12 pulls, mostly to one crossing it to the handler's taunt or Icy
+Touch; `urgent`'s replacement died beside the handler's constellations and went too, and the third
+explosion in 16 s killed 4 and 8 on a drained raid. So the raid's two holes with Big Bang due (the 60 s reserve), and `urgent`'s star
+while it runs, are off the handler's lines: it taunts or damages a loose one only along a line clearing them
+by 7.5 yd, else first walks to a spot 12-20 yd from it whose line clears them by 8-9.5 yd (`side`), 12 yd off
+them, 8 yd off every hole, clear of meteors and out of his reach; with none (`blocked`) it leaves that one
+alone. Holding any with no spare hole to kite into, or gathering, it walks 14 yd off them once within 12
+(`clear`).
+
 **The swap tank not holding him is a second taunter** while the handler is a third tank: one diving on a
 healer ate the raid's last near hole before a cast (20 dead). In the 30 s before each Big Bang it taunts
 the nearest constellation on a healer within 28 yd (`algalon.offtaunt`), not the handler's target, and
@@ -724,8 +734,8 @@ Pulls file under `algalon-the-observer`, aliased to `algalon` in `BOSS_ALIASES`.
 - **Derived per bot, each inside the helper that derives it:** `algalon.tankheal`
   (`holder`/`offtank`/`self`/`range`/`full`, tank healers only), `algalon.hide`
   (`none`/`wait`/`run`/`in`/`exit`/`soak`/`backup`/`hold`/`noshelter`; `hold` is a chased bot waiting
-  to go last), `algalon.kite` (`taunt`/`behind`/`stage`/`wait`/`cross`/`parked`/`kept`/`gather`/`nohole`/`stuck`/`none`;
-  older traces `hole`), `algalon.spot`
+  to go last), `algalon.kite` (`taunt`/`behind`/`side`/`blocked`/`clear`/`stage`/`wait`/`cross`/`parked`/`kept`/
+  `gather`/`nohole`/`stuck`/`none`; older traces `hole`), `algalon.spot`
   (`pickup`/`tank`/`offtank`/`stage`/`slot`/`star`/`starhold`/`nearhole`/`melee`/`buried`/`blocked`/`smash`/`none`),
   `algalon.hazard` (`smash`/`star`/`none`), `algalon.dodge` (`idle`/`clear`/`min`/`field`/`cross`/`none`,
   `cross` meaning only a path over a hole was clear; written on change only, so it resets to `idle` while
@@ -790,6 +800,8 @@ with a swap tank out on `noshelter` aside, per cast the hiders that used a gap c
   at the cast (h% dies h−1 to h s later); over one switch per star; 3 Shoot starts in 2 s.
 - `--collateral`: each bot DoT on a star; the finisher on its finish star counts as on the focus there and in
   `--stars`. `--constellations`: a kite blocked 5 s or more, kite stats from the elected handler alone.
+  `--holes`: each raid hole a constellation closed with Big Bang due: the eater's last victim and its yards
+  off, the eater's height, the handler's yards and `algalon.kite`.
 - `--phasing`: a stray phase within 1.5 s of a gap closer reads `charged in (<spell>)`, `jumped in` for
   Blink, Disengage, Shadowstep and Killing Spree; a hole spawning on the bot still reads `new hole`.
 - `--melee`: per melee bot, per phase outside each Big Bang's cast and 4 s after it, seconds on him in his

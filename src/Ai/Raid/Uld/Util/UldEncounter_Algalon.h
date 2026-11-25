@@ -86,6 +86,11 @@ inline constexpr float ULDUAR_ALGALON_CONSTELLATION_EAT_RADIUS = 6.5f;
 inline constexpr float ULDUAR_ALGALON_CONSTELLATION_LOW_Z = 7.5f;
 inline constexpr float ULDUAR_ALGALON_KITE_SWING = static_cast<float>(M_PI) / 6.0f;
 inline constexpr float ULDUAR_ALGALON_TAUNT_REACH = 28.0f;
+inline constexpr float ULDUAR_ALGALON_TAUNT_SPOT_NEAR = 12.0f;
+inline constexpr float ULDUAR_ALGALON_TAUNT_SPOT_FAR = 20.0f;
+inline constexpr float ULDUAR_ALGALON_TAUNT_LINE_SLACK = 0.5f;
+inline constexpr float ULDUAR_ALGALON_HANDLER_HOLE_CLEARANCE = 12.0f;
+inline constexpr float ULDUAR_ALGALON_HANDLER_KEEP_MARGIN = 2.0f;
 inline constexpr uint32 ULDUAR_ALGALON_TAUNT_COOLDOWN_MS = 8000;
 inline constexpr uint32 ULDUAR_ALGALON_OFFTANK_TAUNT_SECONDS = 30;
 inline constexpr float ULDUAR_ALGALON_TANK_SHELTER_REACH = 35.0f;
@@ -279,6 +284,13 @@ enum class AlgalonKiteStage : uint8
     Wait,
     Cross,
     Parked,
+};
+
+enum class AlgalonTauntLine : uint8
+{
+    Clear,
+    Side,
+    Blocked,
 };
 
 struct AlgalonKite
@@ -505,6 +517,8 @@ Unit* GetAlgalonOffTankConstellation(Player* bot);
 bool GetAlgalonKiteSpot(Player* bot, Unit* constellation, Position& spot, char const*& stage);
 bool AlgalonKiteBehind(Player* bot, Unit* constellation, Position& spot);
 bool AlgalonKitingBehind(Player* bot, Unit* constellation);
+AlgalonTauntLine GetAlgalonTauntLine(Player* bot, Unit* constellation, Position& spot);
+bool GetAlgalonKeepSpot(Player* bot, Position& spot);
 Unit* GetAlgalonLooseDarkMatter(Player* bot);
 
 bool IsAlgalonStarTeam(Player* bot);

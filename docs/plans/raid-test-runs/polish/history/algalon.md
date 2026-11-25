@@ -1434,3 +1434,62 @@ Barrage; Q2.
 hole sat by him, P2 blocked near 0; P1 under ~310 s where P1 deaths stay ≤ 5, and A and B pulls reaching P2 killing
 before Berserk. `--stars`: no under-star `above` its band at the cast (w48 1) and `early` not above w48's 5.
 Regression watch: a stray phase from `algalon raid position action` in `--phasing` (the spot walk into a field).
+
+## Round 18 (2026-11-25, window 50 build 0200b8827: round 17)
+
+**Data.** `window50-algalon.md`, `window48-algalon.md`; every w50 pull's `--verdict`, `--deaths`; `--stars`,
+`--smash`, `--melee`, `--phasing` on all 12 w48/w50 traces. Scratch `alg18/` (window flips with the channel cast
+before them), folded into `--stars` as the bulk breaks.
+
+| Pool | Trace `603_*_algalon-the-observer_*` | Out | Deaths (reader causes) |
+|---|---|---|---|
+| uld1 A | `603_18_…_1795613849` | wipe 6:18 in P1 | 34: loose 14, star 7, Barrage 6, on tank 6, Smash |
+| uld4 A | `603_13_…_1795613694` | wipe 6:55, P1 312 s | 33: loose 17, on tank 6, star 4, Smash 2, other 2, Dark Matter, Big Bang |
+| uld2 B | `603_15_…_1795613725` | wipe 6:16 in P1 | 30: loose 12, star 5, Barrage 5, on tank 5, Smash 3 |
+| uld5 B | `603_14_…_1795613703` | wipe 4:36 in P1 | 31: loose 21, on tank 4, star 3, Barrage 2, Smash |
+| uld3 C | `603_17_…_1795613788` | wipe 5:18 in P1 | 33: star 8, Barrage 7, Smash 5, on tank 4, loose 4, Black Hole DoT 2, Dark Matter 2, Big Bang |
+| uld6 C | `603_16_…_1795613747` | wipe 6:54, P1 333 s | 32: star 9, loose 9, on tank 5, Black Hole DoT 3, Barrage 2, other 2, Smash, Big Bang |
+
+**Stop rules.** Not polished: no kill. Not stuck: this round backs out a regression rather than picking a failure;
+the finisher hand-off has now been touched in r16, r17 and r18, so a fourth round on it calls stuck.
+
+**Verdict on round 17, per part.**
+
+- Melee spot: **held.** `--melee` P1 seconds blocked by a hole (outside the casts): uld1 3.0, uld4 5.3, uld5 26.7,
+  uld2, uld3, uld6 0 (w48: 6.5-526); P2 at most 1.7; spot seconds 0-10.8 a pull. No stray phase from the spot walk
+  (`--phasing`: one stray, a tank face). A and B: no pull reached P2 with ≤ 5 P1 deaths (uld4 13, uld6 12), so its
+  effect on P1 length is untested.
+- Hand-off cap: **regressed, backed out.** Judged by mechanism, not by kill rate: the capped margin is 0 from 3 s
+  before the cast and, for a 5-member team at +2.5 %/s, about half a tick per second left before that (6 at
+  15 s, against r16's 12.5), so the team kept Big Bang 2's last star to the end; `--stars` shows each failure on
+  that path, w48 none:
+  - uld3 1840 (C): no hand-off; Uldzak's Kill Shot 7.7% from 11.6% 1.8 s before the cast, `early` at 3%, off in
+    the cast at 3:26.7 on 23 outside a field (19 not yet hiding); 7 dead by 3:33, the pull fell from there.
+  - uld4 1873 (A): no hand-off; Shadow Bolt 6.4%, Arcane Blast 4.1%, Mind Flay 2.4% from 28.8% to 16.5% 14.6 s
+    before the cast, `early`.
+  - uld5 1888 (B): no hand-off; 76 → 20% by 3:21.9 at +2.9 %/s, then idle: Uldval's Drain Soul on it under 25%
+    zeroed `BulkLeftHp` through `pendingHp`, `UnderBulkStar` returned none, the window fell to `raidhp`,
+    `StopCastsAtLine` cut the channel, and the bulk came back 0.3 s later, three times (3:21.9, 3:23.4, 3:24.5).
+    14.4% at the cast over its 9.6% top, off 6.1 s after the hit on 22 (17 under the line, 2 dead); every tank dead
+    by 3:54, loose 29 s, 19 dead. uld3's 1840 shows the same flips twice (3:20.0, 3:21.4).
+  BB2 under-stars `early` 4 (w48 1), `above` 1 (w48 1); all cycles `early` 9 (w48 5).
+
+**Picked: the backout** (bug: the cap broke the finisher hand-off r16 set up). `FinishHandOverHp` and
+`HandOverFinish` (`UldEncounter_Algalon.cpp`) are r16's again: 2.5 ticks over the line per team member, no cap;
+`BulkClosingPctPerSec` folds back into `BulkWorkMs`. The code now differs from d9964f052 only by `MeleeHoleSpot`.
+r16's one last-star `above` (uld6 1865) stays a known risk.
+
+**Reader.** `--stars` lists the bulk broken off for 2 s or less and back, with the last cast on its star in the
+400 ms before (`bulk_breaks`), test `BulkBreaks`. `docs/raids/ulduar/algalon.md`: the Bulk bullet loses the cap and
+records why; the `pendingHp` sentence records a channel's ticks.
+
+Bots only, 10 and 25 alike; a human changes nothing. Shared code: none.
+
+**Not picked:** the Drain Soul `pendingHp` flip (a lead: seen only under the cap); Cosmic Smash in Big Bang 2's
+hide (8 dead at 3:30, most left low by Big Bang 2's stars); tank burst (Q2); Barrage.
+
+**Next window should show.** `--stars`: Big Bang 2 under-stars with a hand-off before the cast (no `team, no
+hand-off` `early`, w50 2), `early` back to w48's 5 or under across all cycles (w50 9), `above` at the cast at most
+1, no bulk breaks to `raidhp`/`gap` (w50 5). `--melee` P1 blocked under 30 s a pull. Fewer Smash deaths at 3:30
+(w50 8) once Big Bang 2's stars stop draining hiders. A and B pulls reaching P2 with ≤ 5 P1 deaths end P1 under
+~310 s.
