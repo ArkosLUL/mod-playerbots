@@ -461,6 +461,9 @@ HANDBACK_KINDS = ("taunt dragger", "hunter", "tank", "other")
 # Guardian's row may be at the check.
 BEACON_TAUNT_CHECK_MS = 1500
 BEACON_TAUNT_LAND_MS = 1000
+MISSED_TAUNT_LOOK_MS = 12000
+MISSED_SWING_LOOK_MS = 1000
+MISSED_CHANNEL_END_MS = 200
 TAUNT_ROW_SLACK_MS = 1000
 # Where a staged dragger waits, by lane in the module's order (north, south, north-east): the staging spot,
 # and the hunter spot a hunter waits at instead.
@@ -4837,6 +4840,27 @@ def taunt_outcome(rows: list[list], when: int, caster: int, spans: list[tuple[in
     return "took" if rows[index][8] == caster else "didn't take"
 
 
+def missed_verdicts(missed: list[tuple[int, int]], taunts: list[tuple[int, int, int, int]],
+                    swings: list[tuple[int, int, int]], channels: list[tuple[int, int, int]],
+                    look_ms: int = MISSED_SWING_LOOK_MS, end_ms: int = MISSED_CHANNEL_END_MS) -> tuple[int, int, int]:
+    """The drag code's `missed` verdicts as (ms, dragger), each read against the dragger's last drag taunt in the
+    MISSED_TAUNT_LOOK_MS before it, from taunts as (ms, caster, spell, Guardian): (verdicts, those whose Guardian swung
+    at the dragger within `look_ms` after, so the taunt had taken, those within `end_ms` of that Guardian's Drain Life
+    ending). Swings are (ms, Guardian, victim); channels come from drain_life_channels."""
+    total = swung = ended = 0
+    for when, dragger in missed:
+        total += 1
+        aim = max(((at, guardian) for at, caster, _, guardian in taunts
+                   if caster == dragger and when - MISSED_TAUNT_LOOK_MS <= at <= when), default=None)
+        if aim is None:
+            continue
+        guardian = aim[1]
+        swung += any(source == guardian and victim == dragger and when <= at <= when + look_ms
+                     for at, source, victim in swings)
+        ended += any(caster == guardian and abs(began + ms - when) <= end_ms for began, caster, ms in channels)
+    return total, swung, ended
+
+
 def mark_drains(channels: list[tuple[int, int, int]], guardian: int, first: int, last: int) -> tuple[float, int, int]:
     """One marked Guardian's Drain Life between its mark and the heal: (seconds channelled inside
     [first, last], channels, of those cut before DRAIN_FULL_MS). Channels are (start, caster, ms)."""
@@ -5728,6 +5752,12 @@ def show_phase3(trace: Trace) -> None:
     drags = collections.Counter(str(rec.get("txt", "")) for rec in drag_notes)
     if drags:
         print(f"    yogg.beacondrag  : {dict(drags)}")
+    missed = [(rec["t"], rec.get("g", 0)) for rec in drag_notes if rec.get("txt") == "missed"]
+    if missed:
+        swings = [(hit["t"], hit.get("s", 0), hit.get("d", 0)) for hit in melee_hits]
+        total, swung, ended = missed_verdicts(missed, drag_taunts, swings, channels)
+        print(f"    missed taunts    : {total}, the mark on its dragger within {MISSED_SWING_LOOK_MS // 1000} s"
+              f" after {swung}, at a Drain Life's end {ended}")
     sides = collections.Counter(str(rec.get("txt", "")) for rec in notes(trace, "yogg.beaconspot"))
     if sides:
         print(f"    yogg.beaconspot  : {dict(sides)}")
