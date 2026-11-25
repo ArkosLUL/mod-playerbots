@@ -851,8 +851,9 @@ the melee. A melee substitute stays 5.0-10.0 yd from VX-001
 (reach + `ULDUAR_MIMIRON_PHASE2_MELEE_REACH_MARGIN` 2, inside the 10.25 where `reach melee` fires and walks it at the boss off its sector) and off the wedge's
 line, and skips the Napalm spacing test. `mimiron vx001 facing guard` zeroes `set behind` and `tank
 face` there. Hard-mode phase 4 hands out the same sector as `p4melee`, round VX-001 on the chassis,
-without the main tank, who holds the MK II; melee sent to the ACU (reach 5, so 7.83 yd) close the last
-yards inside the slot tolerance.
+without the main tank, who holds the MK II; melee sent to the ACU never reach it ([phase
+4](#phase-4-is-a-rendezvous-and-percent-is-the-only-correct-ordering)) and walk between slot and stack (174
+`arc spread <-> reach melee` A-B-A in one 10-man phase 4).
 
 **The ring centres on the mech, not the room.** Bots cast out to `Playerbots.SpellDistance`, 28.5 here
 (no `AC_` override), so a ring pinned to the room centre puts the far half out of range after about six
@@ -1200,16 +1201,16 @@ cone into a line about 2.3 yd each side, 18,850-21,150 frost plus Emergency Mode
 The 25-man bot (34148, 50.4k HP, ~63k empowered) also carries **Deafening Siren 64616**, a 10 yd area
 silence, from `creature_template_addon`. Faction 16, so attackable.
 
-**Nobody kills one, bar the phase 4 handover.** `GetMimironKeptFireBots` keeps every live one while the
-encounter is in progress, raid-wide, folded every 250 ms, through phase 3 and phase 4: each puts out fire, so
+**Nobody kills one in phase 3.** `GetMimironKeptFireBots` keeps every live one while the
+encounter is in progress, raid-wide, folded every 250 ms, through phase 3: each puts out fire, so
 a dead one only lets the fire build, and a stray spray line is cheaper than pulling anyone off the
 rendezvous. The DPS picker has no fire bot entry then. Culls were measured: an early one spent 7% of phase 3
 output and 21% of ranged bot-seconds on them at ACU 97.9%; demoting them let six live together, spray
 248k and kill six bots; keeping two and culling the rest left the raid in a permanent cull with 1.7-2.4
 alive while fire ran to 41-46% of phase 3 intake. A fire bot with no flame within 150 yd stops moving and
 never sprays, so a raid that clears the field ends up with quiet ones. Watch `arc spread <-> fire bot`
-A-B-A, the casting share and phase 4's splash holds (below): nine to fifteen alive is nine to fifteen
-silences walking into the raid, and those numbers would say a cull was right after all.
+A-B-A and the casting share: nine to fifteen alive is nine to fifteen silences walking into the raid, and
+those numbers would say a cull was right after all.
 
 **Kept into phase 4 they cost more than the fire they put out, so the phase 4 handover kills them.** With
 every one kept there, phase 4 Flames fell to 0.3-1.1k/s from 1.4-2.9k/s and killed nobody, but Water Spray
@@ -1223,7 +1224,16 @@ spent, unselectable ACU in the room (`NOT_SELECTABLE`, under `ULDUAR_MIMIRON_SPE
 0.2% throughout). There the fold hands the live ones to `IsMimironFireBotCullActive` instead of the kept set:
 `mimiron target guard` and, for DPS, `mimiron set dps priority` stay on while one lives, and DPS take them
 after any leftover Assault, Junk or Bomb Bot; the splash guard and the target exclusions lift with the kept
-set. A survivor into phase 4 is kept again.
+set.
+
+**The cull runs on through phase 4** (`IsMimironPhase4`), since a leftover add can hold the whole
+handover: two of eleven opened with nine fire bots and spent it on leftover Junk and Assault Bots, only
+the tanks hitting fire bots. When phase 4 kept them, four rode a 10-man one and sprayed its last ranged
+DPS dead; in a 25-man one, one at 1-6% lived 130 s behind the splash guard, the siren silenced 184 raid-s,
+and Berserk caught the ACU at 2.5%. Nothing summons more in phase 4: its `SetData(1, 4)` resets the ACU's
+events. Held melee (`p4hold`) and healers leave them alone: healers run `mimiron set dps priority` in
+phase 4, but its fire bot entry skips them, as the trigger's gate does in the handover, else a far fire bot
+walks them off their row by `reach spell`.
 
 **Keeping them out of Mimiron's picker is not enough.** The bot tank killed both kept bots on its own,
 since `MimironSetDpsPriorityTrigger` stands down for tanks and `mimiron target guard` only zeroes
@@ -1237,8 +1247,7 @@ holds splash while a kept bot is within `ULDUAR_MIMIRON_FIREBOT_AOE_CLEARANCE` (
 target: the widest raid AoE in play is about 10 yd, and 30 switched the raid's AoE off for all of phase 3
 around a dozen bots, the phase a Junk Bot arrives every 10 s. It tests `SpellSplashes`
 ([the Aoe threat type is no splash marker](../../engine/raid-mechanics-lessons.md#crowd-control-and-threat-on-adds)),
-plus the totem and trap summoners by name, and leaves heals alone. In phase 4 every splash on the stack
-hits all three parts, so a fire bot within 12 yd of it costs the phase real damage.
+plus the totem and trap summoners by name, and leaves heals alone.
 
 **Water Spray one-shots, so it outranks the fire.** Cast time index 1, 0 ms: no cast to see, only the hit,
 **23-26k against a 22-24k pool**, a single tick on a standing victim. Three fixes keep bots out of the
@@ -1338,26 +1347,29 @@ of 1564 target notes in one kill were a VX-001/MK II flip, each resetting a swin
 comes from health alone, so the tank node, the DPS node and the pets agree, and five fit inside the 10%
 floor.
 
-**All three occupy one point server-side.** VehicleSeat 3886 (VX-001 on the chassis) and 3806 (the ACU on
-VX-001) carry `AttachmentOffsetX/Y/Z = 0,0,0`, `Vehicle::AddPassenger` relocates by exactly those offsets,
-and `RelocatePassengers` rewrites passengers to `vehiclePos + offset` on every chassis move without
-re-applying hover height; the visual stack is client-side. So everything splashes every part, and the ACU
-is reachable by melee.
+**The ACU hovers 15 yd over the other two, out of melee reach.** VehicleSeat 3886 (VX-001 on the chassis)
+and 3806 (the ACU on VX-001) carry `AttachmentOffsetX/Y/Z = 0,0,0`, so VX-001 shares the chassis' point,
+but every phase 4 snapshot of five pulls, both sizes, puts the ACU at the same x,y and z 379.3 against
+364.3, its 15 yd hover height: `EVENT_JOIN_TOGETHER` seats it without clearing phase 3's `SetHover(true)`.
+`Unit::IsWithinMeleeRange` is 3D and its reach of 0 gives 5 yd, so no swing lands: melee aimed at it deal
+only ranged spells (Howling Blast, Icy Touch, Exorcism, shocks), a rogue next to nothing, a bear off-tank
+0.1-0.2k/s. **Its pace is the ranged's** (`--p4pace`): a 10-man with two ranged DPS took it down 0.33%/s
+(134 s phase 4), with one left 0.13-0.19%/s, and Berserk came first.
 
 Ranged DPS own the ACU (`IsRangedDps`, not `IsRanged`, so a healer is never steered onto it or into the
 hold); melee get it only while the pair waits on it.
 
 **The ACU still arrives last, so the floor follows the leader.** Ranged aimed 94% of their damage at it and
-it still lost 25.6k hp/s against the pair's 44-46k: one point, so pets, DoTs, totems and AoE spread across
-the stack. Against a flat 10% floor the pair waited with the ACU at 20.2%, Self Repair started over a
-16.7 s spread against the 15 s cast, all three returned at 50%, and phase 4 took 235 s against 112. The
-floor is **`max(10%, leader − ULDUAR_MIMIRON_PHASE4_CONVERGE_PCT)`**, 4% or two bands, `leader` being the
-part furthest from death: the pair parks just under the ACU and the three walk down together. Humans put
-71% of their damage into the pair, which no bot change reaches: in phase 4 a player belongs on the ACU.
-This holds in both modes.
+it still lost 25.6k hp/s against the pair's 44-46k, since nothing else reaches it. Against a flat 10%
+floor the pair waited with the ACU at 20.2%, Self Repair started over a 16.7 s spread against the 15 s
+cast, all three returned at 50%, and phase 4 took 235 s against 112. The floor is
+**`max(10%, leader − ULDUAR_MIMIRON_PHASE4_CONVERGE_PCT)`**, 4% or two bands, `leader` being the part
+furthest from death: the pair parks just under the ACU and the three walk down together. Humans put 71% of
+their damage into the pair, which no bot change reaches: in phase 4 a player belongs on the ACU. This
+holds in both modes.
 
-**Melee at the floor hit the ACU instead of holding.** It is the leader then, so every hit closes the gap;
-held, melee were targetless 24-81% of a phase 4. Melee and pets take it while the lower ground part is
+**Melee at the floor take the ACU instead of holding**, though only their ranged spells reach it; held,
+melee were targetless 24-81% of a phase 4. Melee and pets take it while the lower ground part is
 within twice the converge (8 points) of it, and hold past that, since cleave splashes the pair. No tank
 holds, nor does a healer. A hold (`p4hold`) claims the tick so the class strategies don't re-engage; dodges
 above `ACTION_RAID` still run.
@@ -1368,8 +1380,9 @@ it rode the top-threat ranged: 72-99% of a phase 4's samples, 29-37 balls on ran
 `GetMimironPhase4AcuTankFocus` gives the first living assist tank the ACU while it is attackable, else the
 melee focus; `MimironPhase4FocusAction` attacks it, `mimiron phase 4 acu tank target guard` keeps `tank
 assist` off his target, and his class `lose aggro` taunt takes the ACU back. A real player as that assist tank
-does the job himself: the index counts players. Nothing moves: the ACU's combat reach is 0, so its 5 yd melee
-range lies inside his `p4melee` slot's 5 yd tolerance.
+does the job himself: the index counts players. He never reaches it either, and `reach melee` against his
+`p4melee` slot keeps him walking 65-70% of a phase 4, yet taunts and Faerie Fire alone hold the ACU on
+him 81-99% of one.
 
 **Every restriction lifts the moment a part starts self-repairing.** `IsMimironPhase4` is keyed on VX-001
 riding the chassis, not on all three being attackable, so it stays true through that window, the most
@@ -1659,6 +1672,8 @@ leaves humans out of positions and mana; `--p3` measures each landing off the un
 dodge burned only with a Flames tick on the bot in the 2 s before it, a fallback leg burning when it ends
 within 3.5 yd of a live Flames (Spread), and counts `castcut` notes 1 s apart as one cut; `--acutank`
 takes whoever got a `p4tank` slot as the main tank and every other roster tank as the off-tank;
+`--p4pace` runs from the first snapshot with all three parts above 25% to the first Self Repair, and
+charges a bot's `dealt`, splash included, to what it aimed at;
 `--mines` charges a mine hit to the bot's last leg under 4 s old while it moves, else `standing`,
 judges legs on their straight line, not the navmesh walk, and counts the mine steps begun 3 yd or more
 from the nearest live mine in the snapshot before; `--unreach` gives each `unreach` span with the MK II's health and also

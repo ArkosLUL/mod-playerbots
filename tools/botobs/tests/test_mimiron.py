@@ -1232,6 +1232,88 @@ class AcuTankPull(unittest.TestCase):
         self.assertIn("off-tank 2 for 20k", out.getvalue())
 
 
+PACE_MKII = 4294970750
+PACE_VX = 4294970751
+PACE_ACU = 4294970752
+
+
+def pace_hp(when: int, per_second: float) -> float:
+    return 0.5 if when < 2000 else 50.0 - per_second * (when - 2000) / 1000.0
+
+
+def pace_snap(when: int) -> dict:
+    rows = [[PACE_MKII, 0.0, 0.0, 364.0, 0.0, pace_hp(when, 0.5), 0.0, BULWARK, 0, 0, 0, 0, 0, 0.0],
+            [PACE_VX, 0.0, 0.0, 364.0, 0.0, pace_hp(when, 0.5), 0.0, BULWARK, 0, 0, 0, 0, 0, 0.0],
+            [PACE_ACU, 0.0, 0.0, 379.0, 0.0, pace_hp(when, 0.25), 0.0, BULWARK, 0, 0, 0, 0, 0, 0.0]]
+    shadow_aim = PACE_MKII if when < 32000 else PACE_ACU
+    aims = {AGONY: (PACE_ACU, when), TREE: (0, 0), SHADOW: (shadow_aim, 2 * when), BULWARK: (PACE_MKII, 0)}
+    for guid, (x, y) in HOME.items():
+        aim, dealt = aims[guid]
+        rows.append([guid, x, y, 364.0, 0.0, 100.0, 80.0, aim, 0, 0, 0, dealt, 0, 0.0])
+    return {"t": when, "e": "snap", "u": rows, "hz": []}
+
+
+def pace_pull() -> list[dict]:
+    records = [
+        {"e": "hdr", "v": 14, "ts": 1789700000000, "map": 603, "inst": 12, "diff": 1, "boss": "mimiron",
+         "roster": ROSTER},
+        {"t": 0, "e": "pull", "boss": "mimiron", "src": "engage"},
+        {"t": 1, "e": "unit", "g": PACE_MKII, "en": mm.NPC_LEVIATHAN_MKII, "n": "Leviathan Mk II", "b": 1},
+        {"t": 1, "e": "unit", "g": PACE_VX, "en": mm.NPC_VX001, "n": "VX-001", "b": 1},
+        {"t": 1, "e": "unit", "g": PACE_ACU, "en": mm.NPC_AERIAL_COMMAND_UNIT, "n": "Aerial Command Unit", "b": 1,
+         "mhp": 1000000},
+        {"t": 0, "e": "note", "g": AGONY, "k": "mimiron.phase", "txt": "5"},
+        {"t": 1000, "e": "note", "g": AGONY, "k": "mimiron.phase", "txt": "4"},
+        {"t": 1000, "e": "cast", "s": PACE_ACU, "sp": mm.SPELL_SELF_REPAIR, "tgt": 0, "ct": 0, "tr": 1},
+        {"t": 62000, "e": "cast", "s": PACE_MKII, "sp": mm.SPELL_SELF_REPAIR, "tgt": 0, "ct": 15000},
+        {"t": 63000, "e": "end", "out": "wipe"},
+    ]
+    records += [pace_snap(when) for when in range(0, 63000, 250)]
+    return records
+
+
+class PacePull(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        path = pathlib.Path(cls.folder.name) / "603_12_mimiron_1789700012.ndjson"
+        path.write_text("\n".join(json.dumps(rec) for rec in pace_pull()) + "\n", encoding="utf-8")
+        cls.trace = Trace(path)
+        cls.rows = mm.p4pace_rows(cls.trace)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_the_span_runs_from_the_repaired_parts_to_the_first_self_repair_after(self):
+        self.assertEqual((self.rows["begin"], self.rows["end"]), (2000, 62000))
+        self.assertEqual(self.rows["repairs"], [(62000, "MK II")])
+
+    def test_a_mark_every_30_s_and_the_last_snapshot(self):
+        self.assertEqual([when for when, _, _, _ in self.rows["marks"]], [2000, 32000, 62000])
+        self.assertEqual(self.rows["marks"][-1][1], {"MK II": 20.0, "VX-001": 20.0, "ACU": 35.0})
+
+    def test_loss_rates_and_the_acu_in_hit_points(self):
+        self.assertEqual(self.rows["loss"], {"MK II": 0.5, "VX-001": 0.5, "ACU": 0.25})
+        self.assertEqual(self.rows["acu_hps"], 2500.0)
+
+    def test_the_acu_height_over_the_chassis(self):
+        self.assertEqual(self.rows["height"], 15.0)
+
+    def test_aim_and_damage_split_by_role_and_target(self):
+        self.assertEqual(dict(self.rows["aimed"]["ranged"]), {"ACU": 60000})
+        self.assertEqual(dict(self.rows["aimed"]["melee"]), {"pair": 30000, "ACU": 30000})
+        self.assertEqual(dict(self.rows["dealt"]["melee"]), {"pair": 60000, "ACU": 60000})
+
+    def test_the_view_prints_rates_and_aim(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            mm.show_p4pace(self.trace)
+        self.assertIn("the ACU 15.0 yd above the chassis", out.getvalue())
+        self.assertIn("lost per second: MK II 0.50%, VX-001 0.50%, ACU 0.25% (2.5k)", out.getvalue())
+        self.assertIn("aimed at the ACU: ranged 100% (1.0k/s), melee 50% (2.0k/s)", out.getvalue())
+
+
 PULSE_MKII = 4294970800
 
 

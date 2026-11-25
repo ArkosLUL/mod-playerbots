@@ -2207,7 +2207,8 @@ MimironFightState const& ScanMimironFireBots(Player* bot)
         return state;
 
     std::sort(alive.begin(), alive.end());
-    (IsMimironPhase4Handover(bot) ? state.culledFireBots : state.keptFireBots) = std::move(alive);
+    bool const cull = IsMimironPhase4Handover(bot) || IsMimironPhase4(bot);
+    (cull ? state.culledFireBots : state.keptFireBots) = std::move(alive);
     return state;
 }
 }

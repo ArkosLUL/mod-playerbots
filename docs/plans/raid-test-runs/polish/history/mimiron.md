@@ -1,6 +1,6 @@
 # Mimiron polish history
 
-Rounds 1-22 of the Mimiron polish loop, oldest first; [the log](../mimiron.md) holds State and the newest round.
+Rounds 1-23 of the Mimiron polish loop, oldest first; [the log](../mimiron.md) holds State and the newest round.
 
 ## Round 1 (build 02925e260, DC 5443dbc)
 
@@ -2486,3 +2486,79 @@ Frost Bomb 4, single pulls each.
 **Questions for the user.** None new; Q11 stands as asked in round 21.
 
 **Shared code:** none (Mimiron encounter, findings doc, reader and its test, this log).
+
+## Round 23 (build 37cc72a94, round 22 built, stock spawn)
+
+**Data:** window 46, the first on the stock spawn and the first 10n hard mode. `window46-mimiron-25n-job5.md`
+and `window46-mimiron-10n-job4.md`, one pull per pool; window 36 (`--head 42bff9a03 --diff 25n`, epochs
+17955547xx) for round 22's verdict and the spawn comparison. Traces `603_<inst>_mimiron_<epoch>`: 25n uld4
+`23_1795604540`, uld5 `21_1795604468`, uld6 `24_1795604742`; 10n uld1 `19_1795604358`, uld2
+`20_1795604391`, uld3 `22_1795604502`. Scratch `mim23/`. Hard mode real in all six (64563 at 6.96-7.19 s,
+64582 at 2:10-2:21).
+
+| Pool | Out | Deaths |
+|---|---|---|
+| 25n uld4 A | **kill** 9:10 | 1: P3 Water Spray |
+| 25n uld5 B | **kill** 9:19 | 10: P2 Heat Wave 2 (3:18); P4 Hand Pulse 7 (7:45, 8:47-8:55), mine |
+| 25n uld6 C | **kill** 9:45 | 6: P2 Rapid Burst 5 (3:23-3:28); P3 Water Spray |
+| 10n uld1 A | wipe 5:46 | 11: P2 Heat Wave, Rapid Burst 2; P3 Water Spray 2, Junk Bot 2, Plasma Ball 2, Bomb Bot, Assault Bot |
+| 10n uld2 B | wipe 5:47 | 11: P1 mine (healer); P2 Heat Wave; P3 Junk Bot 6, Bomb Bot, Assault Bot, Plasma Ball |
+| 10n uld3 C | wipe 8:36 | 12: P3 (287 s) Bomb Bot 5, Assault Bot 3, Junk Bot 3, Water Spray |
+
+**Stop rules:** 25n A met, B and C not; 10n none. Bomb Bots were picked in rounds 9, 20 (Q10) and 22; not
+stuck, since round 22's design held where it ran (A) and never ran in B and C (below), and Q10 directs it.
+
+**Spawn:** it does not explain the 25n difference (State, Spawn). uld5's 10 are the P4 mana race (two
+healers out by ~8:45, Hand Pulse 7) and uld6's 6 the P2 storm uld3 also had in window 34; window 36's own
+uld1 A wiped at Berserk with 30.
+
+**Verdict on round 22 (off-tank takes the P3 Bomb Bots): held in A, never ran in B and C.** `--bombbots`:
+A's DK taunted 2/4, 4/4 (window 36), 3/3 (46) at 25n and 2/4 at 10n, every blast on him, no 25n Bomb
+Bot death in A. The bear bomb tank in B and C taunted 0 bombs in all eight pulls of windows 36 and 46
+at both sizes (taunt action FAILED 4-9 a pull); Bomb Bot deaths there 5 in window 36, 6 at 10n.
+
+**Failure picked: the bear bomb tank never in bear form (bug).** Not the worst by count (the 10n P3 adds
+16, the P2 storm 11, below), but its root in C and part of B, and independent and small.
+
+- Every bear dropped Dire Bear Form (aura 9634 removed) 22-24 s before P3, when VX-001's death fired `drop
+  target` (`ChooseTargetActions.cpp:78`, non-combat engine). There his party heals take `caster form` as
+  prerequisite (uld5: `drop target` 228.8 s, `caster form` 229.9 s, `rejuvenation on party`), and the bomb
+  tank target guard zeroes every picker, so nothing selects a target or re-enters combat: 14-37 party
+  heals from P3 on, 0% of P3 in bear form in all eight pulls.
+- `ClassTauntReady` checks only the cooldown and `CanCastSpell` passes `SPELL_FAILED_NOT_SHAPESHIFT`
+  (`PlayerbotAI.cpp:3616`), so `mimiron bomb bot taunt` fired on each bomb and Growl failed. The DK's
+  Dark Command needs no form, which is why A worked.
+- 10n uld3 C lost 2 ranged to bombs at 4:26 and 5:05, then P3 ran 287 s with the adds piling (Assault
+  Bot alive up to 193 s, 3 landings for 78 points); 25n window 36 uld3 and uld6 lost 2 each.
+
+**Fix** (Mimiron only, 10 and 25, both modes; a real player as bomb tank does his own form):
+`MimironBombTankFormTrigger` / `Action` (`ACTION_RAID` + 5.5, above the taunt) cast Dire Bear Form, else
+Bear Form, on a druid bomb tank out of them; the `mimiron bomb tank hold` block also zeroes `caster form`,
+so the party heals' prerequisite never shifts him back (the heals then fail in form, harmlessly). Reader:
+`--bombbots` prints the bomb tank's taunt action verdicts and a druid's share of P3 in a bear form (window
+46: uld5 FAILED 4, 0%; uld3 FAILED 9, 0%; uld4 FAILED 1, OK 3). Test `BombTankPull`. Findings doc: the Bomb
+Bot section and "What a trace answers".
+
+**Next window should show** (`--bombbots`, `--p3`):
+
+- B and C: the bear in a bear form ~100% of P3, taunt action mostly OK, most bombs taunted within ~0.5 s
+  of first sight and blowing on him, Bomb Bot deaths near 0 at both sizes, the bomb tank never dead to a
+  blast.
+- 10n C keeps its ranged through P3's first minute and P3 shortens; if 10n still wipes in P3 with bombs
+  taunted, the add pile is next (Watch).
+
+**Not picked.**
+
+- 10n P3 adds 16: downstream. A and B entered P3 3 and 2 down, a healer each (uld1 3:14, uld2 1:05), C lost
+  two ranged to bombs; the main tank stays pinned and the off-tank on bombs, so Junk Bots did 241k into
+  uld3's healers.
+- P2 storm 11: mixed. uld6: the second Frost Bomb landed 17.9 yd off VX-001 (3:12.6, fuse to 3:24.5); all
+  10 melee and 2 tanks fled into one 24° arc 28-37 yd south, `mimiron frost bomb guard` held their reach,
+  and bursts carried by the clump hit all 12 a tick while Heat Wave landed (raid 91 to 62%). uld5's 2 melee
+  died to Heat Wave just after that bomb's blast; 10n uld1 had no bomb then. A spread melee escape would be
+  a positions question; one pull of evidence, not raised yet.
+- Hand Pulse 7 (uld5, Q11 dropped); Water Spray 5; mines 2.
+
+**Questions for the user.** None.
+
+**Shared code:** none (Mimiron definition, trigger and action, reader and its test, findings doc, this log).

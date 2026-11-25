@@ -1,6 +1,6 @@
 # Mimiron polish log (hard mode, Firefighter, 25 and 10)
 
-Rounds 1-22: [history/mimiron.md](history/mimiron.md).
+Rounds 1-23: [history/mimiron.md](history/mimiron.md).
 
 ## State
 
@@ -8,46 +8,47 @@ Rounds 1-22: [history/mimiron.md](history/mimiron.md).
 scripts live in the lane scratchpad, never carried forward). Scenario `uld-mimiron`: the tank presses the
 Big Red Button as the pull's start. Hard mode is real when Summon Flames (Initial) 64563 casts at ~7.1 s,
 Flames 64566 ticks from the opening and VX-001 casts Emergency Mode 64582 at phase 2; a kill counts only
-then. Berserk 64238 at 10:00 is the clock. 10n hard mode runs from window 46 (uld1-3 at 10n, uld4-6 at
-25n there).
+then. Berserk 64238 at 10:00 is the clock. 10n hard mode runs from window 46.
 
 **Spawn.** Rounds 1-22 ran on a hand-placed 25-man Mimiron (guid 8000473, (2748.17, 2577.3)); window 46
-on the stock one (2742.53, 2560.99). It changes nothing: at the pull he already rides the MK II (first
-snapshot (2742.3, 2571.8, 368.0) in both), the core summons VX-001 and the ACU at fixed points
-(`boss_mimiron.cpp` 532, 284), no bot code reads his position, his home only sets the 80 yd leash and his
-seat on the MK II the 150 yd Flames pick. Older windows compare directly.
+on the stock one (2742.53, 2560.99). It changes nothing: at the pull he already rides the MK II, the core
+summons VX-001 and the ACU at fixed points (`boss_mimiron.cpp` 532, 284), no bot code reads his position.
+Older windows compare directly.
 
 **Rosters.** From window 34 every pool has all eleven professions at 450 with their perks and profession
 enchants: compare deaths with window 33 and older only by mechanic and target, never by total. Tanks:
-A blood DK off-tank, B and C a bear.
+A blood DK off-tank, B and C a bear. 10-man takes the first six DPS, the same classes in every design:
+rogue, DK, enh shaman, ret paladin, mage, hunter (four melee, two ranged).
 
 **Fight model.** Z1 13 s; P1 MK II 69-94 s; Z2+H1 48 s (the raid holds a band 40 yd out, walks in 12.75 s
 before P2); P2 VX-001 68-100 s; H2 24 s; P3 ACU 115-171 s at 25, set by Magnetic Core landings ~54 s apart
 (17-47 points each; airborne it loses ~0.02-0.2%/s); H3 32 s (fire bots culled); P4 the three parts at
-50%, 100-160 s. A clean 25n pull reaches P4 by 6:30-7:15; every body lost before P4 costs the clock. P4 is
-a mana race: once two of four healers are out Hand Pulse kills (`--pulse`). At 10n the ACU's add timers
-are the 25n ones with half the raid, so P3 is the DPS check: window 46 wiped there at 5:46, 5:47 and 8:36
-with the ACU down 29, 29 and 88 points. What loses bodies: the P2 storm after a barrage (Heat Wave,
-Rapid Burst, the Frost Bomb), P3 Bomb Bots and adds at 10, Water Spray, P4 mines and Hand Pulse.
+50%, 100-160 s at 25. A clean 25n pull reaches P4 by 6:30-7:15; every body lost before P4 costs the clock.
+In P4 the ACU hovers 15 yd above the chassis (z 379.3 against 364.3 in every snapshot), out of every
+melee swing, so its pace is the ranged's and the pair waits on it (`--p4pace`). At 10n that makes P4 the
+DPS check: both ranged alive, 0.33-0.37%/s and 134 s (window 49 uld4 kill); one left, 0.13-0.19%/s and
+Berserk. At 25n P4 is a mana race: once two of four healers are out Hand Pulse kills (`--pulse`). What
+loses bodies: the P2 storm after a barrage (Heat Wave, Rapid Burst, the Frost Bomb), P3 adds at 10,
+Water Spray, P4 mines and Hand Pulse.
 
-**Compositions on `37cc72a94` (window 46).**
+**Compositions.**
 
-- 25n A (uld4): **met**, kill 9:10 with 1 (P3 Water Spray), hard mode real.
-- 25n B (uld5): not met, kill 9:19 with 10 (P2 Heat Wave 2; P4 Hand Pulse 7, mine).
-- 25n C (uld6): not met, kill 9:45 with 6 (P2 Rapid Burst 5 in a Frost Bomb fuse; P3 Water Spray).
-- 10n A (uld1), B (uld2), C (uld3): wipes in P3, 11, 11 and 12 dead, hard mode real.
-- Window 36 (round 22's build, 25n, all pools) met at 25: uld2 B 4, uld3 C 3, uld4 A 2, uld5 B 2, uld6 C 3;
-  uld1 A wiped at Berserk.
+- `06854755f` (window 49, round 23 built): 25n only uld5 B, kill 9:15 with 11 (a DC setup check stopped
+  the job; DC 0b2488a). 10n: A **met** (uld4 kill 9:08 with 1; uld1 P2 wipe 11); B no (uld2 P3 wipe 11,
+  uld5 Berserk 10); C no (uld3 and uld6 Berserk, 11 each). Hard mode real in all seven.
+- `37cc72a94` (windows 46 and filler 47, round 22 built), 25n: A **met** (uld4 kill 1, uld1 kill 6), C
+  **met** (uld3 kill 0, uld6 kill 6), B not (uld5 kill 10, uld2 Berserk 30 with the ACU at 2.5%).
 
-**Open failures, ranked** (window 46, 51 deaths):
+**Open failures, ranked** (window 49, 66 deaths):
 
-1. 10n P3 adds: Junk Bot 11, Assault Bot 5, Plasma Ball 3, after bodies lost earlier; nothing tanks Junk
-   or Assault Bots (main tank pinned, off-tank on bombs).
-2. P2 storm 11 (25n 7, 10n 4): uld6's 12 melee and tanks clumped 28-37 yd off VX-001 in the second Frost
-   Bomb's fuse, every Rapid Burst on one hit all.
-3. Bomb Bot 7 (10n): the bear bomb tank never taunted (round 23).
-4. Hand Pulse 7 (uld5 only). Q11 dropped (user, 2026-11-25).
-5. Water Spray 5; mines 2.
+1. 10n P4 out of clock: uld3, uld5, uld6 Berserk (23). Each lost a ranged DPS first (P1 Napalm Shell, P2
+   Heat Wave, P2 Frost Bomb, then a P4 Water Spray). Q12.
+2. P2 storm 14: uld1 9 after its two healers fell (P1 mine 0:25, Rapid Burst 2:50); one each in uld2,
+   uld3, uld6; 25n uld5 2.
+3. Hand Pulse 8 (25n uld5 6). Q11 dropped.
+4. Water Spray 7: uld2's four melee at 5:14 from two sprays 0.1 s apart as the ACU lifted; uld6's two in
+   P4 from fire bots left over from H3 (round 24).
+5. 10n P3 adds 5 (uld2, after its Water Spray four); P1 4 (mine, Napalm Shell 2, Plasma Blast on a tank).
 
 **Fixes in place** (round: what; verdict).
 
@@ -70,9 +71,10 @@ Rapid Burst, the Frost Bomb), P3 Bomb Bots and adds at 10, Water Spray, P4 mines
 - r19: settle turns at most 90° (Q9); held.
 - r20: a spray step starts the 2.5 s fire hold; held.
 - r21: the flee fan refuses a destination off the floor (Z 803.11); held.
-- r22: the off-tank takes every P3 Bomb Bot (Q10 a), `p3bomb` slot, class taunt, holds the spot; held in
-  A (DK, 9 of 11 taunted at 25n, no Bomb Bot death); never ran for a bear (B, C).
-- r23: a bear bomb tank shifts to Dire Bear Form in P3 and the hold zeroes `caster form`; pending.
+- r22: the off-tank takes every P3 Bomb Bot (Q10 a), `p3bomb` slot, class taunt, holds the spot; held.
+- r23: a bear bomb tank shifts to Dire Bear Form in P3 and the hold zeroes `caster form`; held (bear form
+  100% of P3 in all five B and C pulls, Bomb Bot deaths 1).
+- r24: fire bots alive when P4 starts stay cull targets for DPS (the user's Q4 covered H3 only); pending.
 
 **Tried and rejected.**
 
@@ -92,99 +94,99 @@ Rapid Burst, the Frost Bomb), P3 Bomb Bots and adds at 10, Water Spray, P4 mines
   a job he does himself.
 - Q1: every Firefighter raid holds a band ~40 yd out through the 1→2 handover and walks in over its last
   ~13 s.
-- Q3: no 15% fire bot sweep. Q4: fire bots kept through P3, culled in H3. Q5: the off-tank tanks the ACU
-  in P4.
+- Q3: no 15% fire bot sweep. Q4: fire bots kept through P3, culled in H3 so P4 starts without them. Q5:
+  the off-tank tanks the ACU in P4.
 - Q6 (a) with Q9 (a): once the beams stop, the P2 wedge takes the fewest-fire 120° arc within 90° of the
   re-aim.
 - Q7 (a): P4 healers on the wedge's front row; Q8: that row stays at 18 yd.
 - Q10 (a) (2026-11-24): the off-tank stands 10-12 yd off the ACU's ground spot, taunts every phase 3 Bomb
-  Bot and takes the blast; built in round 22, made to work for a bear in round 23.
+  Bot and takes the blast.
 - Q11 (2026-11-24 yes, dropped 2026-11-25): the phase 4 healer mana change is not built.
 
-**Open questions.** None.
+**Open questions.** Q12 (round 24): how 10-man gets enough ranged damage onto the P4 ACU; recommended (a),
+a third ranged DPS in each design's first six.
 
-**Watch.** The 10n P3 add pile: if 10n still wipes in P3 once bombs are taunted, ask whether a tank picks
-up Junk Bots there. The P2 Frost Bomb fuse: melee and tanks flee to one clump, a burst on one hits all.
-The P4 `combat formation move` (generic disperse 4.0, shared code) runs unscreened off-slot: walk-ins
-into live bombs, mine hits, one Z 803.11 leg in window 34. Siren legs across a spray lane. Detour
-waypoints off the room. A bot stuck off the navmesh has no flee leg at all. `mimiron.phase` flickers
-(H3 0.3 s, P2b 0.25 s), splitting reader spans. The main tank's generic taunt can still pull a bomb into
-the pile. Shared code, not raised: healer mana (priests overheal P3), Reincarnation into the killing
-lane, Ice Block ending inside a Frost Bomb fuse. DC side: auras carried over a logout, Boomer XP-500
-trash west of the room.
+**Watch.** Melee and the off-tank sent to the unreachable P4 ACU walk between slot and stack (174 `arc
+spread <-> reach melee` A-B-A in uld3's P4); if a core change seats it without hover, melee reach it and
+the P4 model changes. The H3 cull loses to leftover Junk and Assault Bots (DPS take those first). The P2
+Frost Bomb fuse: melee and tanks flee to one clump, a burst on one hits all. The P4 `combat formation move`
+(generic disperse 4.0, shared code) runs unscreened off-slot: walk-ins into live bombs, mine hits (uld1's
+P1 healer at 0:25). Siren legs across a spray lane. A bot stuck off the navmesh has no flee leg at all.
+`mimiron.phase` flickers (H3 0.3 s, P2b 0.25 s), splitting reader spans. Shared code, not raised: healer
+mana (priests overheal P3), Reincarnation into the killing lane, Ice Block ending inside a Frost Bomb
+fuse. DC side: auras carried over a logout, Boomer XP-500 trash west of the room.
 
-## Round 23 (build 37cc72a94, round 22 built, stock spawn)
+## Round 24 (build 06854755f, round 23 built, stock spawn)
 
-**Data:** window 46, the first on the stock spawn and the first 10n hard mode. `window46-mimiron-25n-job5.md`
-and `window46-mimiron-10n-job4.md`, one pull per pool; window 36 (`--head 42bff9a03 --diff 25n`, epochs
-17955547xx) for round 22's verdict and the spawn comparison. Traces `603_<inst>_mimiron_<epoch>`: 25n uld4
-`23_1795604540`, uld5 `21_1795604468`, uld6 `24_1795604742`; 10n uld1 `19_1795604358`, uld2
-`20_1795604391`, uld3 `22_1795604502`. Scratch `mim23/`. Hard mode real in all six (64563 at 6.96-7.19 s,
-64582 at 2:10-2:21).
+**Data:** window 49 (`window49-mimiron-10n-job4.md`, six pulls; `window49-mimiron-25n-job3.md`, one) and
+filler 47 on round 22's build (`filler47-mimiron-10n-job1.md`, `filler47-mimiron-25n-job2.md`). Traces
+`603_<inst>_mimiron_<epoch>`: window 49 10n uld1 `18_1795611027`, uld2 `16_1795610997`, uld3
+`17_1795611002`, uld4 `15_1795610986`, uld5 `21_1795611503`, uld6 `14_1795610924`, 25n uld5
+`13_1795610900`; filler 47 10n uld4-6 `28_1795605526`, `29_1795605527`, `30_1795605512`, 25n uld1-3
+`31_1795605531`, `32_1795605540`, `33_1795605546`. Hard mode real in all thirteen. Scratch `mim24/`.
 
 | Pool | Out | Deaths |
 |---|---|---|
-| 25n uld4 A | **kill** 9:10 | 1: P3 Water Spray |
-| 25n uld5 B | **kill** 9:19 | 10: P2 Heat Wave 2 (3:18); P4 Hand Pulse 7 (7:45, 8:47-8:55), mine |
-| 25n uld6 C | **kill** 9:45 | 6: P2 Rapid Burst 5 (3:23-3:28); P3 Water Spray |
-| 10n uld1 A | wipe 5:46 | 11: P2 Heat Wave, Rapid Burst 2; P3 Water Spray 2, Junk Bot 2, Plasma Ball 2, Bomb Bot, Assault Bot |
-| 10n uld2 B | wipe 5:47 | 11: P1 mine (healer); P2 Heat Wave; P3 Junk Bot 6, Bomb Bot, Assault Bot, Plasma Ball |
-| 10n uld3 C | wipe 8:36 | 12: P3 (287 s) Bomb Bot 5, Assault Bot 3, Junk Bot 3, Water Spray |
+| 10n uld1 A | wipe 4:34 | 11: P1 mine (healer, 0:25), Napalm Shell; P2 Rapid Burst 4, Heat Wave 5 |
+| 10n uld2 B | wipe 7:20 | 11: P2 Rapid Burst; P3 Water Spray 5, Junk Bot 3, Assault Bot, ACU |
+| 10n uld3 C | Berserk | 11: P2 Heat Wave (hunter); P4 Hand Pulse; Berserk 9 |
+| 10n uld4 A | **kill** 9:08 | 1: P4 Rocket Strike |
+| 10n uld5 B | Berserk | 10: P1 Plasma Blast (tank), Napalm Shell (mage); P4 Hand Pulse; Berserk 7 |
+| 10n uld6 C | Berserk | 11: P2 Frost Bomb (hunter); P3 Bomb Bot; P4 Water Spray 2 (mage, shaman); Berserk 7 |
+| 25n uld5 B | **kill** 9:15 | 11: P2 Rapid Burst 2; P4 Hand Pulse 6, Laser Barrage, mine |
 
-**Stop rules:** 25n A met, B and C not; 10n none. Bomb Bots were picked in rounds 9, 20 (Q10) and 22; not
-stuck, since round 22's design held where it ran (A) and never ran in B and C (below), and Q10 directs it.
+**Stop rules:** not polished (25n has only B on this build; 10n B and C open). Not stuck: this round's
+failure is new.
 
-**Spawn:** it does not explain the 25n difference (State, Spawn). uld5's 10 are the P4 mana race (two
-healers out by ~8:45, Hand Pulse 7) and uld6's 6 the P2 storm uld3 also had in window 34; window 36's own
-uld1 A wiped at Berserk with 30.
+**Verdict on round 23 (bear bomb tank in bear form): held.** `--bombbots` on all five B and C pulls (10n
+uld2, uld3, uld5, uld6, 25n uld5): the bear in a bear form 100% of P3, taunt action OK 4-5 and FAILED 0 a
+pull (window 46: FAILED 4-9, 0%), 4-5 bombs taunted each (median 40-1206 ms after first sight), every
+blast on him but one; Bomb Bot deaths 1 (uld6 collateral, 5:10) against 6 at 10n in window 46 and 10 in
+filler 47.
 
-**Verdict on round 22 (off-tank takes the P3 Bomb Bots): held in A, never ran in B and C.** `--bombbots`:
-A's DK taunted 2/4, 4/4 (window 36), 3/3 (46) at 25n and 2/4 at 10n, every blast on him, no 25n Bomb
-Bot death in A. The bear bomb tank in B and C taunted 0 bombs in all eight pulls of windows 36 and 46
-at both sizes (taunt action FAILED 4-9 a pull); Bomb Bot deaths there 5 in window 36, 6 at 10n.
+**Not picked first: 10n P4 runs out the clock (plan question Q12).** `--p4pace`: the ACU sits 15.0 yd
+above the chassis through every P4 (z 379.3/364.3, five pulls, both sizes); `IsWithinMeleeRange` is 3D
+(`Unit.cpp:790`) and its reach 0 gives 5 yd. Melee aimed at it dealt their ranged spells only (bear
+0.1-0.2k/s, rogue 0.4-1.0k/s; 174 `arc spread <-> reach melee` A-B-A in uld3). The ACU lost 0.33%/s with
+both ranged alive (uld4, 134 s), 0.19% with one (uld3, ACU 8% at Berserk), 0.13% (uld5) and 0.11% (uld6,
+none left from 7:23). The pair waits at the floor, so P4 lasts the ACU's HP over ranged damage.
 
-**Failure picked: the bear bomb tank never in bear form (bug).** Not the worst by count (the 10n P3 adds
-16, the P2 storm 11, below), but its root in C and part of B, and independent and small.
+**Failure picked: fire bots left by H3 are kept in P4 (bug).** Q4 culls them in H3 "so phase 4 starts
+without them"; `ScanMimironFireBots` (`UldEncounter_Mimiron.cpp:2210`) folds live ones to the cull only
+while `IsMimironPhase4Handover` reads a spent, unselectable ACU, so once P4 makes it selectable survivors
+are kept again: excluded as targets, behind the splash guard.
 
-- Every bear dropped Dire Bear Form (aura 9634 removed) 22-24 s before P3, when VX-001's death fired `drop
-  target` (`ChooseTargetActions.cpp:78`, non-combat engine). There his party heals take `caster form` as
-  prerequisite (uld5: `drop target` 228.8 s, `caster form` 229.9 s, `rejuvenation on party`), and the bomb
-  tank target guard zeroes every picker, so nothing selects a target or re-enters combat: 14-37 party
-  heals from P3 on, 0% of P3 in bear form in all eight pulls.
-- `ClassTauntReady` checks only the cooldown and `CanCastSpell` passes `SPELL_FAILED_NOT_SHAPESHIFT`
-  (`PlayerbotAI.cpp:3616`), so `mimiron bomb bot taunt` fired on each bomb and Growl failed. The DK's
-  Dark Command needs no form, which is why A worked.
-- 10n uld3 C lost 2 ranged to bombs at 4:26 and 5:05, then P3 ran 287 s with the adds piling (Assault
-  Bot alive up to 193 s, 3 landings for 78 points); 25n window 36 uld3 and uld6 lost 2 each.
+- 2 of 11 H3s read opened with nine fire bots (10n uld6, filler 47 25n uld2). DPS spent the handover on
+  leftover adds: uld6 melee on a Junk Bot then the Assault Bot 6:16-6:47, uld2 all 15 DPS on one Assault
+  Bot 6:41-7:10; only the tanks hit fire bots.
+- uld6: four into P4 at 36-56%, two alive at the end; Water Spray killed the mage at 7:23 (its last
+  ranged DPS) and the shaman at 8:08, splash holds 41; the ACU then lost 0.11%/s, Berserk at 28%.
+- 25n uld2: six into P4, one at 1-6% alive 7:50-10:00; Deafening Siren through P4, 184 raid-s silenced,
+  splash holds 62; Berserk with the ACU at 2.5%, 30 dead.
+- The other nine H3s ended with none (`--firebots`).
 
-**Fix** (Mimiron only, 10 and 25, both modes; a real player as bomb tank does his own form):
-`MimironBombTankFormTrigger` / `Action` (`ACTION_RAID` + 5.5, above the taunt) cast Dire Bear Form, else
-Bear Form, on a druid bomb tank out of them; the `mimiron bomb tank hold` block also zeroes `caster form`,
-so the party heals' prerequisite never shifts him back (the heals then fail in form, harmlessly). Reader:
-`--bombbots` prints the bomb tank's taunt action verdicts and a druid's share of P3 in a bear form (window
-46: uld5 FAILED 4, 0%; uld3 FAILED 9, 0%; uld4 FAILED 1, OK 3). Test `BombTankPull`. Findings doc: the Bomb
-Bot section and "What a trace answers".
+**Fix** (Mimiron only, hard mode, 10 and 25; a real player kills or ignores them as he likes): the fold
+culls in P4 too (`IsMimironPhase4`), so a survivor stays a DPS priority target after leftover adds, off
+the target exclusions and the splash guard. Healers run `mimiron set dps priority` in P4, so its fire bot
+entry skips them as H3's trigger gate does, and they keep their part (`UldActions_Mimiron.cpp:1300`, review
+fix; else a far fire bot would pull them off the row by `reach spell`). Nothing summons more in P4 (`SetData(1, 4)` resets the ACU's
+events). Reader: `--p4pace` (parts every 30 s, loss rates, the ACU's height, aim and damage by role), test
+`PacePull`. Findings doc: the ACU's height and what it means for melee, the off-tank and the pace; the
+cull in P4.
 
-**Next window should show** (`--bombbots`, `--p3`):
+**Next window should show** (`--firebots`, `--p4pace`): after an H3 that leaves fire bots, P4 closes
+with none (gone = open within ~15 s), P4 Water Spray, siren and splash holds near 0, no healer aimed at
+a fire bot; H3 and P3 unchanged.
+With none left (most pulls) the fix is not exercised.
 
-- B and C: the bear in a bear form ~100% of P3, taunt action mostly OK, most bombs taunted within ~0.5 s
-  of first sight and blowing on him, Bomb Bot deaths near 0 at both sizes, the bomb tank never dead to a
-  blast.
-- 10n C keeps its ranged through P3's first minute and P3 shortens; if 10n still wipes in P3 with bombs
-  taunted, the add pile is next (Watch).
+**Questions for the user.**
 
-**Not picked.**
+- **Q12 (plan change, roster): 10-man ranged damage on the P4 ACU.** The ACU hovers out of melee reach in
+  P4, so only ranged attacks bring it down, and the other two parts must wait for it. 10-man brings two
+  ranged DPS; with both alive P4 took 134 s and the kill came at 9:08, with one lost before or early in P4
+  it ran past Berserk in three of six window 49 pulls. Options: (a) put a third ranged DPS among each
+  design's first six (for example a warlock for the rogue), which changes every 10-man pull of every
+  boss; (b) 10-man healers also hit the ACU in P4 while the raid is healthy (~1-2k/s, risks the Hand Pulse
+  race); (c) leave it and waive the 10n stop rule for Mimiron. Recommendation: (a).
 
-- 10n P3 adds 16: downstream. A and B entered P3 3 and 2 down, a healer each (uld1 3:14, uld2 1:05), C lost
-  two ranged to bombs; the main tank stays pinned and the off-tank on bombs, so Junk Bots did 241k into
-  uld3's healers.
-- P2 storm 11: mixed. uld6: the second Frost Bomb landed 17.9 yd off VX-001 (3:12.6, fuse to 3:24.5); all
-  10 melee and 2 tanks fled into one 24° arc 28-37 yd south, `mimiron frost bomb guard` held their reach,
-  and bursts carried by the clump hit all 12 a tick while Heat Wave landed (raid 91 to 62%). uld5's 2 melee
-  died to Heat Wave just after that bomb's blast; 10n uld1 had no bomb then. A spread melee escape would be
-  a positions question; one pull of evidence, not raised yet.
-- Hand Pulse 7 (uld5, Q11 dropped); Water Spray 5; mines 2.
-
-**Questions for the user.** None.
-
-**Shared code:** none (Mimiron definition, trigger and action, reader and its test, findings doc, this log).
+**Shared code:** none (Mimiron fire bot fold, reader and its test, findings doc, this log).

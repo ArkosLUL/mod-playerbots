@@ -46,6 +46,7 @@ SPELL_BOMB_BOT_BLAST = 63801
 SPELL_PLASMA_BALL_P4 = 65647
 SPELL_SHOCK_BLAST = 63631
 SPELL_HAND_PULSE = (64348, 64352, 64536, 64537)
+SPELL_SELF_REPAIR = 64383
 # Raid cooldowns for --heal's events, off the caster's cast record. Heroism and Bloodlust share one name:
 # a raid only ever has one of them, and which one says nothing but the faction.
 COOLDOWN_EVENTS = {64205: "guardian", 64843: "hymn", 31821: "mastery", 10060: "PI", 33206: "painsup",
@@ -157,6 +158,10 @@ PULSE_KILL_MS = 50
 ESCAPE_SETTLE_MS = 3000
 ESCAPE_LOOKBACK_MS = 6000
 DRY_MANA_PCT = 10.0
+
+PACE_PARTS = ("MK II", "VX-001", "ACU")
+PACE_STEP_MS = 30000
+PACE_START_PCT = 25.0
 
 FLOOR_Z = anchor("ULDUAR_MIMIRON_ROOM_CENTER")[2]
 FLOOR_TOLERANCE = radius("ULDUAR_MIMIRON_FLOOR_TOLERANCE")
@@ -2032,6 +2037,119 @@ def show_acutank(trace: Trace) -> None:
           " an off-tank")
 
 
+def p4pace_rows(trace: Trace) -> dict:
+    span = span_of(phases(trace), "P4")
+    if not span:
+        return {}
+
+    low, high = span
+    names = {**{guid: "MK II" for guid in guids_of_entry(trace, NPC_LEVIATHAN_MKII)},
+             **{guid: "VX-001" for guid in guids_of_entry(trace, NPC_VX001)},
+             **{guid: "ACU" for guid in guids_of_entry(trace, NPC_AERIAL_COMMAND_UNIT)}}
+    roster = roster_guids(trace)
+    samples = Samples(trace)
+    first = bisect.bisect_left(samples.stamps, low)
+    last = bisect.bisect_left(samples.stamps, high)
+
+    def part_hp(units: dict[int, list]) -> dict[str, float]:
+        return {names[guid]: unit[5] for guid, unit in units.items() if guid in names and living(unit)}
+
+    start = None
+    for index in range(first, last):
+        hp = part_hp(samples.rows(index))
+        if len(hp) == len(PACE_PARTS) and min(hp.values()) > PACE_START_PCT:
+            start = index
+            break
+    if start is None:
+        return {"span": span, "marks": []}
+
+    begin = samples.stamps[start]
+    repairs = sorted((rec["t"], names[rec["s"]]) for rec in trace.of("cast")
+                     if rec.get("sp") == SPELL_SELF_REPAIR and rec.get("s") in names and begin < rec["t"] < high)
+    end = repairs[0][0] if repairs else high
+    stop = max(bisect.bisect_right(samples.stamps, end) - 1, start)
+
+    marks = []
+    heights = []
+    aimed: dict[str, collections.Counter] = collections.defaultdict(collections.Counter)
+    dealt: dict[str, collections.Counter] = collections.defaultdict(collections.Counter)
+    due = begin
+    for index in range(start, stop + 1):
+        units = samples.rows(index)
+        when = samples.stamps[index]
+        hp = part_hp(units)
+        if when >= due or index == stop:
+            due = when + PACE_STEP_MS
+            alive = collections.Counter(trace.role(guid) for guid in roster
+                                        if guid in units and living(units[guid]))
+            marks.append((when, hp, alive["ranged"], alive["melee"]))
+        chassis = next((unit for guid, unit in units.items() if names.get(guid) == "MK II"), None)
+        acu = next((unit for guid, unit in units.items() if names.get(guid) == "ACU"), None)
+        if chassis and acu:
+            heights.append(acu[3] - chassis[3])
+        if index == stop:
+            break
+
+        ahead = samples.rows(index + 1)
+        gap = samples.stamps[index + 1] - when
+        weight = SAMPLE_MS if gap > HOLE_MS else gap
+        for guid in roster:
+            unit = units.get(guid)
+            if not unit or not living(unit) or len(unit) <= 11:
+                continue
+            aim = names.get(unit[7])
+            key = "ACU" if aim == "ACU" else ("pair" if aim else "other")
+            role = trace.role(guid)
+            aimed[role][key] += weight
+            later = ahead.get(guid)
+            if later and len(later) > 11:
+                dealt[role][key] += max(0, later[11] - unit[11])
+
+    seconds = max((samples.stamps[stop] - begin) / 1000.0, 0.001)
+    loss = {name: (marks[0][1].get(name, 0.0) - marks[-1][1].get(name, 0.0)) / seconds for name in PACE_PARTS}
+    acu_max = next((trace.maxhp[guid] for guid, name in names.items() if name == "ACU" and trace.maxhp.get(guid)),
+                   None)
+    return {"span": span, "begin": begin, "end": samples.stamps[stop], "repairs": repairs, "marks": marks,
+            "loss": loss, "acu_hps": loss["ACU"] * acu_max / 100.0 if acu_max else None,
+            "height": statistics.median(heights) if heights else None, "aimed": aimed, "dealt": dealt}
+
+
+def show_p4pace(trace: Trace) -> None:
+    print("P4 PACE")
+    rows = p4pace_rows(trace)
+    if not rows:
+        print("  no phase 4 in this pull")
+        return
+
+    low, high = rows["span"]
+    if not rows["marks"]:
+        print(f"  P4 {clock(low)} .. {clock(high)}: the three parts never all read above {PACE_START_PCT:.0f}%")
+        return
+
+    height = f"; the ACU {rows['height']:.1f} yd above the chassis" if rows["height"] is not None else ""
+    print(f"  P4 {clock(low)} .. {clock(high)}: {clock(rows['begin'])} to {clock(rows['end'])},"
+          f" {(rows['end'] - rows['begin']) / 1000:.1f} s{height}")
+    print(f"    {'time':9} " + " ".join(f"{name:>6}" for name in PACE_PARTS) + "  ranged  melee")
+    for when, hp, ranged, melee in rows["marks"]:
+        print(f"    {clock(when):9} " + " ".join(f"{hp.get(name, 0.0):6.1f}" for name in PACE_PARTS)
+              + f"  {ranged:6}  {melee:5}")
+    acu = f" ({rows['acu_hps'] / 1000:.1f}k)" if rows["acu_hps"] is not None else ""
+    print("  lost per second: " + ", ".join(f"{name} {rows['loss'][name]:.2f}%" for name in PACE_PARTS) + acu)
+    for key, label in (("ACU", "the ACU"), ("pair", "MK II or VX-001")):
+        parts = []
+        for role in ("ranged", "melee", "tank"):
+            total = sum(rows["aimed"][role].values())
+            spent = rows["aimed"][role][key]
+            if total and spent:
+                parts.append(f"{role} {spent / total * 100:.0f}% ({rows['dealt'][role][key] / spent:.1f}k/s)")
+        print(f"  aimed at {label}: {', '.join(parts) or 'nobody'}")
+    repairs = ", ".join(f"{name} {clock(when)}" for when, name in rows["repairs"])
+    print(f"  Self Repair: {repairs or 'none before the end'}")
+    print(f"\n  the span runs from the first snapshot with all three parts above {PACE_START_PCT:.0f}% to the first"
+          f" Self Repair; k/s is everything the role dealt while aimed there, splash included, per bot; melee reach"
+          f" is 3D, so a part hovering over the chassis takes no melee swings")
+
+
 def pulse_rows(trace: Trace) -> list[dict]:
     roster = roster_guids(trace)
     heals = [guid for guid in roster if trace.role(guid) == "heal"]
@@ -2402,6 +2520,8 @@ SECTIONS = (
      " length", show_bombbots),
     ("acutank", "phase 4: whom the ACU targeted and hit with Plasma Ball, and what the off-tank aimed at",
      show_acutank),
+    ("p4pace", "phase 4 pace: the parts' health every 30 s and their loss rate, the ACU's height over the chassis,"
+     " and per role the time aimed at the ACU or the pair and what it dealt meanwhile", show_p4pace),
     ("pulse", "phase 4 Hand Pulse: healers hit per pulse, healers in reach of melee after a Shock Blast"
      " escape and how far, Hand Pulse damage against healing, Hand Pulse deaths after one, and when two"
      " healers were out", show_pulse),
