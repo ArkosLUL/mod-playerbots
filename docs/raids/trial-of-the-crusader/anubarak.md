@@ -556,9 +556,10 @@ pure, nativetest): `MoveTo` `backwards = true` keeps them in its front 180°, th
 dodges, parries or blocks from (`Unit::RollMeleeOutcomeAgainst`; none while it casts either). A walk
 to the centre (one off Permafrost) runs forward: frost first. Before it, in 12 pulls of the 2026-11-25
 test pools a burrower stood behind a side tank 29% of their contact, 95% of that on a hold walk and
-about half on the 7 yd crawl to the rim under the patch's 80% slow, landing 0.70 hits a second against
-0.29 standing in front (CT, CU, CV: 21%, 0.59, 0.24). Backing up runs at `MOVE_RUN_BACK` (4.5 against
-7), so a walk takes 1.56 times as long; `AnubarakSpikeReachesFirst` times it at that speed.
+about half on the 7 yd crawl to the rim under the patch's 80% slow, landing 0.61 hits a second against
+0.34 walking and 0.29 standing with it in front (CT, CU, CV: 21%, 0.51, 0.36, 0.23). Backing up runs at
+`MOVE_RUN_BACK` (4.5 against 7), so a walk takes 1.56 times as long and saves about an eighth of its
+hits; `AnubarakSpikeReachesFirst` times it at that speed.
 
 **The test pools' side tanks avoid as well as the user's.** Standing with a burrower in front, 0.55 of
 its swings landed in those pulls and in CT, CU and CV alike (read off the gaps between one burrower's
@@ -1785,7 +1786,8 @@ he was up with burrowers out. Per flag:
     snapshot (max health from back-to-back melee hits): a 300 ms snapshot read 55% for a 38% Last Stand.
   - per side tank before phase 3 and its first death, the seconds a burrower on it stood within 6 yd and
     its landed burrower hits a second of that; both split by the tank standing or walking (`snap` column
-    8) and the burrower in its front 180° by its `snap` facing or behind; standing with it in front, the
+    8) and the burrower in its front 180° by its `snap` facing or behind, a hit from beyond 6 yd at its
+    snapshot counted apart, as its time is not contact; standing with it in front, the
     hits landed a swing off the gaps up to 6 s between one burrower's landed hits at 1.22 s a swing; the
     `backup` rows.
   - each run of the main tank's Expose Weakness: its peak, the burrowers on him at a stack (the shared

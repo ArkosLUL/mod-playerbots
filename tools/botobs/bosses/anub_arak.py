@@ -168,8 +168,9 @@
                                      Taps and Evocations from his 40% to phase 3
     anub_arak.py <file> --tanks      Expose Weakness peak per burrower wave per side tank; per side tank before
                                      phase 3 its burrower contact by it standing or walking and the burrower in
-                                     its front 180 degrees or behind, with the landed hits, the standing front
-                                     hits landed a swing, and anub.backup rows; per run of it on the
+                                     its front 180 degrees or behind, with the landed hits in that contact and
+                                     those outside it, the standing front hits landed a swing, and anub.backup
+                                     rows; per run of it on the
                                      main tank its peak, the burrowers on him at a stack and his area casts (Swipe,
                                      Challenging Roar, ...) from 5 s before the first stack to the peak; per side
                                      tank and surfaced phase its area casts by spell, anub.saoe rows, its picks
@@ -7984,7 +7985,8 @@ def side_tank_facing(trace: Trace, samples: Samples) -> dict[int, dict]:
     for rec in combat_deaths(trace):
         if rec.get("g") in stop:
             stop[rec["g"]] = min(stop[rec["g"]], rec["t"])
-    out = {guid: {**{state: {"ms": 0, "landed": 0} for state in FACING_STATES}, "gaps": 0, "swings": 0}
+    out = {guid: {**{state: {"ms": 0, "landed": 0} for state in FACING_STATES}, "outside": 0, "gaps": 0,
+                  "swings": 0}
            for guid in tanks}
     burrowers = guids_of_entry(trace, NPC_BURROWER)
     for burrower in burrowers:
@@ -8002,8 +8004,10 @@ def side_tank_facing(trace: Trace, samples: Samples) -> dict[int, dict]:
         if (tank in out and rec.get("s") in burrowers and not rec.get("sp") and rec["t"] < stop[tank]
                 and (rec.get("a", 0) > 0 or rec.get("ab", 0) > 0)):
             hits[(tank, rec["s"])].append(rec["t"])
-            state = facing_state(samples, tank, rec["s"], rec["t"])
-            if state is not None:
+            state = facing_state(samples, tank, rec["s"], rec["t"], BURROWER_CONTACT_YD)
+            if state is None:
+                out[tank]["outside"] += 1
+            else:
                 out[tank][state]["landed"] += 1
     standing_front = (False, False)
     for (tank, burrower), times in hits.items():
@@ -8025,7 +8029,8 @@ def facing_text(row: dict) -> str:
 
     swing = (f"{row['gaps'] / row['swings']:.2f} ({row['gaps']} gaps)" if row["swings"] else "-")
     return (f"standing front {part((False, False))}, behind {part((False, True))}; walking front"
-            f" {part((True, False))}, behind {part((True, True))}; a swing {swing}")
+            f" {part((True, False))}, behind {part((True, True))}; outside contact {row['outside']};"
+            f" a swing {swing}")
 
 
 def engage_mana(trace: Trace, samples: Samples | None = None) -> list[tuple[int, float]]:
@@ -8345,8 +8350,9 @@ def show_tanks(trace: Trace) -> None:
                   + (f"{row['landed'] * 1000 / row['ms']:.2f}/s" if row["ms"] else "-")
                   for guid, row in contact.items()))
         print(f"  that contact and its landed hits by the tank standing or walking and the burrower in its front"
-              f" 180 degrees or\n  behind it, seconds, hits and hits a second, and standing with it in front the"
-              f" hits landed a swing off\n  the gaps up to {SWING_GAP_MS / 1000:.0f} s between one burrower's landed"
+              f" 180 degrees or\n  behind it, seconds, hits and hits a second, the hits landed with the burrower"
+              f" outside {BURROWER_CONTACT_YD:.0f} yd at\n  the snapshot, and standing with it in front the"
+              f" hits landed a swing off the gaps up to {SWING_GAP_MS / 1000:.0f} s\n  between one burrower's landed"
               f" hits ({BURROWER_SWING_MS / 1000:.2f} s swings):")
         for guid, row in side_tank_facing(trace, samples).items():
             print(f"    {trace.name(guid)[:12]:12} {facing_text(row)}")
@@ -9894,8 +9900,8 @@ SECTIONS = (
      show_healers),
     ("tanks", "Expose Weakness per wave per side tank, burrower contact seconds and landed hits a second per"
      " side tank before phase 3, split by the tank standing or walking and the burrower in front or behind,"
-     " with the standing front hits landed a swing and anub.backup rows, the main tank's Expose Weakness with the burrowers and his area casts"
-     " before it, side tank area casts per surfaced phase and anub.saoe rows, its picks against its casts and"
+     " the hits landed outside that contact, the standing front hits landed a swing and anub.backup rows, the"
+     " main tank's Expose Weakness with the burrowers and his area casts before it, side tank area casts per surfaced phase and anub.saoe rows, its picks against its casts and"
      " the FAILED ones, each tank defensive cast with its stack and health after the last logged hit, a side"
      " tank's long defensives outside phase 3 at half health or more, a tank form or stance lost"
      " while he was up with the act row that dropped it, each tank death with the damage and heals before it,"

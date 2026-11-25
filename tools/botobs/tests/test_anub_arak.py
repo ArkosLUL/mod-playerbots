@@ -6698,7 +6698,7 @@ class SideTankHealthLines(unittest.TestCase):
 
 
 R37_SIDE = 7101
-R37_B1, R37_B2 = CREATURE | 1801, CREATURE | 1802
+R37_B1, R37_B2, R37_B3 = CREATURE | 1801, CREATURE | 1802, CREATURE | 1803
 
 
 def r37_pull() -> list[dict]:
@@ -6708,6 +6708,8 @@ def r37_pull() -> list[dict]:
         units = [tank, [R37_B1, X + 3.0, Y, Z, math.pi, 100.0, 0.0, R37_SIDE, 0, 0, 0, 0]]
         if when < 8000:
             units.append([R37_B2, X - 3.0 if walking else X + 2.0, Y + 1.0, Z, 0.0, 100.0, 0.0, R37_SIDE, 0, 0, 0, 0])
+        if 6000 <= when < 8000:
+            units.append([R37_B3, X + 9.0, Y, Z, math.pi, 100.0, 0.0, R37_SIDE, 0, 0, 0, 0])
         return {"t": when, "e": "snap", "hz": [], "u": units}
 
     records = [
@@ -6717,13 +6719,14 @@ def r37_pull() -> list[dict]:
         {"t": -500, "e": "unit", "g": BOSS, "en": ab.NPC_ANUBARAK, "n": "Anub'arak", "b": 1},
         {"t": 0, "e": "unit", "g": R37_B1, "en": ab.NPC_BURROWER, "n": "Nerubian Burrower"},
         {"t": 0, "e": "unit", "g": R37_B2, "en": ab.NPC_BURROWER, "n": "Nerubian Burrower"},
+        {"t": 0, "e": "unit", "g": R37_B3, "en": ab.NPC_BURROWER, "n": "Nerubian Burrower"},
         note(0, R37_SIDE, "anub.phase", 1),
         note(0, R37_SIDE, "anub.side0", R37_SIDE),
         note(3900, R37_SIDE, "anub.backup", "back"),
         dmg(500, R37_B1, R37_SIDE, 0, 5000), dmg(1720, R37_B1, R37_SIDE, 0, 5000),
         dmg(3700, R37_B1, R37_SIDE, 0, 5000),
         dmg(4500, R37_B2, R37_SIDE, 0, 5000), dmg(5500, R37_B2, R37_SIDE, 0, 5000),
-        dmg(9800, R37_B1, R37_SIDE, 0, 5000),
+        dmg(7000, R37_B3, R37_SIDE, 0, 5000), dmg(9800, R37_B1, R37_SIDE, 0, 5000),
         note(10000, R37_SIDE, "anub.phase", 3),
         {"t": 10000, "e": "end", "out": "wipe"},
     ]
@@ -6749,6 +6752,10 @@ class SideTankFacingLines(unittest.TestCase):
         self.assertEqual(row[(True, True)], {"ms": 2000, "landed": 2})
         self.assertEqual(row[(False, True)], {"ms": 0, "landed": 0})
 
+    def test_a_hit_from_outside_the_contact_counts_apart(self):
+        row = ab.side_tank_facing(self.trace, self.samples)[R37_SIDE]
+        self.assertEqual(row["outside"], 1)
+
     def test_landed_a_swing_counts_standing_front_gaps_only(self):
         row = ab.side_tank_facing(self.trace, self.samples)[R37_SIDE]
         self.assertEqual((row["gaps"], row["swings"]), (2, 3))
@@ -6759,7 +6766,7 @@ class SideTankFacingLines(unittest.TestCase):
             ab.show_tanks(self.trace)
         text = out.getvalue()
         self.assertIn("Felesta      standing front 13.5 s 4 0.30/s, behind 0.0 s 0; walking front 2.0 s 0,"
-                      " behind 2.0 s 2 1.00/s; a swing 0.67 (2 gaps)\n", text)
+                      " behind 2.0 s 2 1.00/s; outside contact 1; a swing 0.67 (2 gaps)\n", text)
         self.assertIn("anub.backup: Felesta back 1\n", text)
 
 

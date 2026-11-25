@@ -45,8 +45,10 @@ three. Test side tanks take 0.43 landed burrower hits a second of contact
 against Bulwark's and Felesta's 0.34 (r3 `--tanks`), with the same hit size per
 stack and the same four healers. Not gear (r3): per swing from the front both
 land 0.55, and no tank shows crits. The gap is a burrower behind the tank 29% of
-contact (CT/CU/CV 21%), 95% of it on the tank's hold walk, landing 0.70 a second
-(0.59) against 0.29 standing in front (0.24), plus more swings a second in front.
+contact (CT/CU/CV 21%), 95% of it on the tank's hold walk, landing 0.61 a second
+(0.51) against 0.34 walking (0.36) and 0.29 standing (0.23) in front, plus more
+swings a second in front. These count only hits inside the 6 yd contact (r3
+review; r3 first read 0.70 and 0.52 walking with hits from beyond it).
 
 **Compositions on 37cc72a94 (window 46, 12 valid pulls, all wipes).**
 
@@ -134,10 +136,15 @@ the database (Docker), so this compares what the stats do to burrower swings:
 | seconds | 5036 | 1467 |
 | walking / behind share | 36% / 29% | 30% / 21% |
 | landed a second, all | 0.43 | 0.34 |
-| standing front | 0.29 | 0.24 |
-| walking behind | 0.70 | 0.59 |
-| walking front | 0.52 | 0.50 |
+| standing front | 0.29 | 0.23 |
+| walking behind | 0.61 | 0.51 |
+| walking front | 0.34 | 0.36 |
 | standing behind (seconds) | 66 | 12 |
+| hits from beyond 6 yd (apart) | 232 | 49 |
+
+Split rates count only hits with the burrower within 6 yd at the snapshot, as
+the contact seconds do (review fix; counting the rest read walking behind 0.70
+and 0.59, walking front 0.52 and 0.50).
 
 - Behind while walking is 95% of behind time; its mover was `anubarak assist
   tank hold burrower` 91% (6 test pulls, 853 of 932 s) and 93% (user).
@@ -157,15 +164,17 @@ Reader `--tanks`: the facing split per side tank, landed a swing, `anub.backup`
 rows; tests. Boss doc: the rule and r3's facts. No shared code.
 
 **Expected size.** Backing up is 1.56 times slower (4.5 vs 7 yd/s, both under
-the slow). Rim walks are ~14% of test contact at 0.70 a second (~23% of landed
-hits); backed up they take ~22% at the in-front rate: 0.29 a second saves ~8% of
-all landed burrower hits, 0.45 (every swing) saves none.
+the slow). Rim walks are ~14% of test contact at 0.61 a second (~23% of the
+in-contact landed hits); backed up they take ~22%: at the walking-front 0.34 a
+second that saves ~13% of a rim walk's hits, ~3% of all landed burrower hits
+(~6% at the standing 0.29); at 0.39 a second it saves none. Too small to read off
+one window's deaths, so judge it by the split.
 
 **Next window should show.** `anub.backup back` rows on every bot side tank;
 `--tanks` walking-behind seconds down (test 27% of contact) and walking-front
-up; walking landed a second under 0.70; all landed a second under 0.43 per side
+up; walking landed a second under 0.61; all landed a second under 0.43 per side
 tank; first side tank death later than r2's table, per composition. If walking
-hits a second sit near 0.45 and the total doesn't drop, backing up only trades
+hits a second sit near 0.39 and the total doesn't drop, backing up only trades
 speed: ask the rim crawl question.
 
 **Previous fix (r2) verdict.** r2 changed only the reader and no pulls ran
