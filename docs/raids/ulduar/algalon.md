@@ -175,14 +175,15 @@ it. It can't open sooner: the tanks hold him until the cast starts or he resets,
 |---|---|---|---|
 | 1 | 16.5 s, 4 | 116.5 | one shelter kill, 3 under Big Bang 1 (hit 98), ~18.5% extra each |
 | 2 | 76.5 s, 1 | 176.5, before Big Bang 2's hit (188.5) | under Big Bang 1 (~78% in ~20 s), else paced |
-| 3 | 136.5 s, 4 | 236.5 | under Big Bang 2, ~48% each |
-| 4 | 196.5 s, 4 | 296.5 | under Big Bang 3, ~17.5% each |
+| 3 | 136.5 s, 3 while wave 2's lives (tops up to 4) | 236.5 | under Big Bang 2, ~48% each |
+| 4 | 196.5 s, up to 4 | 296.5 | under Big Bang 3, ~17.5% each |
 
 **Wave 3 must go under.** Its untouched death lands 1.6 s after the meteor at 234.9, and after Big Bang 2 the
 aftermath, the 209.4 meteor and its `smashrecovery` leave 219.4-230.9 clear: room for one explosion. One wave-3 star
 left after Big Bang 2 cost 1.5 dead a pull, two cost 6.2 (25 pulls), whether the second was killed 11-14 s after the
-first or drained onto the meteor. Two are left when the bulk lands only one of its two wave-3 under-stars (the other
-released `late` at 38-70%), so its speed (median +1.9 %/s beyond the drain; both need ~+3.1) decides it.
+first or drained onto the meteor. Two are left when the bulk lands only one: the plan takes as many as its measured
+speed fits by cast − 5 s, two only from +2.9 %/s beyond the drain, and a planned second can still go `late` at
+38-70%. So its speed (median +1.9 %/s; landing both took ~+3.1) decides it.
 
 - **Plan**, per tick outside the cast, only with a disperser latched (a tank soaker would take each explosion
   whole), started afresh at each cast: a new star joins if its drain death isn't before the window and the

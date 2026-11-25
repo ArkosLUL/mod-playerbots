@@ -1112,3 +1112,67 @@ every pull; "at the cast, released early or not at all: N below their band" well
 under-star going off in a cast before hit − 4 s (w34: uld3 Big Bang 2 15 dead, uld6 Big Bang 1 4). Watch: wave-3
 `late` releases (w34: 4 of 6, left out of that count), under-stars `above` their band at the cast (w34: 0), a
 finisher that never reaches its star, the bulk's median speed.
+
+## Round 13 (2026-11-25, windows 36-37 build ce636f992: round 12)
+
+**Data.** `window36-algalon.md` (six pools), `window37-algalon.md` (two more C pulls); every pull's `--verdict`,
+`--deaths`, `--stars`, `--constellations`, `--tankheal`, `--defensives` (uld3 w36/w37, uld6 w37), `--bigbang`
+(uld3 w37). Scratch `alg13/`: `tanks.py` (pair intake and healing per second held), `raidheal.py` (raid damage
+against raid healing, P1's first 200 s), `barrage.py`, `bdeaths.py`, `team.py` (star team casts in a span),
+`blocks.py` (Ice Block and Deterrence spans, now `--defensives`).
+
+| Pool | Trace `603_*_algalon-the-observer_*` | Out | Deaths by mechanic |
+|---|---|---|---|
+| uld1 A | `603_12_…_1795555471` | kill 6:29 | 4: on tank 3, star 1 |
+| uld4 A | `603_7_…_1795555345` | wipe 7:05 | 32: loose 22, on tank 6, star 2, Big Bang, Smash (30 after Berserk) |
+| uld5 B | `603_11_…_1795555409` | kill 6:17 | 3: on tank 3 |
+| uld2 B | `603_9_…_1795555376` | wipe 7:14 | 31: loose 21, on tank 6, star, Dark Matter, Big Bang, Smash (28 after Berserk) |
+| uld3 C | `603_10_…_1795555409` | wipe 5:32 | 32 in P1: loose 18, Barrage 6, on tank 5, star, Big Bang, Dark Matter |
+| uld3 C | `603_13_…_1795556082` | wipe 6:53 | 33: loose 15, on tank 6, Barrage 4, star 4, Black Hole DoT 3, Big Bang |
+| uld6 C | `603_8_…_1795555346` | wipe 7:19 | 32: loose 21, on tank 6, 5 others (30 after Berserk) |
+| uld6 C | `603_14_…_1795556082` | wipe 6:02 | 33 in P1: loose 13, star 6, on tank 5, Barrage 4, Dark Matter 3, 2 others |
+
+**Stop rules.** Not polished: A (uld1, 4 dead) and B (uld5, 3) killed on ce636f992, C did not. Not stuck: C's
+collapse is picked for the first time.
+
+**Verdict on round 12: held** in A, B and C. Under-stars below their band at the cast 7 of 49 (w34: 9 of 31): A 1,
+B 2, C 4 (uld6 w36); one went off early in a cast with a death (uld6 w36 5:00.6, 1 dead; w34 22). Finishes ran in
+every pull. Above their band: 2 (w34: 0), both C's wave-3 star 7 at Big Bang 2 (uld3 w36 17.9%, uld6 w37 18.7%),
+8-9 ticks over, never reached by a finish. A finisher that never touched its star: uld3 w37 (lead above).
+
+**Picked: C's wave-3 under-star going off after Big Bang 2's hit.** uld3 w36 3:43.7 (hit + 9.1 s, 15 under, the
+disc died to a Barrage 0.9 s later and the DK holder 2.5 s later: the collapse), uld3 w37 3:39.6 (hit + 5.0, 19
+under, 2 dead), uld6 w37 3:40.6 (hit + 6.1, 7 under, 3 dead). In each the bulk stalled after the 3:14 deadline
+explosion: star 7 +1.5 then +0.3 %/s (uld3 w36), +0.9 then +0.1 (uld6 w37), against +2-3.4 before it. Bug: two of
+the three team members stop attacking at that explosion.
+
+- uld6 w37: the arcane mage Uldwah, 91.9% of a ~20 k pool, under the 21.5 k top roll, so the personal node pressed
+  Ice Block at 3:14.46 (`algalon.personal`); it sat the full 10 s to 3:24.46, no heal landing (`team.py`). The MM
+  hunter Uldwak's class Deterrence (`low health`, 3.5 s after the hit) stopped its shots 3:17.99-3:22.99.
+- uld3 w37: Uldzah Ice Block 3:14.42-3:24.43 the same way; uld3 w36: Uldzak Deterrence 3:16.4-3:21.4.
+- Across the 8 pulls: 39 Deterrences (20 on team hunters), every one after the hit, never ahead of one; 8 node Ice
+  Blocks, 5 the team mage's, each held 10 s. `ClaimAlgalonExplosionPersonal` (`UldEncounter_Algalon.cpp`) never
+  cancels the immunity, and no rule holds the class Deterrence node.
+
+**Fix** (Algalon files only):
+
+- `BreakSpentIceBlocks` in the tick: a personal-node Ice Block (`personalBlocks`) comes off once its star has left
+  the scan, no star explodes on the bot within 4.5 s (the press lead plus the stacking span), outside the Big Bang
+  cast (the hide run already strips it) and unphased; probe `algalon.unblock`.
+- `algalon deterrence hold` blocks the class `deterrence` node for unphased bots in phase 1 he is not hitting
+  (its parry stops his melee; none in w36-37 was on his victim); phased (Dark Matter) and phase 2 keep it.
+- Reader: `--defensives` lists each Ice Block and Deterrence a bot raised on itself unphased in P1, the star team's
+  share and the broken ones; verdict for a team member held over 2 s. Test `IdleButtons`.
+- Doc: `docs/raids/ulduar/algalon.md` (Cooldowns: personal buttons; The trace).
+
+10 and 25-man alike; a human's Ice Block and Deterrence are untouched (the map holds only the node's presses, the
+block is a bot rule). Cost: a mage out of its block is exposed to a Barrage it would have ignored, at the same
+health it would leave the block with; a low hunter loses a deflect it has never pressed in time.
+
+**Questions for the user.** None.
+
+**Next window should show** (`--defensives`, `--stars`, `--verdict`): "Ice Block and Deterrence … in P1, unphased"
+with no Deterrence and every node Ice Block `broken by algalon.unblock` within ~1 s of its star (w36-37: 5-20 s of
+team time per pull); Big Bang 2's wave-3 under-stars in their band at the cast, and no explosion within 16 s after
+Big Bang 2's hit (w36-37: 3 of 4 C pulls); C a kill with at most 5 dead, A and B again. Watch: a mage dying to a
+Barrage right after its block breaks, the finisher that never touches its star, P1 length against Berserk.
