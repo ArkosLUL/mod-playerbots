@@ -170,6 +170,12 @@ The 4 yd past the blast clear its knockback and the yard or two a leg overshoots
 `MoveAwayFromCreatureAction`, which does not move at all unless a candidate clears the full 30 yd, and
 most don't.
 
+**The escape fan stops at 90° off straight away** (`ULDUAR_MIMIRON_FROST_BOMB_FAN_MAX`, the cut counted
+as `bomb`): past it the leg cuts back inside the blast before it leaves, at 112.5° from 31 yd to 28.6 yd
+of the bomb over a 30 yd walk. Over 60 pulls the ±112.5° legs were 158 of ~5,000 escapes but the last
+leg before 11 of 20 blast hits on an escaping bot (9 dead), one a healer the opening phase 4 bomb
+caught from 31 yd. When every bearing to 90° is refused, the unit flee's fallback walks straight away.
+
 **The generic movers walk bots back onto the edge**, and the flee ping-pongs there for the whole fuse:
 114-150 `frost bomb <-> reach melee` a pull before the guard. `mimiron frost bomb guard` zeroes `reach
 melee`, `reach spell`, `reach party member to heal`, `set behind`, `follow`, `mimiron approach target
@@ -1263,6 +1269,13 @@ that test: half the `reach melee`, `set behind` and target-approach legs in thos
 lane (18% of the rest), 126-861 of them a phase 3, and 19 of one window's 32 phase 3 hits came within
 3 s of one.
 
+**Crowded lanes need a longer step.** Six fire bots round the melee lay a lane over every 5 yd step, and
+the bot stood 3-4 s in its line until the spray came: 10 of 30 spray deaths in 40 pulls came within
+3.5 s of a `spray unsafe`. So both sides repeat at 8 and 12 yd
+(`ULDUAR_MIMIRON_FIREBOT_SPRAY_ESCAPE_LADDER`, notes `spray+8`, `spray+12`), and only the last rung's
+far side takes the unscreened fallback. A replay of 145 such moments, lanes rebuilt from the snapshot,
+found a lane-free spot within 12 yd every time, out of every lane within 1.6 s.
+
 **The spray has to be predicted.** The script faces the nearest `NPC_FLAMES_SPREAD` every 15 s, or 5 s
 after a spray, and sprays at once if it is within 5 yd, else walks to 5 yd short and sprays on arrival
 facing the way it walked. The live line, the bot's current facing, appears only as it fires (1 of 14
@@ -1654,7 +1667,7 @@ Position, verdicts and movement commands come from the raid-agnostic streams; wh
 | `plasma` | Which defensive answered the Plasma Blast window, or `covered`/`none` |
 | `barrage` | Which dodge rule fired — `clear`, `hold`, `stepin` (melee back onto the ring), `boundary` (out from under VX-001), or `ahead`/`inside`/`trailing`/`refuge` (off fire inside the safe sector) plus a direction — with the bearing clockwise of the centreline, bucketed to 15°, since at whole degrees it changes every tick and one kill wrote 2,300 rows. Not the radius: `snap.u` samples the position four times a second beside the hazard row's apex |
 | `wedge` | `reaim N`, the Firefighter wedge's new centreline in degrees, when a barrage moved it; once its beams stop, `fire N a>b` (moved off fire to N) or `keep N a>b` (stayed at N), `a` and `b` the burning nodes in the footprint at the old centreline and at the best bearing. Per instance |
-| `flee` | The bearing fan's outcome, `ok`/`fallback`/`unsafe`/`none`/`locked`, and how many bearings each filter refused (`back`, `mine`, `cone`, `fire`, `bomb`, `rocket`, `burst`, `shock`, `spray`, `move`, `hold`: past the holder radius, `bombbot`: a Bomb Bot blast). `what` names the hazard: `shock`, `shock fire` (the second sweep, fire allowed), `shock anchor` (the escape aiming at a slot once every bearing failed), `rocket`, `frostbomb`, `spray`, `siren`, `bombbot` and `bombbot kite`, `unreach` and `unreach fire`, and `flames+N` per ladder rung, so which rung won is readable. `locked` means the movement lock refused before a single bearing was tried; `unsafe`, that the fallback would have landed in a Shock Blast, a Frost Bomb, a rocket, the barrage cone or a spray lane. A least-burn `fallback` carries its bearing like `ok`, and one with none issued no leg. A `spray` `none` is the near side failing; the far side's outcome follows |
+| `flee` | The bearing fan's outcome, `ok`/`fallback`/`unsafe`/`none`/`locked`, and how many bearings each filter refused (`back`, `mine`, `cone`, `fire`, `bomb`, `rocket`, `burst`, `shock`, `spray`, `move`, `hold`: past the holder radius, `bombbot`: a Bomb Bot blast). `what` names the hazard: `shock`, `shock fire` (the second sweep, fire allowed), `shock anchor` (the escape aiming at a slot once every bearing failed), `rocket`, `frostbomb`, `spray`, `siren`, `bombbot` and `bombbot kite`, `unreach` and `unreach fire`, and `flames+N` and `spray+N` per ladder rung, so which rung won is readable. `locked` means the movement lock refused before a single bearing was tried; `unsafe`, that the fallback would have landed in a Shock Blast, a Frost Bomb, a rocket, the barrage cone or a spray lane. A least-burn `fallback` carries its bearing like `ok`, and one with none issued no leg. A `spray` `none` is the near side failing; the far side's outcome follows |
 | `castcut` | The spell id of a cast the encounter tick cut for the flames dodge; a cut can write two notes 250 ms apart |
 | `campturn` | The phase 1 camp's sight turn toward the room, degrees, on change. Per instance |
 | `approach` | A formation leg that is not the plain walk to the slot: `substitute rN` (yd off the slot), `detour ±N` (degrees off the direct bearing), `cross N` or `stranded N` (yd of burn walked through); `none mines` when only a walk past mines was left, `none bomb` when the direct leg ran into a live Frost Bomb and no detour passed, fire refusals included, so not proof the bomb held the bot; a `stranded` leg can still follow |
@@ -1683,12 +1696,16 @@ so episodes rather than ticks, and splits off the Water Spray hits inside a barr
 cast to the cone's last `sweep` row, else plus 14.5 s), counting victims with no `spray` note in the 3 s
 before, and the hits within 3 s of a walk-back (a fire hold mover's accepted leg within 2.5 s of the
 bot's own spray step: an accepted fire bot leg whose last `mimiron.flee` note reads `spray ok` or
-`spray fallback`, since `NoteDerived` skips a note equal to the last); `--bombbots` calls a blast
+`spray fallback`, or `spray+N` for a ladder rung, since `NoteDerived` skips a note equal to the last),
+the `spray unsafe` notes (about one a tick while a bot stands in its lane) with the hits within 3 s of
+one, and the ladder legs by rung; `--bombbots` calls a blast
 victim chased when the bomb targeted it in the snapshot 300 ms before, times each bomb's first roster
 taunt from its first snapshot, and takes whoever held a `p3bomb` slot as the bomb tank, measured off
 the unit through phase 3 and, at each blast on him, off the bomb's first snapshot, with his taunt action
 verdicts and, for a druid, his share of phase 3 in a bear form; `--bomb` counts as a
-walk-in any accepted leg but the bomb escape that ran deeper inside 32 yd of the bomb than the bot stood;
+walk-in any accepted leg but the bomb escape that ran deeper inside 32 yd of the bomb than the bot stood,
+and an escape past 90° by its `frostbomb ok` bearing, with the blast hits whose victim's last escape it
+was;
 `--wedge` counts every living Flames (Spread) under a footprint, where the `wedge` note counts burning
 ones, and anchors it on VX-001 unclamped; `--pulse` and `--wedge` count healing net of overheal, and
 `--pulse` calls a healer out when dead or under 10% mana; `--floor` counts a move more than 3 yd off the

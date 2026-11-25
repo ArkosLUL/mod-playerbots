@@ -472,6 +472,7 @@ inline constexpr float ULDUAR_MIMIRON_FIREBOT_SPRAY_LENGTH = 18.0f;
 inline constexpr float ULDUAR_MIMIRON_FIREBOT_SPRAY_HALF_WIDTH = 3.5f;
 inline constexpr float ULDUAR_MIMIRON_FIREBOT_SPRAY_STAND_HALF_WIDTH = 4.5f;
 inline constexpr float ULDUAR_MIMIRON_FIREBOT_SPRAY_SIDESTEP = 1.5f;
+inline constexpr float ULDUAR_MIMIRON_FIREBOT_SPRAY_ESCAPE_LADDER[] = {8.0f, 12.0f};
 inline constexpr float ULDUAR_MIMIRON_FIREBOT_SPRAY_REACH = 5.0f;
 inline constexpr float ULDUAR_MIMIRON_FIREBOT_SIREN_CLEARANCE = 13.0f;
 inline constexpr float ULDUAR_MIMIRON_FIREBOT_SIREN_STAND = 17.0f;
@@ -495,6 +496,7 @@ inline constexpr float ULDUAR_MIMIRON_FLAMES_MAX_HOP = 12.0f;
 
 inline constexpr float ULDUAR_MIMIRON_FLEE_FAN_STEP = static_cast<float>(M_PI) / 8.0f;
 inline constexpr float ULDUAR_MIMIRON_FLEE_FAN_MAX = 5.0f * ULDUAR_MIMIRON_FLEE_FAN_STEP;
+inline constexpr float ULDUAR_MIMIRON_FROST_BOMB_FAN_MAX = 4.0f * ULDUAR_MIMIRON_FLEE_FAN_STEP;
 
 inline constexpr float ULDUAR_MIMIRON_FLEE_MIN_PROGRESS_PCT = 0.5f;
 
