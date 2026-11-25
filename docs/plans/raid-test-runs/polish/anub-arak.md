@@ -59,7 +59,8 @@ gates drop 6.5%, `fore` walks 2.6% (r4).
 | C | toc3, toc6 | 4 of 4 reached phase 3, wipes at 5.3%, 10.1%, 14.5%, 24.1% (2 of 2: 11.8%, 19.4%) |
 
 Phase 3 reach went from 4 of 12 (window 46) to 5 of 6 (window 49) before r3,
-with phase 3 at 5:40-6:03 after two submerges; not r3's doing.
+so not r3's doing; in window 50, 8 of the 9 reached it at 5:40-6:03 after two
+submerges, toc6 `…4848` at 7:28 after three.
 
 **Open failures, ranked.**
 
@@ -83,8 +84,9 @@ with phase 3 at 5:40-6:03 after two submerges; not r3's doing.
   Permafrost (`anub.backup`). Verdict r4: half works. Backed-up walks land 0.28
   a second; walking behind fell from 27% to 21% of contact, but walking time
   rose and the landed rate held (0.36 in contact, windows 46 and 49 0.38 and
-  0.36); 38% of the walking under `back` ran forward because `IsDuplicateMove`
-  and `IsWaitingForLastMove` ignore `backwards`.
+  0.36); 38% of the walking under `back` ran forward because the move gates
+  ignore `backwards`: `IsWaitingForLastMove` made 2515 of the 2516 logged hold
+  walk rejections in window 50, `IsDuplicateMove` 1.
 
 **Ideas rejected.**
 
@@ -110,8 +112,8 @@ Felesta's and Bulwark's (done r3: no gap) and build the facing fix (built r3).
 
 - **Q2 (plan change: which tanks hold burrowers).** In heroic, pick the two side
   tanks by how they take burrower hits, prot paladin first, then blood DK, prot
-  warrior, bear last, and give Anub'arak to the one left over, instead of the
-  main tank flag deciding? Bears take 6.1k burrower damage a contact second
+  warrior, bear last, and give Anub'arak to the one left over (at 10 man the
+  same order picks the one side tank), instead of the main tank flag deciding? Bears take 6.1k burrower damage a contact second
   against a paladin's 3.5k and died first in 17 of 20 pulls; the user's kills
   had the bear on him and paladin plus DK on burrowers. C would get the user's
   setup, A paladin plus DK (warrior on him), B paladin plus warrior (bear on
@@ -177,11 +179,13 @@ a second): `frost` 9.6% 0.64, `back` 6.5% 0.69, `fore` 2.6% 0.76; `reach melee`
 `fore` 2.2% 0.31. Before r3 (18 pulls) hold walks were 24.6% behind at 0.61 and
 5.9% front at 0.35. Under `back`, 315 of 825 s walking ran forward (97% forward
 gait). Of 257 flips to `back`, 26 issued a hold walk within 0.3 s, 50 after
-`wait` rejections 0.3-2.6 s later, 181 none before the next change (rejections
-are throttled in the trace). Cause: `MovementAction::MoveToImpl` drops the move
-at `IsDuplicateMove` (MovementActions.cpp:1047, same destination) or
-`IsWaitingForLastMove` (:1059, same priority), neither comparing `backwards`,
-so a flip with the forward walk running changes nothing
+`wait` rejections 0.3-2.6 s later, 181 none before the next change; 161 of the
+257 met a logged `wait` rejection first, the rest none logged (rejections are
+throttled to one a second per action in the trace). Cause:
+`MovementAction::MoveToImpl` drops the move at `IsWaitingForLastMove`
+(MovementActions.cpp:1059, same priority; 2515 of the 2516 logged hold walk
+rejections) or `IsDuplicateMove` (:1047, same destination; 1), neither
+comparing `backwards`, so a flip with the forward walk running changes nothing
 (ToCActions_Anubarak.cpp:435-440).
 
 **Side tank class (new read).** 30 pulls, before phase 3 or the tank's death:
@@ -192,7 +196,7 @@ so a flip with the forward walk running changes nothing
 | warrior | 10 | 0.45 | 5.1k | 7 of A's 10 |
 | blood DK | 20 | 0.40 | 4.5k | 3 of A's 10, 2 of C's 10 |
 | prot paladin | 10 | 0.38 | 3.5k | 1 of B's 10 |
-| Felesta, Bulwark (CT, CU, CV) | 3 each | 0.33, 0.34 | 3.7k, 3.0k | none |
+| Felesta, Bulwark (CT, CU, CV) | 3 each | 0.33, 0.34 | 3.7k, 3.0k | Felesta in CU, Bulwark in CV, both in phase 3 |
 
 The 4 bear deaths in window 50 with `anub.defensive kept` (Toczab 1:13, Tocvab
 3:41, Tocwab 2:43 and 2:57) had frenzied regeneration ready, Tocvab survival
@@ -200,6 +204,12 @@ instincts too, and 94-100% top health in the 6 s before.
 
 **Change.** None to the strategy. Boss doc: r3's measured result and the class
 read. This log.
+
+**Questions** (State has them in full). Q2, a plan change: in heroic pick the
+side tanks by class (prot paladin, blood DK, prot warrior, bear last), the one
+left over on him; recommended yes among bots. Q3: waive the stuck rule to
+re-issue the hold walk when the back-up decision flips; recommended only with
+Q2.
 
 **Next window should show.** Same code, same failure. If Q2 is built: the bear
 (B, C) and the warrior (A) on him; side tank burrower damage a contact second
