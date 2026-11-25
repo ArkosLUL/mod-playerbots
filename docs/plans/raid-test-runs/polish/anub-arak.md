@@ -1,116 +1,196 @@
 # Polish log: Anub'arak (25-man heroic)
 
-Reader `tools/botobs/bosses/anub_arak.py` (`--tanks`, `--burrowers`, `--healers`, `--dps`, `--phases`; its
-`--summary` is the banner only), tests in `tools/botobs/tests/test_anub_arak.py`. Older rounds:
+Reader `tools/botobs/bosses/anub_arak.py` (`--tanks`, `--burrowers`,
+`--healers`, `--dps`, `--phases`, `--pull`; its `--summary` is the banner only),
+tests in `tools/botobs/tests/test_anub_arak.py`. Older rounds:
 `history/anub-arak.md`.
 
 ## State
 
-**Setup.** Trace slug `anub-arak`, raid `toc`, DC scenario `totc-anubarak` (3 tanks, 4 healers at 25). The first
-pull waits out the Lich King scene; a re-pull replays `OnPlayerEnter`. Second pulls that engaged before DC's start
-step are voided (3 of 6 on f863bb8b6); a DC lane fixes that. Names: pool letters x=toc1, y=toc2, z=toc3, u=toc4,
-v=toc5, w=toc6; slot `aa` main tank, side tanks `ab` (bear, B and C) or `am` (blood DK, A) and `az` (prot warrior
-A, prot paladin B, blood DK C). The user's own raid killed 25H on this strategy; two kills are still on disk for
-comparison: CT `649_1_anub-arak_1794829976` and CU `649_2_anub-arak_1794938939`.
+**Setup.** Trace slug `anub-arak`, raid `toc`, DC scenario `totc-anubarak` (3
+tanks, 4 healers at 25). A window runs one DC run of two pulls per pool: the
+first waits out the Lich King scene, the second re-pulls in the same instance
+after DC's revive and refresh (`OnPlayerEnter` replayed). Names: pool letters
+x=toc1, y=toc2, z=toc3, u=toc4, v=toc5, w=toc6; slot `aa` main tank, side tanks
+`ab` (bear, B and C) or `am` (blood DK, A) and `az` (prot warrior A, prot
+paladin B, blood DK C). The user's own raid killed 25H on this strategy; two
+kills are on disk for comparison: CT `649_1_anub-arak_1794829976` and CU
+`649_2_anub-arak_1794938939` (side tanks Bulwark, prot paladin, and Felesta,
+blood DK).
 
-**Fight model.** He submerges 80 s after the engage and after each emerge, for 62 s; phase 3 starts at 30%, which
-needs about 20% off him per phase 1, and the raid must then kill him before the 10 min Berserk. Heroic burrower
-waves (4, 753k each, 2 per side tank) come 5 s and 50 s into each phase 1, then every 45 s in phase 3, from the west
-exits, reaching the east tank pair 15-20 s later. A side tank holding two reaches 9 Expose Weakness stacks (+225%
-physical) for 25-45 s a wave. Off Permafrost, after 30 s, a burrower under 80% submerges back to full.
+**Re-pull state (r2).** Same as a first pull in cooldowns (DC resets them:
+Shield Wall, Rebirth, Hymn of Hope reused 175-500 s apart), raid buffs and Well
+Fed, health and positions at the engage. Only healer mana differs: 82-98% mean
+at the engage (single healers 73-100%) against 100%, a DC refresh matter. By
+wave 3 the healers stood at 58-80% either way, so it did not cause the short
+second pulls; those died to the same side tank failure.
 
-**What kills raids.** A side tank dies under its burrowers at 9 stacks, they go to healers and ranged, the other
-side tank takes four, and the raid follows (burrower melee 28 deaths a pull). On the test pools the first side tank
-death came on a phase 1's second wave (waves 2, 4, 6, 8) in 11 of 12 pulls. Against CT/CU the burrower lifetimes,
-focus timing, raid DPS (about 160k/s in phase 1) and healing on the side tanks match; the test side tanks take
-bigger hits at similar health (logged burrower hits: Bulwark median 6.1k, test prot paladin 9.0k, bears 10.5-13k;
-60-83k health on both), so they are less durable, not misplayed.
+**Fight model.** He submerges 80 s after the engage and after each emerge, for
+62 s; phase 3 starts at 30%, which needs about 23% off him per phase 1 to come
+with two submerges, and the raid must then kill him before the 10 min Berserk.
+Heroic burrower waves (4, 753k each, 2 per side tank) come 5 s and 50 s into
+each phase 1, then every 45 s in phase 3, from the west exits. A side tank
+holding two reaches 9 Expose Weakness stacks (+225% physical) for 25-60 s a
+wave; at 9 stacks a landed hit is 15-19k on a bear (about 95k health), 13-15k on
+a DK, 11-14k on a warrior, 9-13k on a paladin, and two can land in one tick. Off
+Permafrost, after 30 s, a burrower under 80% submerges back to full.
 
-**Compositions on f863bb8b6 (12 valid pulls, all wipes).**
+**What kills raids.** A side tank goes from 80-100% to dead in under 6 s with no
+long defensive ready (33 of 36 side tank deaths outside phase 3 in window 46; in
+the other 3 a running Last Stand, Barkskin or Vampiric Blood blocked a ready
+one, since `NextTankDefensive` casts one at a time), its burrowers go to healers
+and ranged, the other side tank takes four, and the raid follows (burrower melee
+28 deaths a pull). Two long defensives per side tank cover about two waves in
+three. Against CT/CU, hit size per stack, swing speed (1.22 s), rotations and
+phase 1 DPS (144-173k/s) match, but test side tanks are landed on 0.34-0.69
+times a second of burrower contact against Bulwark's and Felesta's 0.29-0.37
+(`--tanks`; paladins closest), so they take 6.9-11.6k/s of burrower damage in
+phase 1 against 4.5-6.2k/s, with the healers already putting more on them.
 
-| Design | Pools | Outcome |
+**Compositions on 37cc72a94 (window 46, 12 valid pulls, all wipes).**
+
+| Design | Pools | Outcome (f863bb8b6 in brackets) |
 |---|---|---|
-| A | toc1, toc4 | 1 of 4 reached phase 3 (wipe 8:32 at 29.9%); three collapsed in P1c-P1d at 31.4-57.7% |
-| B | toc2, toc5 | 2 of 4 reached phase 3 (27.2%, 15.6%); two collapsed after wave 2, wipes 1:42 and 2:15 |
-| C | toc3, toc6 | 4 of 4 reached phase 3, wipes at 10.6-22.5% |
+| A | toc1, toc4 | 3 of 4 reached phase 3, wipes at 9.2%, 11.1%, 30.0% (1 of 4) |
+| B | toc2, toc5 | 1 of 4 reached phase 3, wipe at 9.6%; three collapsed at 47-52% (2 of 4) |
+| C | toc3, toc6 | 1 of 4 reached phase 3, wipe at 20.6%; three collapsed at 31-63% (4 of 4) |
+
+One build each, so no regression call on C.
 
 **Open failures, ranked.**
 
-1. Side tank death on a phase 1's second wave, then the cascade: 420 burrower melee deaths. Picked r1.
-2. Phase 3: 7 of 12 wipes, side tanks dead 1-17 s in, then burrowers and the swarm. Not yet looked into.
-3. A bear side tank (B, C) leaves Dire Bear Form between waves for the non-combat strategy's Rejuvenation or Mark of
-   the Wild: 15 drops in 7 of 8 B/C pulls, out 1.4-7.3 s, back about when the next wave comes up, so little damage
-   so far. A `caster form` block would also stop a druid tank's `anubarak battle res side tank`.
-4. Anub'arak melee 21, Penetrating Cold 18, Mandibles 11, Leeching Swarm 6, Impale 4, Shadow Strike 4, Freezing
-   Slash 3: mostly inside collapses.
+1. Side tank death at 9 stacks with no long defensive ready, then the cascade:
+   337 of 388 deaths. Picked r1 (bug, fixed), r2 (plan question Q1).
+2. Phase 3: 4 of 12 pulls reached it, all wiped after side tanks died. The near
+   kills (9.2-11.1%) started it at 7:26-7:45 after a third submerge (P1b lost
+   19-20%); CT/CU started it at 5:43-5:47 after two (P1b 25%).
+3. Anub'arak melee 18, Penetrating Cold 12, Mandibles 7, Impale 6, Shadow Strike
+   5: mostly inside collapses.
+4. A running defensive blocks a ready long one (3 of 36 side tank deaths,
+   above). Shared `RaidTankDefensive.cpp`, so every boss using it would be
+   pulled again; not worth it at that count.
 
 **Fixes in place.**
 
-- r1: heroic side tank defensives with a 120 s+ cooldown are kept while the tank is at 50%+ from the pull until
-  `Swarm` (was from his 50%). Verdict pending.
+- r1: heroic side tank defensives with a 120 s+ cooldown kept at 50%+ health
+  from the pull until `Swarm`. Verdict r2: works (long casts at 50%+ by health
+  after the last hit 4 of 79, was 67 of 85; no side tank died with one kept);
+  first side tank deaths moved from a phase 1's second wave (11 of 12 → 6) to
+  the first wave after a submerge (1 → 5), the defensives spent under 50% on the
+  wave before still cooling.
 
-**Ideas rejected.** None yet.
+**Ideas rejected.**
 
-**User answers in force.** The boss doc's user calls (east tank pair in heroic, DPS split by side, the push, keep
-killing phase 3 waves, battle res as is). The 2026-11-04 defensive keep from his 50% is widened by r1.
+- Holding a bear side tank in Dire Bear Form between waves (r2): it leaves form
+  once its burrowers die, casts Rejuvenation or Mark of the Wild (100
+  Rejuvenations in 8 B/C pulls) and shifts back 0.2-1.5 s after the next wave
+  spawns; 1 burrower hit landed on it out of form. Its rage refills from the
+  first hit.
+- r1's "test side tanks take bigger hits": at equal stacks hit sizes match
+  CT/CU; the gap is how often they land.
 
-**Open questions.** None asked. If side tanks still die on second waves with a long defensive spent under 50%, the
-next levers are plan changes: a fifth healer at 25 (the roster's spare healer replacing a DPS, as lane C's research
-proposed) or more DPS on burrowers in phase 1.
+**User answers in force.** The boss doc's user calls (east tank pair in heroic,
+DPS split by side, the push, keep killing phase 3 waves, battle res as is, focus
+once the side tank carries 6+ stacks). r1's defensive keep from the pull (kept
+2026-11-25).
 
-## Round 1 (build f863bb8b6)
+**Open questions.**
 
-**Data.** Window report `check42-anub-arak.md` (job 1), its 15-row pull table. Valid: toc2 `649_2_…1795595889`,
-`…1795596327`; toc5 `649_5_…1795595892`, `…1795596073`; toc6 `649_6_…1795595893`, `649_7_…1795596939`; toc1
-`649_1_…1795595889`, `649_8_…1795596970`; toc4 `649_4_…1795595891`, `…1795596260`; toc3 `649_3_…1795595891`,
-`649_9_…1795597051`. Voided (engaged before the start step): `649_6_…1795596344`, `649_1_…1795596367`,
-`649_3_…1795596329`. Kill references CT and CU. Sections read: `--phases`, `--burrowers`, `--tanks`, `--healers`,
-`--dps`.
+- **Q1 (r2): should heroic 25 get a fifth healer?** Recommended: yes, swap the
+  roster's spare healer in for one DPS in DC's `totc-anubarak` scenario; no
+  strategy code changes. All 12 window 46 wipes began when a side tank (the tank
+  holding two burrowers) went from 80-100% health to dead in under 6 s at 9
+  Expose Weakness stacks, almost always with its long cooldowns (Shield Wall,
+  Icebound Fortitude and the like) still recharging from an earlier wave. Those
+  cooldowns cover only about two waves in three. The bot side tanks take as much
+  per hit as Felesta and Bulwark did in the user's kills, but get hit about 1.3
+  times as often per second (more of the burrowers' swings land), so they take
+  1.3-1.9 times the burrower damage with the same four healers. The cost is one
+  DPS in 18; the closest wipes already needed a third submerge. The other choice
+  is code: one healer sticks to each side tank while it holds burrowers. That
+  takes healing from the main tank and the five Penetrating Cold carriers, so
+  try it only if the fifth healer's healing goes to the raid instead of the side
+  tanks.
 
-**Deaths.** Burrower melee 420 of 487 in 15 pulls, then Anub'arak melee 21, Penetrating Cold 18. First side tank
-death per valid pull:
+## Round 2 (build 37cc72a94, window 46)
+
+**Data.** `window46-anub-arak.md` (job 2: r1 plus the ritual walk fix
+21376d9f9), 12 valid pulls, first then second per pool: toc1
+`649_7_…1795603120`, `…1795603732`; toc4 `649_10_…1795603232`, `…1795603841`;
+toc2 `649_8_…1795603140`, `…1795603740`; toc5 `649_11_…1795603242`,
+`…1795603659`; toc3 `649_9_…1795603202`, `…1795603473`; toc6
+`649_12_…1795603253`, `…1795603727`. Kill references CT, CU. Sections:
+`--tanks`, `--phases`, `--burrowers`, `--dps`, `--healers`, `--pull`; scratch
+reads of death auras, mana, cooldown reuse, heal split.
+
+**Deaths.** Burrower melee 337 of 388, Anub'arak melee 18, Penetrating Cold 12.
+First side tank death per pull:
 
 | Pull | Wipe | First side tank death |
 |---|---|---|
-| toc2 …5889 | P3 6:29, 27.2% | Tocyab (bear) 1:06, wave 2 |
-| toc2 …6327 | P2 1:42, 72.1% | Tocyab 1:03, wave 2 (three on him, two from wave 1) |
-| toc5 …5892 | P2 2:15, 72.1% | Tocvaz (paladin) 1:05, wave 2 (Righteous Defense off a healer at 22% gave him four) |
-| toc5 …6073 | P3 9:16, 15.6% | Tocvab 8:32, wave 8 |
-| toc6 …5893 | P3 6:54, 22.1% | Tocwaz (DK) 5:46, wave 6 |
-| toc6 …6939 | P3 7:11, 21.2% | Tocwaz 3:31, wave 4 |
-| toc1 …5889 | P1d 7:19, 35.5% | Tocxam (DK) 3:28, wave 4 |
-| toc1 …6970 | P2c 7:01, 31.4% | Tocxaz (warrior) 1:07, wave 2 |
-| toc4 …5891 | P1c 5:23, 57.7% | Tocuaz (warrior) 1:09, wave 2 |
-| toc4 …6260 | P3 8:32, 29.9% | Tocuaz 6:04, wave 6 |
-| toc3 …5891 | P3 6:44, 22.5% | Toczab (bear) 5:15, wave 5 |
-| toc3 …7051 | P3 7:06, 10.6% | Toczaz (DK) 6:07, wave 6 |
+| toc1 …3120 | P3 9:12, 9.2% | Tocxaz (warrior) 5:52, wave 6 |
+| toc1 …3732 | P2b 4:04, 63.6% | Tocxaz 0:26, wave 1 |
+| toc4 …3232 | P3 9:22, 11.1% | Tocuaz (warrior) 6:01, wave 6 |
+| toc4 …3841 | P3 8:21, 30.0% | Tocuaz 1:18, wave 2 |
+| toc2 …3140 | P3 8:56, 9.6% | Tocyab (bear) 8:09, wave 8 |
+| toc2 …3740 | P2b 4:32, 48.2% | Tocyab 3:02, wave 3 |
+| toc5 …3242 | P1c 6:10, 47.1% | Tocvab (bear) 1:07, wave 2 (battle res, lived to 5:14) |
+| toc5 …3659 | P2b 4:01, 51.7% | Tocvab 2:54, wave 3 |
+| toc3 …3202 | P1b 3:43, 62.6% | Toczab (bear) 2:45, wave 3 |
+| toc3 …3473 | P1c 6:08, 30.6% | Toczab 5:07, wave 5 |
+| toc6 …3253 | P3 7:01, 20.6% | Tocwab (bear) 5:54, wave 6 |
+| toc6 …3727 | P2b 4:32, 55.6% | Tocwaz (DK) 2:48, wave 3 |
 
-**Failure picked: side tanks die on a phase 1's second wave with every long defensive cooling.**
+**Re-pull.** Second pulls ran 4:01-8:21 against 3:43-9:22. Death auras: same
+raid buffs and Well Fed on all 25 per pull. Cooldowns reset (toc1 Tocxaz Shield
+Wall at 7:44 and again 2:55 later at 0:27). Healer mana at the engage: toc1
+100/85/85/85, toc3 100/80/81/88, toc4 96/86/82/82, toc5 90/81/84/73, toc6
+100/90/97/85, toc2 100/100/100/93; at 2:30-2:50 mean 58-80% in both pulls, no
+consistent gap. Engage positions match (`--pull`). Answer: a DC refresh matter
+(mana), not the cause; the short second pulls are the side tank failure on wave
+3, which toc3's first pull shows too.
 
-- `AnubarakSideTankNeedsDefensive` (`ToCHelpers_Anubarak.cpp:5564`) fires at 5 Expose Weakness stacks whatever
-  the tank's health, and `NextTankDefensive` (`RaidTankDefensive.cpp:59`, weakest first) hands warriors Last
-  Stand then Shield Wall, paladins Divine Protection, bears Barkskin then Frenzied Regeneration and Survival
-  Instincts, DKs Vampiric Blood then Icebound Fortitude. The keep (`AnubarakSideTankDefensiveKept`, `:5572`)
-  held the 120 s+ ones only from his 50%.
-- So each phase 1's first wave took them: 67 of 85 long casts outside phase 3 went at 50%+ health (`--tanks`),
-  for example toc4 …5891 Tocuaz Last Stand 0:21.2 at 74% and Shield Wall 0:38.3 at 93%, toc1 …6970 Tocxaz 83% and
-  74%, toc5 …5892 Tocvaz Divine Protection 0:21.1 at 86%.
-- Every first side tank death came with each of its long defensives cast 21-147 s before (`--tanks` death rows,
-  within the 120-300 s cooldowns): Tocuaz 1:09.6 under two burrowers, 100% to 3% in 15 s, Shield Wall 31 s and
-  Last Stand 48 s before.
-- Healing is not the gap: in phase 1 the side tanks of four test pulls received 219-420k heals, CT's 257k and 420k,
-  CU's 133k and 224k.
+**Failure picked: side tanks die at 9 stacks with no long defensive ready.**
 
-**Classification: bug.** The defensive is meant to carry the side tank through the waves; spent at full health on
-the wave that didn't need it, it is gone for the one that kills.
+- No keep at a death: the last `anub.defensive` before each of 36 side tank
+  deaths outside phase 3 is a cast or `covered`, never `kept`; their highest
+  health in the 6 s before was 80-100% (one 79.6%). By cast times and death
+  auras a long defensive was ready at 3 of them, each blocked by a running one:
+  toc1 …3732 Tocxaz 0:26 (Last Stand up, Shield Wall ready), toc3 …3473 Toczab
+  5:07 (Barkskin, Frenzied Regeneration), Toczaz 5:09 (Vampiric Blood, Icebound
+  Fortitude).
+- One tick kills: toc5 …3242 Tocvab 1:07.5 at 55% took 23.3k and 24.8k at
+  1:07.827 (postmortem death 0).
+- Per hit at 9 stacks test equals CT/CU per class (paladin 9.0-13.3k vs Bulwark
+  9.6-12.5k, DK 12.6-15.2k vs Felesta 13.8-15.5k); landed burrower hits a second
+  of contact 0.34-0.69 vs 0.29-0.37; side tank burrower damage in phase 1
+  6.9-11.6k/s vs 4.5-6.2k/s (CT 1.48M on both side tanks to 5:43, toc1 …3120
+  2.5M to 5:52).
+- Healing: in the 12 s before each first side tank death the dying tank got
+  about a third of the four healers' output, the rest the main tank, the other
+  side tank and DPS (toc3 …3202 Toczaf 0 on Toczab, 54k on DPS). Over phase 1
+  the side tanks already get 38-59% of it (median 45%) against CT/CU's 39%.
+- Rotations match the kills (casts a minute: Felesta Rune Strike 8.8-9.7, Blood
+  Boil 5.5-5.9; test DKs 7.3-11.5, 4.8-8.1; Bulwark and test paladins Holy
+  Shield 4.8-5.8); burrower lives 30-46 s against 32-43 s.
 
-**Fix.** `AnubarakSideTankDefensiveKept` keeps a 120 s+ pick while the tank is at 50%+ on heroic from the pull to
-`Swarm`, not only from his 50% (`ANUBARAK_SIDE_DEFENSIVE_KEEP_PCT` removed). Barkskin and Vampiric Blood still go
-at 5 stacks; normal is unchanged. Reader: `--tanks` lists the long defensives a side tank cast outside phase 3 at
-50%+ health and, per side tank death, its last cast of each.
+**Classification: plan change** (Q1). Nothing the strategy intends fails: the
+keep holds, defensives go under 50%, rotations match.
 
-**Next window should show.** `--tanks` long defensives at 50%+ outside phase 3: 0 of N on every pull (`anub.defensive
-kept` rows instead), and fewer first side tank deaths on waves 2 and 4, each with a long defensive cast under 50%
-in that wave. Judge per composition; A's warriors and B's paladin, whose only long buttons these are, should gain most.
+**Change.** Reader only. `--tanks`: a defensive's health is now after the last
+logged hit or heal when that is newer than the snapshot (the snapshot overstated
+it by up to 30 points: Tocxaz Last Stand 0:20.0 read 55%, was 38%); burrower
+contact seconds and landed hits a second per side tank before phase 3; each tank
+death's last `anub.defensive` and highest health in the 6 s before. `--pull`:
+healer mana at the engage. Tests added.
 
-**Previous fix.** None (first round).
+**Next window should show.** Same code, so the same failure. With Q1 answered (a
+fifth healer): side tank burrower damage healed per second up, the first side
+tank death later than wave 3 in most pulls, and phase 1 loss per phase still
+near 20%.
+
+**Previous fix (r1) verdict.** Works as built: long defensives at 50%+ 4 of 79
+(A 2, B 1, C 1). By composition the first side tank death came on a phase 1's
+second wave in A 3 of 4 (r1 4 of 4), B 2 of 4 (r1 4 of 4), C 1 of 4 (r1 3 of 4);
+on the first wave after a submerge in A 0, B 2, C 3 (r1: C 1). A gained (3 of 4
+to phase 3), C lost (1 of 4); one build, so no call.

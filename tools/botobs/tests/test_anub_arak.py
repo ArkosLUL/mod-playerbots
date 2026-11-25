@@ -1963,7 +1963,7 @@ class RefillPull(unittest.TestCase):
                       "     0:13.000 Bulwark        divine protection 100%\n", text)
         self.assertRegex(text, r"0:15\.000 Felesta +side 1 P1 +taken 75,000 \(burrower 60,000, Anub'arak 10,000,"
                                r" scarab 5,000\); healed 13,000 by 3 heal\(s\), 5,000 over; absorbed 3,000;"
-                               r" Expose peak 3; long defensives: none\n")
+                               r" Expose peak 3; anub.defensive covered; top 100%; long defensives: none\n")
 
 
 RANGER, STALKER, TRAPPER, CASTER = range(7001, 7005)
@@ -6612,6 +6612,89 @@ class Refine35Lines(unittest.TestCase):
             ab.show_healer_floor(self.trace, 0, 5000, self.samples)
         self.assertIn("Holylight 0.5 s 4.00%, Prayer 2.0 s 3.00%, died to the swarm floor 0:04.000,"
                       " Tree 0.0 s 20.00%\n", out.getvalue())
+
+
+R36_MAIN, R36_SIDE, R36_HEAL = 7001, 7002, 7003
+R36_B = CREATURE | 1700
+
+
+def r36_pull() -> list[dict]:
+    def frame(when):
+        units = [[R36_MAIN, X, Y, Z, 0.0, 100.0, 100.0, 0, 0, 0, 0, 0],
+                 [R36_SIDE, X + 10.0, Y, Z, 0.0, 0.0 if when >= 9000 else 95.0, 100.0, 0, 0, 0, 0, 0],
+                 [R36_HEAL, X - 10.0, Y, Z, 0.0, 100.0, 80.0, 0, 0, 0, 0, 0]]
+        if when >= 1000:
+            units.append([R36_B, X + (12.0 if when < 6000 else 20.0), Y, Z, 0.0, 100.0, 0.0, R36_SIDE, 0, 0, 0, 0])
+        return {"t": when, "e": "snap", "hz": [], "u": units}
+
+    def hit(when, amount, hp, absorbed=0):
+        return {**dmg(when, R36_B, R36_SIDE, 0, amount), "hp": hp, "ab": absorbed}
+
+    records = [
+        {"e": "hdr", "v": 14, "ts": 1791000000000, "map": ab.MAP_TOC, "inst": 9, "diff": 3, "boss": "anub-arak",
+         "roster": [{"g": R36_MAIN, "n": "Bulwark", "r": "tank", "c": 2, "h": 0},
+                    {"g": R36_SIDE, "n": "Felesta", "r": "tank", "c": 6, "h": 0},
+                    {"g": R36_HEAL, "n": "Mercy", "r": "heal", "c": 5, "h": 0}]},
+        {"t": 0, "e": "pull", "boss": "anub-arak", "src": "engage"},
+        {"t": -500, "e": "unit", "g": BOSS, "en": ab.NPC_ANUBARAK, "n": "Anub'arak", "b": 1},
+        {"t": 1000, "e": "unit", "g": R36_B, "en": ab.NPC_BURROWER, "n": "Nerubian Burrower"},
+        note(0, R36_MAIN, "anub.phase", 1),
+        note(0, R36_MAIN, "anub.side0", R36_SIDE),
+        hit(2000, 10000, 90.0), hit(2200, 10000, 80.0), hit(2400, 10000, 70.0), hit(2600, 10000, 60.0),
+        cast(2650, R36_SIDE, 48792, R36_SIDE),
+        {"t": 2700, "e": "heal", "s": R36_HEAL, "d": R36_SIDE, "sp": 48071, "a": 20000, "oh": 0, "hp": 70.0},
+        cast(2750, R36_SIDE, 55233, R36_SIDE),
+        hit(3000, 0, 40.0, 5000),
+        note(8000, R36_SIDE, "anub.defensive", "kept"),
+        hit(8500, 10000, 30.0),
+        {"t": 9000, "e": "death", "g": R36_SIDE, "killer": R36_B, "x": X + 10.0, "y": Y, "z": Z},
+        hit(9500, 10000, 50.0),
+        {"t": 10000, "e": "end", "out": "wipe"},
+    ]
+    records += [frame(when) for when in range(0, 10500, 500)]
+    return records
+
+
+class SideTankHealthLines(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        cls.trace = write_trace(cls.folder.name, "649_9_anub-arak_1791000000.ndjson", r36_pull())
+        cls.samples = ab.Samples(cls.trace)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_max_health_reads_back_to_back_melee_hits(self):
+        _, rows, top = ab.health_tracks(self.trace)[R36_SIDE]
+        self.assertAlmostEqual(top, 100000.0)
+        self.assertIsNone(ab.max_health(rows[:3]))
+
+    def test_a_defensive_reads_health_after_the_last_hit_or_heal(self):
+        rows = {row["spell"]: row["hp"] for row in ab.defensive_rows(self.trace, self.samples)}
+        self.assertAlmostEqual(rows["icebound fortitude"], 50.0)
+        self.assertAlmostEqual(rows["vampiric blood"], 70.0)
+
+    def test_a_tank_death_reads_its_last_verdict_and_top_health(self):
+        row = ab.tank_deaths(self.trace, self.samples)[0]
+        self.assertEqual((row["verdict"], row["top"]), ("kept", 95.0))
+
+    def test_burrower_contact_and_landed_hits_stop_at_the_death(self):
+        self.assertEqual(ab.side_tank_contact(self.trace, self.samples), {R36_SIDE: {"ms": 5000, "landed": 6}})
+
+    def test_healer_mana_at_the_engage(self):
+        self.assertEqual(ab.engage_mana(self.trace, self.samples), [(R36_HEAL, 80.0)])
+
+    def test_the_lines_print(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            ab.show_tanks(self.trace)
+            ab.show_pull(self.trace)
+        text = out.getvalue()
+        self.assertIn("Felesta 5.0 s, 6, 1.20/s\n", text)
+        self.assertIn("anub.defensive kept; top 95%", text)
+        self.assertIn("healer mana at the engage: Mercy 80%\n", text)
 
 
 if __name__ == "__main__":
