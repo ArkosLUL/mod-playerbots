@@ -20,10 +20,13 @@
 #include "RaidObs.h"
 #include "ScriptedCreature.h"
 #include "ServerFacade.h"
+#include "Spell.h"
 #include "UldEncounter_FlameLeviathan.h"
 #include "UldScripts.h"
 #include "Unit.h"
 #include "Vehicle.h"
+#include "WorldPacket.h"
+#include "WorldSession.h"
 
 namespace
 {
@@ -82,6 +85,13 @@ bool CastVehicleSelfSpell(PlayerbotAI* botAI, Unit* vehicleBase, uint32 spellId,
 
     vehicleBase->AddSpellCooldown(spellId, 0, cooldownMs);
     return true;
+}
+
+bool RequestVehicleExit(Player* bot)
+{
+    WorldPacket packet;
+    bot->GetSession()->HandleRequestVehicleExit(packet);
+    return !bot->GetVehicle();
 }
 
 char const* HazardBranch(Unit* hazard)
@@ -168,6 +178,9 @@ bool FlameLeviathanVehicleAction::Execute(Event /*event*/)
     if (!_vehicleBase || !bot->GetVehicle())
         return false;
 
+    if (FlameLeviathanSeatOf(bot) != FlameLeviathanSeat::Catapult)
+        _catapultSinceMs = 0;
+
     Unit* boss = FlameLeviathanBoss(botAI);
 
     Unit* add = nullptr;
@@ -194,7 +207,9 @@ bool FlameLeviathanVehicleAction::Execute(Event /*event*/)
     switch (_vehicleBase->GetEntry())
     {
         case NPC_SALVAGED_DEMOLISHER:
-            return DemolisherAction(target);
+            if (FlameLeviathanIsDriver(bot))
+                return DemolisherAction(target);
+            return FlameLeviathanSeatOf(bot) == FlameLeviathanSeat::Catapult && CatapultPassengerAction();
         case NPC_SALVAGED_DEMOLISHER_TURRET:
             return DemolisherTurretAction(target);
         case NPC_SALVAGED_SIEGE_ENGINE:
@@ -202,12 +217,133 @@ bool FlameLeviathanVehicleAction::Execute(Event /*event*/)
         case NPC_SALVAGED_SIEGE_ENGINE_TURRET:
             return SiegeEngineTurretAction(target);
         case NPC_VEHICLE_CHOPPER:
-            return ChopperAction(target);
+            return FlameLeviathanIsDriver(bot) ? ChopperAction(target) : ChopperPassengerAction();
         default:
             break;
     }
 
     return false;
+}
+
+bool FlameLeviathanVehicleAction::ThrowPassenger(Unit* boss)
+{
+    if (!boss || !boss->IsInCombat() || FlameLeviathanShutdown(boss) || FlameLeviathanIsPursued(bot) ||
+        FlameLeviathanIsRamTarget(bot))
+        return false;
+
+    if (_vehicleBase->GetCurrentSpell(CURRENT_GENERIC_SPELL))
+        return true;
+
+    Player* passenger = FlameLeviathanCatapultPassenger(_vehicleBase);
+    Position const aim = FlameLeviathanThrowAim(boss);
+    float const dist = _vehicleBase->GetExactDist2d(aim);
+    if (!passenger || dist > ULDUAR_FL_THROW_MAX_RANGE)
+        return false;
+
+    if (_vehicleBase->isMoving())
+    {
+        _vehicleBase->StopMoving();
+        return true;
+    }
+
+    if (!_vehicleBase->HasInArc(ULDUAR_FL_THROW_FACING_ARC, &aim))
+    {
+        _vehicleBase->SetFacingTo(_vehicleBase->GetAngle(&aim));
+        return true;
+    }
+
+    if (!botAI->CastVehicleSpell(SPELL_FL_THROW_PASSENGER, aim.GetPositionX(), aim.GetPositionY(),
+                                 aim.GetPositionZ()))
+        return false;
+
+    Spell* throwing = _vehicleBase->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+    if (!throwing || throwing->m_spellInfo->Id != SPELL_FL_THROW_PASSENGER)
+        return false;
+
+    if (RaidObs::Active())
+        RaidObs::Note(bot, "fl.throw",
+                      RaidObs::DescribeAssignment(passenger->GetGUID()) + " " +
+                          std::to_string(static_cast<int32>(dist)) + " " +
+                          std::to_string(static_cast<int32>(boss->isMoving() ? boss->GetSpeed(MOVE_RUN) : 0.0f)));
+
+    return true;
+}
+
+bool FlameLeviathanVehicleAction::LoadIntoCatapult()
+{
+    Unit* demolisher = FlameLeviathanRiddenVehicle(bot);
+    if (!demolisher || !FlameLeviathanWantsCatapult(botAI, bot))
+        return false;
+
+    if (!botAI->CastVehicleSpell(SPELL_FL_LOAD_INTO_CATAPULT, _vehicleBase))
+        return false;
+
+    if (!demolisher->HasAura(SPELL_FL_LOAD_INTO_CATAPULT, bot->GetGUID()))
+        return false;
+
+    FlameLeviathanClaimSeat(bot, demolisher);
+    if (RaidObs::Active())
+        RaidObs::Note(bot, "fl.load", RaidObs::DescribeAssignment(demolisher->GetGUID()));
+
+    return true;
+}
+
+bool FlameLeviathanVehicleAction::CatapultPassengerAction()
+{
+    uint32 const now = getMSTime();
+    bool const held = FlameLeviathanIsPursued(bot) || FlameLeviathanShutdown(FlameLeviathanBoss(botAI));
+    if (!_catapultSinceMs || held)
+        _catapultSinceMs = now;
+
+    bool const waited = getMSTimeDiff(_catapultSinceMs, now) >= ULDUAR_FL_CATAPULT_WAIT_MS;
+    if (FlameLeviathanEngaged(botAI) && !waited)
+        return false;
+
+    _catapultSinceMs = 0;
+    return RequestVehicleExit(bot);
+}
+
+bool FlameLeviathanVehicleAction::ChopperPassengerAction()
+{
+    if (!FlameLeviathanEngaged(botAI))
+        return RequestVehicleExit(bot);
+
+    Unit* demolisher = FlameLeviathanFerryTarget(botAI, bot, _vehicleBase);
+    if (!demolisher || _vehicleBase->GetExactDist2d(demolisher) > ULDUAR_FL_FERRY_HOP_DIST)
+        return false;
+
+    if (!RequestVehicleExit(bot))
+        return false;
+
+    demolisher->HandleSpellClick(bot);
+
+    Vehicle* kit = demolisher->GetVehicleKit();
+    Unit* seat = kit ? kit->GetPassenger(ULDUAR_FL_DEMOLISHER_GUNNER_SEAT) : nullptr;
+    if (RaidObs::Active() && seat && seat->HasAuraTypeWithCaster(SPELL_AURA_CONTROL_VEHICLE, bot->GetGUID()))
+        RaidObs::Note(bot, "fl.regun", RaidObs::DescribeAssignment(demolisher->GetGUID()));
+
+    return true;
+}
+
+bool FlameLeviathanVehicleAction::FirstAidKit()
+{
+    Player* passenger = FlameLeviathanChopperPassenger(_vehicleBase);
+    if (!passenger || !passenger->IsAlive() || passenger->HasAura(SPELL_FL_FIRST_AID_KIT) ||
+        passenger->GetHealthPct() >= ULDUAR_FL_FIRST_AID_KIT_HEALTH_PCT ||
+        _vehicleBase->HasSpellCooldown(SPELL_FL_FIRST_AID_KIT))
+        return false;
+
+    if (!botAI->CastVehicleSpell(SPELL_FL_FIRST_AID_KIT, _vehicleBase) || !passenger->HasAura(SPELL_FL_FIRST_AID_KIT))
+    {
+        _vehicleBase->AddSpellCooldown(SPELL_FL_FIRST_AID_KIT, 0, ULDUAR_FL_FIRST_AID_KIT_RETRY_MS);
+        return false;
+    }
+
+    _vehicleBase->AddSpellCooldown(SPELL_FL_FIRST_AID_KIT, 0, ULDUAR_FL_FIRST_AID_KIT_COOLDOWN_MS);
+    if (RaidObs::Active())
+        RaidObs::Note(bot, "fl.heal", RaidObs::DescribeAssignment(passenger->GetGUID()));
+
+    return true;
 }
 
 Aura* FlameLeviathanVehicleAction::TrackBarrels(Unit* target)
@@ -244,11 +380,14 @@ Aura* FlameLeviathanVehicleAction::TrackBarrels(Unit* target)
 
 bool FlameLeviathanVehicleAction::DemolisherAction(Unit* target)
 {
+    // Keep this above the thaw's early return, or a landing goes unread and times out as a lost barrel.
+    Aura* own = target ? TrackBarrels(target) : nullptr;
+
+    if (_vehicleBase->HasAura(SPELL_FL_PASSENGER_LOADED))
+        return ThrowPassenger(FlameLeviathanBoss(botAI));
+
     if (!target)
         return false;
-
-    // Keep this above the thaw's early return, or a landing goes unread and times out as a lost barrel.
-    Aura* own = TrackBarrels(target);
 
     if (Unit* frozen = FlameLeviathanFrozenVehicle(bot, _vehicleBase, ULDUAR_FL_HURL_BOULDER_MIN_RANGE,
                                                    ULDUAR_FL_HURL_BOULDER_MAX_RANGE))
@@ -262,8 +401,9 @@ bool FlameLeviathanVehicleAction::DemolisherAction(Unit* target)
         uint32 const energy = _vehicleBase->GetPower(POWER_ENERGY);
         uint32 const stacks = std::min<uint32>((own ? own->GetStackAmount() : 0) + _barrelsInFlight.size(),
                                                ULDUAR_FL_PYRITE_MAX_STACKS);
-        uint32 const burst = energy >= (ULDUAR_FL_PYRITE_MAX_STACKS - stacks) * ULDUAR_FL_PYRITE_BARREL_COST +
-                                           ULDUAR_FL_PYRITE_REFRESH_RESERVE
+        uint32 const burst = FlameLeviathanShutdown(target) ||
+                                     energy >= (ULDUAR_FL_PYRITE_MAX_STACKS - stacks) * ULDUAR_FL_PYRITE_BARREL_COST +
+                                                   ULDUAR_FL_PYRITE_REFRESH_RESERVE
                                  ? ULDUAR_FL_PYRITE_MAX_STACKS
                                  : ULDUAR_FL_PYRITE_BURST_STACKS;
 
@@ -345,20 +485,32 @@ bool FlameLeviathanVehicleAction::DemolisherTurretAction(Unit* target)
         }
     }
 
-    if (demolisher && demolisher->GetPower(POWER_ENERGY) <= ULDUAR_FL_CRATE_GRAB_CEILING)
+    if (LoadIntoCatapult())
+        return true;
+
+    SpellInfo const* grabInfo = sSpellMgr->GetSpellInfo(SPELL_FL_GRAB_CRATE);
+    CharmInfo* charm = _vehicleBase->GetCharmInfo();
+    auto const grabOnCooldown = [grabInfo, charm]
+    { return !grabInfo || !charm || charm->GetGlobalCooldownMgr().HasGlobalCooldown(grabInfo); };
+
+    if (demolisher && demolisher->GetPower(POWER_ENERGY) <= ULDUAR_FL_CRATE_GRAB_CEILING && !grabOnCooldown())
     {
         GuidVector npcs = AI_VALUE(GuidVector, "nearest npcs");
         for (auto const& guid : npcs)
         {
             Unit* crate = botAI->GetUnit(guid);
-            if (!crate || crate->GetEntry() != NPC_FL_PYRITE_CONTAINER)
+            if (!crate || crate->GetEntry() != NPC_FL_PYRITE_CONTAINER || FlameLeviathanCrateTaken(bot, crate))
                 continue;
 
             if (crate->GetDistance(bot) >= ULDUAR_FL_CRATE_GRAB_RANGE)
                 continue;
 
             if (CastVehicle(SPELL_FL_GRAB_CRATE, crate))
+            {
+                if (grabOnCooldown())
+                    FlameLeviathanTakeCrate(bot, crate);
                 return true;
+            }
         }
     }
 
@@ -384,10 +536,13 @@ bool FlameLeviathanVehicleAction::DemolisherTurretAction(Unit* target)
 bool FlameLeviathanVehicleAction::SiegeEngineAction(Unit* target)
 {
     uint32 needed = ULDUAR_FL_RAM_COST;
-    if (FlameLeviathanIsVentInterrupter(botAI, bot))
-        needed += ULDUAR_FL_ELECTROSHOCK_COST;
-    if (FlameLeviathanIsPursued(bot) || FlameLeviathanIsVentReserve(bot))
-        needed += ULDUAR_FL_STEAM_RUSH_COST;
+    if (!FlameLeviathanShutdown(FlameLeviathanBoss(botAI)))
+    {
+        if (FlameLeviathanIsVentInterrupter(botAI, bot))
+            needed += ULDUAR_FL_ELECTROSHOCK_COST;
+        if (FlameLeviathanIsPursued(bot) || FlameLeviathanIsVentReserve(bot))
+            needed += ULDUAR_FL_STEAM_RUSH_COST;
+    }
 
     if (_vehicleBase->GetPower(POWER_ENERGY) < needed)
         return false;
@@ -455,11 +610,18 @@ bool FlameLeviathanVehicleAction::SiegeEngineTurretAction(Unit* target)
     if (!target)
         return false;
 
+    if (target->GetEntry() == NPC_FLAME_LEVIATHAN && FlameLeviathanShutdownSoon(bot) &&
+        _vehicleBase->GetPower(POWER_ENERGY) < ULDUAR_FL_FIRE_CANNON_POOL)
+        return false;
+
     return CastVehicle(SPELL_FL_FIRE_CANNON, target);
 }
 
 bool FlameLeviathanVehicleAction::ChopperAction(Unit* target)
 {
+    if (FirstAidKit())
+        return true;
+
     if (target && !_vehicleBase->HasInArc(M_PI / 2.0f, target))
         if (CastVehicleSelfSpell(botAI, _vehicleBase, SPELL_FL_TAR, 0, ULDUAR_FL_TAR_COOLDOWN_MS))
             return true;
@@ -557,8 +719,9 @@ bool FlameLeviathanDriveAction::Execute(Event /*event*/)
             RaidObs::NoteDerived(bot, "fl.drive", name);
     };
 
+    bool const stunned = FlameLeviathanShutdown(boss);
     bool const pursued = FlameLeviathanIsPursued(bot);
-    if (pursued || FlameLeviathanIsRamTarget(bot))
+    if (!stunned && (pursued || FlameLeviathanIsRamTarget(bot)))
     {
         _dodgeGoal.reset();
         char const* how = pursued ? "kite" : "kite:victim";
@@ -569,7 +732,7 @@ bool FlameLeviathanDriveAction::Execute(Event /*event*/)
 
     ResetKite();
 
-    bool const ventDuty = FlameLeviathanIsVentReserve(bot) && FlameLeviathanVentWindowOpen(bot, boss);
+    bool const ventDuty = !stunned && FlameLeviathanIsVentReserve(bot) && FlameLeviathanVentWindowOpen(bot, boss);
 
     Unit* hazard = GetFlameLeviathanNearestTowerHazard(botAI, _vehicleBase, FL_TOWER_ALL,
                                                        ULDUAR_FL_TOWER_HAZARD_MARGIN, ventDuty ? FL_TOWER_STORM : 0);
@@ -586,6 +749,24 @@ bool FlameLeviathanDriveAction::Execute(Event /*event*/)
     if (ClearBatteringRam(boss))
     {
         branch("ram");
+        return true;
+    }
+
+    if (_vehicleBase->GetCurrentSpell(CURRENT_GENERIC_SPELL) || Catapult(boss))
+    {
+        branch("catapult");
+        return true;
+    }
+
+    if (Ferry())
+    {
+        branch("ferry");
+        return true;
+    }
+
+    if (Pickup())
+    {
+        branch("pickup");
         return true;
     }
 
@@ -806,6 +987,7 @@ bool FlameLeviathanDriveAction::HoldStation(Unit* boss, char const*& branch)
             break;
     }
 
+    bool const stunned = FlameLeviathanShutdown(boss);
     bool const ventReserve = FlameLeviathanIsVentReserve(bot);
     if (ventReserve)
     {
@@ -813,7 +995,7 @@ bool FlameLeviathanDriveAction::HoldStation(Unit* boss, char const*& branch)
         stationLead = FlameLeviathanStationLead(boss);
         centreSide = true;
 
-        if (FlameLeviathanMsToNextVent(bot, boss) > ULDUAR_FL_VENT_APPROACH_LEAD_MS)
+        if (!stunned && FlameLeviathanMsToNextVent(bot, boss) > ULDUAR_FL_VENT_APPROACH_LEAD_MS)
             standDist = ULDUAR_FL_BATTERING_RAM_CAST_RANGE + _vehicleBase->GetCombatReach() +
                         ULDUAR_FL_ARRIVE_TOLERANCE;
     }
@@ -821,7 +1003,7 @@ bool FlameLeviathanDriveAction::HoldStation(Unit* boss, char const*& branch)
     if (RaidObs::Active())
         RaidObs::NoteDerived(bot, "fl.station", how);
 
-    if (ventReserve && RushToVents(boss))
+    if (ventReserve && !stunned && RushToVents(boss))
         return true;
 
     float fanHalf = 0.0f;
@@ -1021,14 +1203,63 @@ bool FlameLeviathanDriveAction::Kite(Unit* boss, char const*& branch)
     return true;
 }
 
+bool FlameLeviathanDriveAction::Catapult(Unit* boss)
+{
+    if (_vehicleBase->GetEntry() != NPC_SALVAGED_DEMOLISHER || !_vehicleBase->HasAura(SPELL_FL_PASSENGER_LOADED))
+        return false;
+
+    Position const aim = FlameLeviathanThrowAim(boss);
+    float const facing = _vehicleBase->GetAngle(&aim);
+    if (_vehicleBase->GetExactDist2d(aim) <= ULDUAR_FL_THROW_MAX_RANGE)
+    {
+        DriveToImpl(_vehicleBase->GetPosition(), facing, MovementPriority::MOVEMENT_COMBAT);
+        return true;
+    }
+
+    float const back = aim.GetAngle(_vehicleBase);
+    Position const goal(aim.GetPositionX() + std::cos(back) * ULDUAR_FL_THROW_APPROACH,
+                        aim.GetPositionY() + std::sin(back) * ULDUAR_FL_THROW_APPROACH, aim.GetPositionZ());
+    DriveTo(goal, boss, false);
+    return true;
+}
+
+bool FlameLeviathanDriveAction::Ferry()
+{
+    Player* passenger = FlameLeviathanChopperPassenger(_vehicleBase);
+    Unit* demolisher = passenger ? FlameLeviathanFerryTarget(botAI, passenger, _vehicleBase) : nullptr;
+    if (!demolisher)
+        return false;
+
+    float const angle = demolisher->GetAngle(_vehicleBase);
+    float const stand = demolisher->GetObjectSize() + _vehicleBase->GetObjectSize() + 1.0f;
+    Position const goal(demolisher->GetPositionX() + std::cos(angle) * stand,
+                        demolisher->GetPositionY() + std::sin(angle) * stand, demolisher->GetPositionZ());
+    DriveTo(goal, demolisher, false, MovementPriority::MOVEMENT_COMBAT, ULDUAR_FL_FERRY_ARRIVE);
+    return true;
+}
+
+bool FlameLeviathanDriveAction::Pickup()
+{
+    Player* member = FlameLeviathanPickupFor(bot);
+    if (!member)
+        return false;
+
+    float const angle = member->GetAngle(_vehicleBase);
+    float const stand = _vehicleBase->GetObjectSize() + 1.0f;
+    Position const goal(member->GetPositionX() + std::cos(angle) * stand,
+                        member->GetPositionY() + std::sin(angle) * stand, member->GetPositionZ());
+    DriveTo(goal, member, false, MovementPriority::MOVEMENT_COMBAT, ULDUAR_FL_PICKUP_ARRIVE);
+    return true;
+}
+
 bool FlameLeviathanDriveAction::DriveTo(Position const& goal, Unit* faceTarget, bool faceAway,
-                                        MovementPriority priority)
+                                        MovementPriority priority, float arrive)
 {
     std::optional<float> facing;
     if (faceTarget)
         facing = faceAway ? faceTarget->GetAngle(_vehicleBase) : _vehicleBase->GetAngle(faceTarget);
 
-    return DriveToImpl(goal, facing, priority);
+    return DriveToImpl(goal, facing, priority, arrive);
 }
 
 bool FlameLeviathanDriveAction::DriveTo(Position const& goal, Position const& facePoint, MovementPriority priority)
@@ -1038,9 +1269,9 @@ bool FlameLeviathanDriveAction::DriveTo(Position const& goal, Position const& fa
 }
 
 bool FlameLeviathanDriveAction::DriveToImpl(Position const& goal, std::optional<float> facing,
-                                            MovementPriority priority)
+                                            MovementPriority priority, float arrive)
 {
-    if (_vehicleBase->GetExactDist2d(goal) <= ULDUAR_FL_ARRIVE_TOLERANCE)
+    if (_vehicleBase->GetExactDist2d(goal) <= arrive)
     {
         if (!_parked)
         {
@@ -1090,7 +1321,9 @@ bool FlameLeviathanEnterVehicleAction::Execute(Event /*event*/)
         return false;
 
     if (bot->GetDistance(vehicleBase) > INTERACTION_DISTANCE)
-        return MoveTo(vehicleBase);
+        return MoveTo(vehicleBase, 0.0f,
+                      FlameLeviathanEngaged(botAI) ? MovementPriority::MOVEMENT_COMBAT
+                                                   : MovementPriority::MOVEMENT_NORMAL);
 
     botAI->RemoveShapeshift();
     vehicleBase->HandleSpellClick(bot);
@@ -1101,4 +1334,27 @@ bool FlameLeviathanEnterVehicleAction::Execute(Event /*event*/)
     WorldPacket emptyPacket;
     bot->GetSession()->HandleCancelMountAuraOpcode(emptyPacket);
     return true;
+}
+
+bool FlameLeviathanSeatAction::Execute(Event /*event*/)
+{
+    Unit* seat = bot->GetVehicleBase();
+    Unit* boss = seat && seat->GetEntry() == NPC_FL_SEAT ? seat->GetVehicleBase() : nullptr;
+    if (!boss)
+        return false;
+
+    bool const stunned = FlameLeviathanShutdown(boss);
+    if (stunned || !boss->IsAlive() || !boss->IsInCombat())
+    {
+        if (!RequestVehicleExit(bot))
+            return false;
+
+        if (RaidObs::Active())
+            RaidObs::Note(bot, "fl.jump", stunned ? "shutdown" : "fight over");
+
+        return true;
+    }
+
+    Unit* turret = FlameLeviathanRiderTurret(bot);
+    return turret && Attack(turret);
 }

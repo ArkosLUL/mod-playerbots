@@ -4421,6 +4421,50 @@ bool PlayerbotAI::CastVehicleSpell(uint32 spellId, Unit* target)
     return true;
 }
 
+bool PlayerbotAI::CastVehicleSpell(uint32 spellId, float x, float y, float z)
+{
+    Vehicle* vehicle = bot->GetVehicle();
+    if (!spellId || !vehicle)
+        return false;
+
+    VehicleSeatEntry const* seat = vehicle->GetSeatForPassenger(bot);
+    if (!seat || !(seat->m_flags & VEHICLE_SEAT_FLAG_CAN_CAST))
+        return false;
+
+    SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(spellId);
+    if (!spellInfo || !(spellInfo->Targets & TARGET_FLAG_DEST_LOCATION))
+        return false;
+
+    Unit* vehicleBase = vehicle->GetBase();
+    Position const dest(x, y, z);
+    if ((seat->CanControl() || (seat->m_flags & VEHICLE_SEAT_FLAG_ALLOW_TURNING)) &&
+        !vehicleBase->HasInArc(CAST_ANGLE_IN_FRONT, &dest))
+    {
+        vehicleBase->SetFacingTo(vehicleBase->GetAngle(&dest));
+        SetNextCheckDelay(sPlayerbotAIConfig.ReactDelay);
+        return false;
+    }
+
+    if (seat->CanControl() && vehicleBase->isMoving() && spellInfo->CalcCastTime(vehicleBase))
+    {
+        vehicleBase->StopMoving();
+        SetNextCheckDelay(sPlayerbotAIConfig.GlobalCoolDown);
+        return false;
+    }
+
+    SpellCastTargets targets;
+    targets.SetDst(WorldLocation(bot->GetMapId(), x, y, z, 0.0f));
+    targets.SetSpeed(30.0f);
+    float const dist = vehicleBase->GetExactDist(&dest);
+    targets.SetElevation(dist >= 110.0f ? 1.0f : std::pow((dist + 10.0f) / 120.0f, 2.0f));
+    if (spellInfo->Targets & TARGET_FLAG_SOURCE_LOCATION)
+        targets.SetSrc(vehicleBase->GetPositionX(), vehicleBase->GetPositionY(), vehicleBase->GetPositionZ());
+
+    Spell* spell = new Spell(vehicleBase, spellInfo, TRIGGERED_NONE);
+    spell->prepare(&targets);
+    return true;
+}
+
 bool PlayerbotAI::IsInVehicle(bool canControl, bool canCast, bool canAttack, bool canTurn, bool fixed)
 {
     Vehicle* vehicle = bot->GetVehicle();

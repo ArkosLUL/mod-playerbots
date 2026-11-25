@@ -33,6 +33,11 @@ bool FlameLeviathanOnVehicleTrigger::IsActive()
     return false;
 }
 
+bool FlameLeviathanOnSeatTrigger::IsActive()
+{
+    return FlameLeviathanSeatOf(bot) == FlameLeviathanSeat::LeviathanSeat;
+}
+
 bool FlameLeviathanVehicleNearTrigger::IsActive() { return FlameLeviathanVehicleToBoard(botAI) != nullptr; }
 
 bool FlameLeviathanFlameVentsTrigger::IsActive()
@@ -52,7 +57,8 @@ bool FlameLeviathanDriveUrgentTrigger::IsActive()
     if (!FlameLeviathanIsDriver(bot) || !FlameLeviathanEngaged(botAI))
         return false;
 
-    if (FlameLeviathanIsPursued(bot) || FlameLeviathanIsRamTarget(bot))
+    bool const stunned = FlameLeviathanShutdown(FlameLeviathanBoss(botAI));
+    if (!stunned && (FlameLeviathanIsPursued(bot) || FlameLeviathanIsRamTarget(bot)))
         return true;
 
     if (FlameLeviathanShouldClearBatteringRam(botAI, bot))

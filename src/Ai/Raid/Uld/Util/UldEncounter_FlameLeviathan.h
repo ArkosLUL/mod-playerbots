@@ -64,8 +64,39 @@ enum UlduarFlameLeviathanIds
     SPELL_FL_ANTI_AIR_ROCKET = 64979,
     SPELL_FL_GRAB_CRATE = 62479,
     SPELL_FL_INCREASED_SPEED = 62471,
+    SPELL_FL_LOAD_INTO_CATAPULT = 64414,
 
+    SPELL_FL_THROW_PASSENGER = 62324,
+    SPELL_FL_PASSENGER_LOADED = 62340,
+    SPELL_FL_HOOKSHOT_AURA = 62336,
+
+    NPC_FL_SEAT = 33114,
+    SPELL_FL_SYSTEMS_SHUTDOWN = 62475,
+
+    SPELL_FL_FIRST_AID_KIT = 64660,
 };
+
+enum class FlameLeviathanSeat : uint8
+{
+    None = 0,
+    SiegeDriver = 1,
+    SiegeGunner = 2,
+    DemolisherDriver = 3,
+    DemolisherGunner = 4,
+    Catapult = 5,
+    LeviathanSeat = 6,
+    ChopperDriver = 7,
+    ChopperPassenger = 8,
+    OnFoot = 9,
+};
+
+inline constexpr int8 ULDUAR_FL_SEAT_RIDER = 0;
+inline constexpr int8 ULDUAR_FL_SEAT_TURRET = 1;
+inline constexpr int8 ULDUAR_FL_SEAT_DEVICE = 2;
+inline constexpr int8 ULDUAR_FL_DEMOLISHER_GUNNER_SEAT = 1;
+inline constexpr int8 ULDUAR_FL_DEMOLISHER_CATAPULT_SEAT = 3;
+inline constexpr int8 ULDUAR_FL_CHOPPER_REAR_SEAT = 1;
+inline constexpr uint8 ULDUAR_FL_LEVIATHAN_SEATS = 4;
 
 enum FlameLeviathanTowerFlags
 {
@@ -193,6 +224,27 @@ inline constexpr float ULDUAR_FL_KITE_BOSS_CLEARANCE = 50.0f;
 inline constexpr float ULDUAR_FL_KITE_FIRE_LOOKAHEAD = 30.0f;
 inline constexpr float ULDUAR_FL_KITE_DETOUR_STEP = 25.0f;
 
+inline constexpr float ULDUAR_FL_THROW_MAX_RANGE = 70.0f;
+inline constexpr float ULDUAR_FL_THROW_APPROACH = 55.0f;
+inline constexpr float ULDUAR_FL_THROW_LEAD_S = 1.0f;
+inline constexpr float ULDUAR_FL_THROW_FACING_ARC = float(M_PI) / 6.0f;
+inline constexpr uint32 ULDUAR_FL_CATAPULT_WAIT_MS = 10000;
+inline constexpr uint32 ULDUAR_FL_SEAT_CLAIM_MS = 15000;
+inline constexpr uint32 ULDUAR_FL_SEAT_CLAIM_GRACE_MS = 2000;
+
+inline constexpr float ULDUAR_FL_PICKUP_ARRIVE = 3.0f;
+inline constexpr uint32 ULDUAR_FL_PICKUP_TIMEOUT_MS = 20000;
+inline constexpr float ULDUAR_FL_REGUN_RADIUS = 15.0f;
+inline constexpr float ULDUAR_FL_FERRY_HOP_DIST = 10.0f;
+inline constexpr float ULDUAR_FL_FERRY_ARRIVE = 4.0f;
+inline constexpr float ULDUAR_FL_ON_FOOT_ARENA_MARGIN = 20.0f;
+
+inline constexpr uint32 ULDUAR_FL_FIRST_AID_KIT_COOLDOWN_MS = 60000;
+inline constexpr uint32 ULDUAR_FL_FIRST_AID_KIT_RETRY_MS = 2000;
+inline constexpr float ULDUAR_FL_FIRST_AID_KIT_HEALTH_PCT = 80.0f;
+
+inline constexpr uint32 ULDUAR_FL_FIRE_CANNON_POOL = 100;
+
 Unit* FlameLeviathanBoss(PlayerbotAI* botAI);
 
 void FlameLeviathanTick(PlayerbotAI* botAI);
@@ -276,5 +328,35 @@ Position FlameLeviathanLeadPoint(Unit* boss, float standDist);
 float FlameLeviathanTarLeadDistance(Unit* boss, Unit* pursued, float size);
 
 std::vector<Position> const& FlameLeviathanKiteRing();
+
+FlameLeviathanSeat FlameLeviathanSeatOf(Player* member);
+
+bool FlameLeviathanShutdown(Unit* boss);
+
+bool FlameLeviathanShutdownSoon(Player* bot);
+
+bool FlameLeviathanWantsCatapult(PlayerbotAI* botAI, Player* bot);
+
+void FlameLeviathanClaimSeat(Player* bot, Unit* demolisher);
+
+Player* FlameLeviathanCatapultPassenger(Unit* demolisher);
+
+Position FlameLeviathanThrowAim(Unit* boss);
+
+Unit* FlameLeviathanRiderTurret(Player* bot);
+
+Unit* FlameLeviathanPickupChopper(PlayerbotAI* botAI, Player* member);
+
+Player* FlameLeviathanPickupFor(Player* driver);
+
+Player* FlameLeviathanChopperPassenger(Unit* chopper);
+
+Unit* FlameLeviathanFerryTarget(PlayerbotAI* botAI, Player* passenger, Unit* from);
+
+bool FlameLeviathanGunnerless(Unit* demolisher);
+
+bool FlameLeviathanCrateTaken(Player* bot, Unit* crate);
+
+void FlameLeviathanTakeCrate(Player* bot, Unit* crate);
 
 #endif

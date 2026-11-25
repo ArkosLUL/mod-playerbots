@@ -3,17 +3,17 @@
 The whole fight is from vehicles; the engine-level vehicle rules are in
 [raid-mechanics-lessons.md](../../engine/raid-mechanics-lessons.md#vehicles-and-flight).
 
-**Spellbooks** are `creature_template_spell`, not guesswork, and **every one of these spells is
-instant** (`CastingTimeIndex 1`). `CanCastVehicleSpell` only refuses cast-time spells while the base
-is moving, so on this encounter driving and casting compose freely — there is no kite-or-DPS choice.
+**Spellbooks** are `creature_template_spell`, not guesswork, and **every spell but Throw Passenger
+is instant** (`CastingTimeIndex 1`). `CanCastVehicleSpell` only refuses cast-time spells while the
+base is moving, so driving and casting compose freely — there is no kite-or-DPS choice.
 
 | Vehicle | Entry | Spells (energy cost) |
 |---|---|---|
 | Salvaged Siege Engine | 33060 | Ram 62345 (40) · Electroshock 62522 (20, 10s) · Steam Rush 62346 (40, 15s) |
 | Salvaged Siege Turret | 33067 | Fire Cannon 62358 (20) · Anti-Air Rocket 62359 (10) · Shield Generator 64677 (0, 60s) |
-| Salvaged Chopper | 33062 | Sonic Horn 62974 (20) · Tar 62286 (0, 15s) · Speed Boost 62299 (50) |
-| Salvaged Demolisher | 33109 | Hurl Boulder 62306 (0) · Hurl Pyrite Barrel 62490 (5) · Ram 62308 (0) |
-| Demolisher Mechanic Seat | 33167 | Mortar 62634 (0) · Anti-Air Rocket 64979 (0) · Grab Crate 62479 (0) · Increased Speed 62471 (25) |
+| Salvaged Chopper | 33062 | Sonic Horn 62974 (20) · Tar 62286 (0, 15s) · Speed Boost 62299 (50) · First Aid Kit 64660 (0, 60s) |
+| Salvaged Demolisher | 33109 | Hurl Boulder 62306 (0) · Hurl Pyrite Barrel 62490 (5) · Ram 62308 (0) · Throw Passenger 62324 (0, 1 s cast) |
+| Demolisher Mechanic Seat | 33167 | Mortar 62634 (0) · Anti-Air Rocket 64979 (0) · Grab Crate 62479 (0) · Increased Speed 62471 (25) · Load into Catapult 64414 (0, 30s) |
 
 **Hull survival is the fight.** A crewed bot is invisible to boss AoE and a dismounted one absorbs
 all of it ([pitfalls](../../engine/pitfalls.md#role-and-index-traps)), so every bot on foot is a
@@ -34,17 +34,34 @@ that turret, at the hull's position but not its size, so size tests go through
 
 `instance_ulduar.cpp` spawns **2 of each vehicle in 10-man, 5 in 25-man** at `x = 119.8`, west of
 the arena: exactly 10 / 25 usable slots, **zero slack**. Boarding uses `HandleSpellClick`, not
-`Unit::EnterVehicle`, so the Ulduar vehicle scripts run, then cancels the mount a bot boarded on. It
-fills every driver seat first (melee on siege engines, the rest on demolishers), then gunner seats
-or an empty chopper, never a siege engine's flagless seats. Nothing past the driver seats opens
-until all are manned, so a raid short of 5 (10-man: 2) melee or ranged leaves the rest on foot.
+`Unit::EnterVehicle`, so the Ulduar vehicle scripts run, then cancels the mount a bot boarded on.
+Clicking a driven hull is how a gunner boards: the siege engine's `BeforeSpellClick` and the
+demolisher's `spell_demolisher_ride_vehicle` send the clicker to the free turret or mechanic seat,
+and never to a siege engine's flagless seats or the catapult seat.
+
+**The seat plan** (`FlameLeviathanPlannedSeat`) is dealt once per pass, the same for every bot: seated
+members use up their kind, bots on foot are dealt the rest by guid, humans on foot are left out. Roles
+are read by spec, since `IsTank` flickers. First by role, then whoever is left, driver kinds first:
+
+| Kind (N each: 10-man 2, 25-man 5) | By role | Why |
+|---|---|---|
+| Demolisher gunner | ranged DPS | catapulted onto him to kill his turrets with class spells; ranged reach the partner seat's turret |
+| Siege driver | tanks, then melee DPS | any role can; it keeps the ranged free for the catapult |
+| Demolisher driver | healers | vehicle spells only, and no seat a healer can take casts class spells |
+| Chopper driver | healers left | First Aid Kit is a vehicle spell, so the role decides nothing |
+| Siege gunner | melee DPS left | |
+
+A gunner kind waits for its hull's driver. A bot whose planned kind is all taken (a human took one)
+boards the nearest open seat of any kind, driver kinds first.
 
 **Boarding needs no leader.** Every bot on foot boards the nearest seat its rules allow within
 200 yd and in line of sight (`FlameLeviathanVehicleToBoard`), whether or not a real player masters
 it; a real player boards whatever he likes, and the seat counts include him. An empty hull must
 carry the spell click: the base-camp set has it withheld until Brann's intro, and
 `HandleSpellClick`, called directly, does not check it. The trigger runs for every bot on foot in
-Ulduar until he dies, so `nearest vehicles far` is cached for a second.
+Ulduar until he dies, so `nearest vehicles far` is cached for a second. Engaged, a bot on foot boards a
+gunnerless demolisher within `ULDUAR_FL_REGUN_RADIUS` (15 yd), else its pickup chopper, else any open
+seat; it boards nothing while hooked to his seat or in a jump or knockback.
 
 ## The demolisher runs on pyrite, not energy
 
@@ -70,12 +87,16 @@ all 47 spawns on loops crossing the box are still shot once a pass. Only one loo
 10 spawns) crosses the middle; the other 37 bottom out 81-88 yd from the centre, so most drops gain
 little. `fl.lift` records each shot, once per lift (the rocket repeats every 250 ms until one lands).
 
-**Every grab credits, repeats included.** `spell_vehicle_grab_pyrite` runs on each 62482 hit and
-only despawns the crate 1300 ms later. The gunner's 62496 goes to the nearest 33167 (`conditions`
-13/1/62496), its own seat, which force-casts 62473: +25 to itself (`TARGET_UNIT_CASTER`) and +25 to
-its vehicle (`TARGET_UNIT_VEHICLE`). Every traced repeat grab drew its own 62496 (31/31, 33/33), so
-gunners hold no claim: another demolisher's repeat is real energy, and the same gunner's mostly
-overflows past 100. The seat pays for Increased Speed, so nothing reserves the demolisher's energy.
+**A crate is taken by the first grab only.** The core credits every 62482 hit —
+`spell_vehicle_grab_pyrite` despawns the crate only 1300 ms later, and every traced repeat drew its
+own 62496 — which no real raid gets, so repeats are a cheat: one pull ran 146 grabs on 71 crates, 75
+of them repeats. The first hit seats the crate on the grabber's mechanic seat (67390), so a crate on
+a vehicle, or in `fl.crate`, is taken; a gunner adds a crate there once its Grab Crate started a
+global cooldown, the only receipt `CastVehicleSpell` leaves. A human's grab is invisible while its
+missile (speed 40) flies. Each grab lands 62496 on the nearest 33167 (`conditions` 13/1/62496), the
+gunner's own seat, which force-casts 62473: +25 to itself (`TARGET_UNIT_CASTER`) and +25 to its
+vehicle (`TARGET_UNIT_VEHICLE`). The seat pays for Increased Speed, so nothing reserves the
+demolisher's energy.
 A demolisher under `ULDUAR_FL_CRATE_DETOUR_ENERGY` (30) detours to a crate within
 `ULDUAR_FL_CRATE_DETOUR_RADIUS` (60), only to 41 yd of it (the gunner grabs from 49), and only while
 that stop stays within his reach + `FlameLeviathanDemolisherStandDist` + the deadband of his centre:
@@ -225,6 +246,67 @@ despite the name**, and never ignites anything.
 - **Shield Generator 64677** is `SCHOOL_ABSORB` **15** for 5s on a 60s cooldown. Wired because it is
   free, not because it matters.
 
+## The catapult cycle: his turrets and Systems Shutdown
+
+The core chain, read from `boss_flame_leviathan.cpp`, the DBC and `conditions`:
+
+- **Load into Catapult 64414** is on the mechanic seat's bar, but
+  `SPELL_ATTR6_ORIGINATE_FROM_CONTROLLER` makes the gunner the caster, so the gunner, not the seat,
+  moves to demolisher seat 3 (8 yd `NEARBY_ENTRY` 33109, 30 s cooldown on the player).
+  `spell_load_into_catapult_aura` puts **Passenger Loaded 62340** on the demolisher, and 62340 blocks
+  Hurl Boulder and Hurl Pyrite Barrel (`ExcludeCasterAuraSpell`), so a gunner loads only when the
+  throw can follow.
+- **Throw Passenger 62324** needs 62340, casts in 1 s and breaks on movement; its range is unlimited.
+  At cast end `spell_vehicle_throw_passenger` jumps the passenger to the destination and, if a free
+  33114 seat (no rider, device not channelling) is within 20 yd 2d of it, gives Hookshot Aura 62336:
+  5 s of damage immunity, Hookshot 62323 every 500 ms onto the nearest free seat within 150 yd.
+  The trajectory search cuts the destination at his near edge (his `type_flags` collide with
+  missiles), and the seats sit within a few yards of his centre, so aim at his centre led by one
+  cast time of his run speed (`FlameLeviathanThrowAim`). Bots throw from 70 yd at most, Hurl
+  Boulder's range, by choice.
+- **His seat 33114**, seat 0: `CAN_ATTACK` (class spells) and `CAN_ENTER_OR_EXIT`; boarding makes the
+  rider immune to Flame Vents, Missile Barrage, Battering Ram, the Fury stun and the Inferno, and
+  activates the seat's **Leviathan Defense Turret 33142** and its partner's (25-man seat ^ 2; 10-man
+  keeps seats 2 and 3 only, seat ^ 1), which shoot the rider (Searing Flame 62402, ~500). A turret has
+  ~64k health (HealthModifier 5.08) and takes damage only from players on his seats.
+- **A turret's death** makes its seat's device cast Overload Circuit 62399 on him, and the 4th (10-man
+  2nd) casts **Systems Shutdown 62475**: stunned 20 s, +50% damage taken from every school, Gathering
+  Speed removed. Stunned, he casts no Flame Vents, Battering Ram or Pursued (Missile Barrage is
+  triggered and still fires). 3 s in he ejects every rider; on expiry Start the Engine reinstalls the
+  turrets. The Overload Control Device 33143 is `NOT_SELECTABLE`, so its click (which also casts 62399)
+  is out of a player's reach, and bots never use it.
+
+What the bots do, each seat's job done by whoever sits there, human or bot:
+
+- **Gunner loads** (`FlameLeviathanWantsCatapult`) while seats with a live turret and no rider
+  outnumber `fl.claim` (gunners loaded or in flight), its demolisher has a usable driver, is not
+  Pursued or the ram target, stands within 78 yd of him and he is not shut down. Healers never load.
+- **Driver throws** any loaded passenger, human too: stop, face the aim within ±15°, cast; out of
+  70 yd it drives to 55 yd of the aim (`fl.drive` `catapult`), and it holds the hull through the cast.
+  Never while Pursued, the ram target or he is shut down. A passenger left unthrown 10 s (Pursued and
+  shutdown time not counted) leaves seat 3 and clicks back onto the gun.
+- **Rider** (`flame leviathan seat`, an `Exclusive` rule over its movement and pickers) attacks its
+  seat's turret, then the partner's, then any live selectable one, and stays seated, immune, until
+  he shuts down, then leaves (`fl.jump`). Leaving earlier lands it on foot under 15k Flame Vents
+  ticks. Vehicle 341's exit launches and knocks back the rider; Smoke Trail's Parachute 61242
+  feather-falls it.
+- **Pickup**: each raider on foot in the arena — not in hookshot flight, not claimed, not within 15 yd
+  of a gunnerless demolisher — gets the nearest chopper with a usable driver and an empty rear seat
+  (`fl.pickup`, kept 20 s). The driver parks 2 yd off them; they walk to it and click (65030 seats a
+  clicker in seat 1 once seat 0 is taken). The rear seat is `PASSENGER_NOT_SELECTABLE`, so boss AoE
+  skips it. Bots whose hull died ride too. A chopper on pickup or carrying someone gives up the tar
+  lead.
+- **First Aid Kit 64660** targets the chopper's passenger 1: 30% health a second for 4 s, 60 s; the
+  driver casts it under 80%.
+- **Ferry**: the driver takes its passenger to the demolisher whose catapult it left (`fl.origin`)
+  if that one is gunnerless (a driver, empty gun and catapult seats), else to the nearest gunnerless
+  one; within 10 yd the passenger leaves and clicks it (`fl.regun`). With none, the passenger stays
+  aboard.
+- **Damage timing**: shut down, he can neither move nor ram, so nothing kites or backs out of
+  Battering Ram, siege engines Ram without the Electroshock and Steam Rush reserves, demolishers burst
+  Blue Pyrite to 10, and the vent reserve holds the siege stand. With one turret left and a rider
+  aboard, siege turrets hold Fire Cannon at him below 100 energy, so the stun opens on a full bar.
+
 ## Vehicle spells that must be self-cast
 
 Tar, Steam Rush, Speed Boost, Increased Speed and Shield Generator are aimed at the caster or its own
@@ -238,9 +320,11 @@ stamps on the call).
 
 ## One action owns all movement
 
-`FlameLeviathanDriveAction` is the only thing that steers a vehicle, with internal precedence: kite
-when Pursued → clear a hard-mode hazard → back out of Battering Ram → drive to a corner post →
-detour to a crate below `ULDUAR_FL_CRATE_DETOUR_ENERGY` → hold station, the tar lead included.
+`FlameLeviathanDriveAction` is the only thing that steers a vehicle, and only from a `CAN_CONTROL` seat
+(`FlameLeviathanIsDriver`: a catapult or chopper rear passenger shares its hull's entry), with
+internal precedence: kite when Pursued → clear a hard-mode hazard → back out of Battering Ram → hold
+for a throw → ferry a passenger → pick up a raider on foot → drive to a corner post → detour to a
+crate below `ULDUAR_FL_CRATE_DETOUR_ENERGY` → hold station, the tar lead included.
 `fl.drive` names the branch that owned each tick. Hazard clearance is folded in rather than given
 its own action, since two owners of one vehicle bounce. The action is wired to two trigger nodes,
 `drive urgent` at `ACTION_RAID + 3` (chased, or in a hazard) and the routine one at `+0.5` — the
@@ -544,39 +628,46 @@ so the next silent election failure is visible.
   once, so `--hulls` tags a span `reserve` from the 5 s before it and its `kite`/`ready` columns read
   late. `fl.lift` (`<guid> <x> <y>`, each gunner's first rocket at a lift) gives `--pyrite` its drop
   distances, and `--vents` prints the reserve's frames inside Ram reach between channels.
+- **The catapult cycle**, all read by `--mechanics` (in `--summary`): `fl.seat` holds each raider's
+  `FlameLeviathanSeat` (4 gunner, 5 catapult, 6 his seat, 8 chopper passenger, 9 on foot, 0 dead), so
+  every load, landing, jump, pickup and return is a change there, humans included. `fl.throw` is
+  `<passenger> <yd> <his yd/s>` from the driver; a throw landed if the passenger reads 6 within 3 s.
+  `fl.turrets` is a bitmask of seats with a live turret, `fl.shutdown` the stun; `fl.jump` marks a
+  rider leaving on its own, so 6 → 9 without it is his eject. Also `fl.load`, `fl.claim`, `fl.origin`,
+  `fl.pickup`, `fl.heal`, `fl.regun` and `fl.crate`; First Aid Kit heals are `heal` rows of 64660.
 
 ## Known gaps
 
-- **Systems Shutdown is never used**, and it is the biggest lever left. Four `Overload Circuit 62399`
-  in 25-man (two in 10) cast `62475`: `spell_systems_shutdown_aura` stuns him 20 s, **removes Gathering
-  Speed** and adds +50% damage taken. A rider reaches his seats (33114) via demolisher seat 3 and
-  `Throw Passenger 62324`, kills the turret it wakes, and clicks the Overload Control Device; the seats
-  are immune to Vents, Missile Barrage, Ram, Fury and Inferno. Crewless bots or chopper crews could be
-  the passengers.
-- **No seat-shortfall fallback.** With zero slack, a bot that loses a boarding race is left on foot.
-- **A crewless bot walks into the arena and dies**, still running the last drive goal while Missile
-  Barrage and Flame Vents (500 yd) hit a player-sized pool, a median 17.7-22.2 s after losing its hull.
-  Seats have zero slack, so there is nothing to re-board and nothing walks them out; one wipe lost 22
-  of 26 bots this way.
+- **The catapult cycle is unverified in the field**: whether a bot throw lands (the passenger reads 6
+  in `fl.seat`), whether class rotations fire from his seat, whether a melee rider reaches the
+  partner turret, how long a turret lasts, the pickup walk under hazards, and whether the stun pays
+  for the gunners' lost Mortar, crate grabs and Increased Speed (a Pursued demolisher whose gunner is
+  away has none). Load into Catapult's 30 s cooldown floors the cycle.
+- **A rider waits out a shutdown that never comes.** Seated it is safe and useless; if no gunner is
+  left to cover his other seat pair, it sits there until he dies.
+- **A crewless bot walks to its pickup**, on foot under Missile Barrage and, outside a stun, Flame Vents
+  (500 yd), which killed 22 of 26 bots in one wipe before pickups. With every chopper's rear seat
+  full it gets no pickup and walks to any open seat.
 - **The tar lead runs but is unmeasured.** Its note emits only when `FlameLeviathanTarLeadDistance`'s
   clamp opens — lead capped at `dist(boss, pursued) − bossReach(15) − BATTERING_RAM_RADIUS(25) − size`,
   needing the pursued vehicle more than ~40 yd out. What the role is worth is unknown.
 - **No chopper pyrite ferry**, so crates only reach a demolisher that drives to them itself.
-- **`PlayerbotAI::CastVehicleSpell(uint32, float, float, float)` is declared and never defined**, so
-  there is no ground-targeting and tar cannot be ignited deliberately.
+- **Tar is never ignited deliberately**: `PlayerbotAI::CastVehicleSpell(uint32, float, float, float)`
+  aims a ground spell, but no bot fires one at a pool.
 - **The Flames thaw is unverified in the field**: no traced hull took `62297` from its first build
   through 2026-09-16.
 - **Crate income does not cover the barrels thrown.** ~250 energy/min across the fleet against 63
   barrels/min left demolishers `dry` for 20-42% of a kill pull, and `dry` was 5 of 9 stack losses there
-  (12 of 24 in a wipe). The centre drops are the first lever; after them,
+  (12 of 24 in a wipe). That income counted the repeat grabs, half of them in one pull, and gunners
+  away on the catapult grab nothing. The centre drops are the first lever; after them,
   `ULDUAR_FL_PYRITE_BURST_STACKS`, the refresh rate or `ULDUAR_FL_CRATE_DETOUR_RADIUS`.
-- **The crate grab ceiling is not holding and nobody knows why.** 30-47 of 46-91 grabs a pull go out
-  above `ULDUAR_FL_CRATE_GRAB_CEILING` (75), wasting part of the +25. Reading the bar 1.5 s earlier gives
-  the same figures, so it is not the energize landing inside the sample, and
-  `FlameLeviathanRiddenVehicle` does resolve a gunner to its demolisher. One pull's 80 casts went on
-  50 crates, 30 of them repeats inside the despawn, its first three from three gunners on one crate
-  200 ms apart, so the first grab may be under the ceiling and the repeats what overflow. Find the
-  path before moving the constant.
+- **The crate grab ceiling was not holding.** 30-47 of 46-91 grabs a pull went out above
+  `ULDUAR_FL_CRATE_GRAB_CEILING` (75), wasting part of the +25; reading the bar 1.5 s earlier gave the
+  same figures, so it was not the energize landing inside the sample, and
+  `FlameLeviathanRiddenVehicle` does resolve a gunner to its demolisher. Repeats
+  inside the despawn (30 of one pull's 80, its first three from three gunners on one crate 200 ms
+  apart) were the likely overflow. If grabs above the ceiling outlive them, find the path before
+  moving the constant.
 - **The pyrite refresh slack is thin.** `late` lost 1–2 stacks a pull against 25 `fail` of 34, nearly
   all past 70 yd; more `late` losses mean `ULDUAR_FL_PYRITE_REFRESH_SLACK_MS` (2 s) runs short. The
   seat's +25 is read off the DBC and `conditions`, not a trace.

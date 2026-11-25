@@ -8,6 +8,7 @@
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
 #include "Position.h"
+#include "UldEncounter_FlameLeviathan.h"
 #include "UldTriggers.h"
 #include "Vehicle.h"
 
@@ -29,6 +30,12 @@ protected:
     bool SiegeEngineTurretAction(Unit* target);
     bool ChopperAction(Unit* target);
 
+    bool ThrowPassenger(Unit* boss);
+    bool LoadIntoCatapult();
+    bool CatapultPassengerAction();
+    bool ChopperPassengerAction();
+    bool FirstAidKit();
+
     Aura* TrackBarrels(Unit* target);
 
     bool CastVehicle(uint32 spellId, Unit* target, uint32 cooldownMs = 1000);
@@ -48,6 +55,17 @@ private:
     int32 _lastPyriteDurationMs = 0;
 
     ObjectGuid _lastLiftNoted;
+
+    uint32 _catapultSinceMs = 0;
+};
+
+class FlameLeviathanSeatAction : public AttackAction
+{
+public:
+    static constexpr char const* Name = "flame leviathan seat";
+
+    FlameLeviathanSeatAction(PlayerbotAI* botAI) : AttackAction(botAI, Name) {}
+    bool Execute(Event event) override;
 };
 
 class FlameLeviathanEnterVehicleAction : public MovementAction
@@ -86,13 +104,19 @@ protected:
 
     bool RushToVents(Unit* boss);
 
+    bool Catapult(Unit* boss);
+    bool Ferry();
+    bool Pickup();
+
     bool DriveTo(Position const& goal, Unit* faceTarget, bool faceAway,
-                 MovementPriority priority = MovementPriority::MOVEMENT_COMBAT);
+                 MovementPriority priority = MovementPriority::MOVEMENT_COMBAT,
+                 float arrive = ULDUAR_FL_ARRIVE_TOLERANCE);
 
     bool DriveTo(Position const& goal, Position const& facePoint,
                  MovementPriority priority = MovementPriority::MOVEMENT_COMBAT);
 
-    bool DriveToImpl(Position const& goal, std::optional<float> facing, MovementPriority priority);
+    bool DriveToImpl(Position const& goal, std::optional<float> facing, MovementPriority priority,
+                     float arrive = ULDUAR_FL_ARRIVE_TOLERANCE);
 
     Unit* NearestCrate(float radius);
     void ResetKite();

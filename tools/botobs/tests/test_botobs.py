@@ -750,6 +750,33 @@ class FlameLeviathanReader(unittest.TestCase):
         self.assertEqual(flame_leviathan.crate_duplicates(casts),
                          {"casts": 5, "crates": 2, "same": 1, "cross": 1, "later": 1})
 
+    def test_turret_changes_read_kills_and_installs_off_the_mask(self):
+        spans = [("15", 0, 1000), ("13", 1000, 2000), ("4", 2000, 3000), ("0", 3000, 9000), ("15", 9000, 12000)]
+        self.assertEqual(flame_leviathan.turret_changes(spans), ([1000, 2000, 2000, 3000], [9000] * 4))
+        self.assertEqual(flame_leviathan.turret_changes([("12", 0, 500)]), ([], []))
+
+    def test_hp_rates_split_the_stun_from_the_rest_and_skip_resets(self):
+        points = [(0, 100.0), (1000, 99.0), (2000, 96.0), (3000, 93.0), (4000, 92.0), (5000, 100.0), (9000, 90.0)]
+        inside, outside = flame_leviathan.hp_rates(points, [(1000, 3000)])
+        self.assertAlmostEqual(inside, 3.0)
+        self.assertAlmostEqual(outside, 1.0)
+        self.assertEqual(flame_leviathan.hp_rates([], []), (0.0, 0.0))
+
+    def test_throw_records_parse_passenger_distance_and_his_speed(self):
+        notes = [{"t": 100, "g": 7, "txt": "12 58 6"}, {"t": 200, "g": 7, "txt": "x 58 6"}, {"t": 300, "txt": "12 5"}]
+        self.assertEqual(flame_leviathan.throw_records(notes), [(100, 7, 12, 58.0, 6.0)])
+
+    def test_first_value_after_finds_the_landing_inside_the_window(self):
+        track = [("5", 0, 2000), ("9", 2000, 2400), ("6", 2400, 9000)]
+        self.assertEqual(flame_leviathan.first_value_after(track, 1900, 3000, "6"), 2400)
+        self.assertIsNone(flame_leviathan.first_value_after(track, 1900, 300, "6"))
+        self.assertIsNone(flame_leviathan.first_value_after(None, 0, 3000, "6"))
+
+    def test_seat_stays_name_what_came_next(self):
+        track = [("4", 0, 100), ("5", 100, 900), ("6", 1000, 5000), ("9", 5000, 8000), ("8", 8000, 9000), ("6", 9500, 9900)]
+        self.assertEqual(flame_leviathan.seat_stays(track, "6"), [(1000, 5000, "9"), (9500, 9900, "-")])
+        self.assertEqual(flame_leviathan.seat_stays(track, "9"), [(5000, 8000, "8")])
+
     def test_lift_shots_keep_the_earliest_note_per_lift(self):
         notes = [
             {"t": 500, "txt": "7 210 -40"}, {"t": 300, "txt": "7 205 -38"}, {"t": 900, "txt": "8 300 10"},
