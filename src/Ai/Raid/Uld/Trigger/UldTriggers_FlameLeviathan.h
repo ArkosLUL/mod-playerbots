@@ -14,6 +14,15 @@ public:
     bool IsActive() override;
 };
 
+class FlameLeviathanOnSeatTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "flame leviathan on seat";
+
+    FlameLeviathanOnSeatTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
 class FlameLeviathanVehicleNearTrigger : public Trigger
 {
 public:

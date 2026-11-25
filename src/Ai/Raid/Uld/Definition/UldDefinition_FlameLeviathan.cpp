@@ -45,6 +45,12 @@ bool FlameLeviathanRiding(PlayerbotAI* botAI)
     return bot->GetMapId() == ULDUAR_MAP_ID && RidingRaidVehicle(bot) && FlameLeviathanEngaged(botAI);
 }
 
+bool FlameLeviathanRidingSeat(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    return bot->GetMapId() == ULDUAR_MAP_ID && FlameLeviathanSeatOf(bot) == FlameLeviathanSeat::LeviathanSeat;
+}
+
 void DefineFlameLeviathan(EncounterBuilder& e)
 {
     e.Node<FlameLeviathanFlameVentsTrigger, FlameLeviathanInterruptVentsAction>(ACTION_RAID + 4);
@@ -54,9 +60,12 @@ void DefineFlameLeviathan(EncounterBuilder& e)
     e.Node<FlameLeviathanVehicleNearTrigger, FlameLeviathanEnterVehicleAction>(ACTION_RAID + 2);
     e.Node<FlameLeviathanOnVehicleTrigger, FlameLeviathanVehicleAction>(ACTION_RAID + 1);
     e.Node<FlameLeviathanOnVehicleTrigger, FlameLeviathanDriveAction>(ACTION_RAID + 0.5f);
+    e.Node<FlameLeviathanOnSeatTrigger, FlameLeviathanSeatAction>(ACTION_RAID + 1);
 
     e.Exclusive("flame leviathan vehicle movement", Role::Any, FlameLeviathanRiding, 0,
                 {FlameLeviathanDriveAction::Name, FlameLeviathanEnterVehicleAction::Name, "leave vehicle"});
+    e.Exclusive("flame leviathan seat rider", Role::Any, FlameLeviathanRidingSeat, 0,
+                {FlameLeviathanSeatAction::Name});
 
     e.Tick(FlameLeviathanTick);
 }

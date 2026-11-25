@@ -115,6 +115,15 @@ MELEE_YD = 8.0                  # close enough for Lash (0-5 yd) plus a snapshot
 ATTRITION_WINDOW_MS = 5000
 CREW_YD = 8.0
 
+# keep in step with FlameLeviathanSeat in UldEncounter_FlameLeviathan.h, fl.seat writes its raw values
+SEAT_NAMES = {"0": "gone", "1": "siege driver", "2": "siege gunner", "3": "demolisher driver",
+              "4": "demolisher gunner", "5": "catapult", "6": "his seat", "7": "chopper driver",
+              "8": "chopper passenger", "9": "on foot"}
+ON_HIS_SEAT, ON_FOOT, CHOPPER_PASSENGER, DEMO_GUNNER = "6", "9", "8", "4"
+LAND_WINDOW_MS = 3000
+JUMP_NOTE_MS = 1000
+FIRST_AID_KIT = 64660
+
 
 def pick(seq, quantile):
     return seq[min(int(len(seq) * quantile), len(seq) - 1)]
@@ -1734,7 +1743,170 @@ def show_vents(trace: Trace) -> int:
     return 0
 
 
+def popcount(value: int) -> int:
+    return bin(value).count("1")
+
+
+def turret_changes(spans) -> tuple[list[int], list[int]]:
+    kills: list[int] = []
+    installs: list[int] = []
+    previous = None
+    for value, start, _stop in spans:
+        mask = int(value) if str(value).isdigit() else 0
+        if previous is not None:
+            kills += [start] * popcount(previous & ~mask)
+            installs += [start] * popcount(mask & ~previous)
+        previous = mask
+    return kills, installs
+
+
+def held_windows(spans, value: str = "1") -> list[tuple[int, int]]:
+    return [(start, stop) for held, start, stop in spans if held == value]
+
+
+def hp_rates(points: list[tuple[int, float]], windows: list[tuple[int, int]]) -> tuple[float, float]:
+    lost = [0.0, 0.0]
+    seconds = [0.0, 0.0]
+    for (t0, h0), (t1, h1) in zip(points, points[1:]):
+        dt = (t1 - t0) / 1000.0
+        if not 0 < dt <= 2.0 or h1 > h0:
+            continue
+        mid = (t0 + t1) / 2
+        side = 0 if any(start <= mid < stop for start, stop in windows) else 1
+        lost[side] += h0 - h1
+        seconds[side] += dt
+    return tuple(lost[i] / seconds[i] if seconds[i] else 0.0 for i in (0, 1))
+
+
+def throw_records(notes: list[dict]) -> list[tuple[int, int, int, float, float]]:
+    out = []
+    for rec in notes:
+        parts = str(rec.get("txt", "")).split()
+        if len(parts) != 3 or not parts[0].isdigit():
+            continue
+        try:
+            out.append((rec["t"], rec.get("g", 0), int(parts[0]), float(parts[1]), float(parts[2])))
+        except ValueError:
+            continue
+    return out
+
+
+def first_value_after(track, when: int, window_ms: int, wanted: str) -> int | None:
+    for held, start, stop in track or ():
+        if held == wanted and start <= when + window_ms and stop > when:
+            return max(start, when)
+    return None
+
+
+def seat_stays(track, value: str) -> list[tuple[int, int, str]]:
+    out = []
+    for index, (held, start, stop) in enumerate(track or ()):
+        if held == value:
+            after = track[index + 1][0] if index + 1 < len(track) else "-"
+            out.append((start, stop, after))
+    return out
+
+
+def show_mechanics(trace: Trace) -> int:
+    fl = fight(trace)
+    print("Catapult, his turrets and the stun: throws, landings, turret kills, Systems Shutdowns, jumps,\n"
+          "chopper pickups and heals, the drive back to a gun, crate grabs\n")
+
+    tracks = holder_spans(trace, "fl.seat", fl.end)
+    if not tracks:
+        print("  no fl.seat notes: a trace from before the catapult work, or a pull nobody boarded")
+
+    loads = [rec for rec in trace.of("note") if rec.get("k") == "fl.load"]
+    throws = throw_records([rec for rec in trace.of("note") if rec.get("k") == "fl.throw"])
+    landed = 0
+    print(f"  catapult: {len(loads)} bot loads (fl.load), {len(throws)} bot throws (fl.throw)")
+    for when, driver, passenger, distance, speed in throws:
+        seated = first_value_after(tracks.get(passenger), when, LAND_WINDOW_MS, ON_HIS_SEAT)
+        landed += seated is not None
+        outcome = f"on his seat +{(seated - when) / 1000:.1f} s" if seated is not None else "MISSED"
+        print(f"     {clock(when):>9s}  {trace.name(driver):14s} threw {trace.name(passenger):14s}"
+              f" {distance:3.0f} yd, he ran {speed:4.1f} yd/s  {outcome}")
+    if throws:
+        print(f"     landed {landed} of {len(throws)}")
+    boarded = sum(1 for track in tracks.values() for held, _s, _e in track if held == ON_HIS_SEAT)
+    print(f"  his seats boarded {boarded} times (bots and humans alike, fl.seat 6)")
+
+    turret_spans = latch_spans(trace, "fl.turrets", fl.end)
+    kills, installs = turret_changes(turret_spans)
+    shutdowns = held_windows(latch_spans(trace, "fl.shutdown", fl.end))
+    print(f"\n  turrets killed {len(kills)}, installed again {len(installs)}; Systems Shutdowns {len(shutdowns)}")
+    points = [(frame.t, frame.boss_hp) for frame in fl.frames if frame.boss_hp is not None]
+    boss = next((guid for guid, entry in trace.entries.items() if entry == BOSS_ENTRY), None)
+    maxhp = trace.maxhp.get(boss, 0) if boss else 0
+    for start, stop in shutdowns:
+        inside, _ = hp_rates([p for p in points if start <= p[0] <= stop], [(start, stop)])
+        amount = f"  {inside * maxhp / 100 * (stop - start) / 1000:,.0f} hp" if maxhp else ""
+        print(f"     {clock(start):>9s}  {(stop - start) / 1000:4.1f} s  he lost {inside:5.2f}%/s{amount}")
+    if shutdowns and points:
+        inside, outside = hp_rates(points, shutdowns)
+        ratio = f"  ({inside / outside:.2f}x)" if outside else ""
+        print(f"     boss health lost: {inside:.2f}%/s inside the stuns, {outside:.2f}%/s outside{ratio}")
+
+    jumps = collections.defaultdict(list)
+    for rec in trace.of("note"):
+        if rec.get("k") == "fl.jump":
+            jumps[rec.get("g", 0)].append(rec["t"])
+    jumped = ejected = picked = dead = 0
+    on_foot: list[float] = []
+    print("\n  off his back (fl.seat 6 -> on foot), then on foot until a chopper or a gun took them:")
+    for member, track in sorted(tracks.items(), key=lambda kv: trace.name(kv[0])):
+        for start, stop, after in seat_stays(track, ON_HIS_SEAT):
+            if after != ON_FOOT:
+                continue
+            own = any(abs(t - stop) <= JUMP_NOTE_MS for t in jumps.get(member, ()))
+            jumped += own
+            ejected += not own
+            walk = next(((s, e, nxt) for s, e, nxt in seat_stays(track, ON_FOOT) if s == stop), None)
+            fate = "-"
+            if walk:
+                fate = SEAT_NAMES.get(walk[2], walk[2])
+                if walk[2] in (CHOPPER_PASSENGER, DEMO_GUNNER):
+                    picked += 1
+                    on_foot.append((walk[1] - walk[0]) / 1000.0)
+                elif walk[2] == "0":
+                    dead += 1
+                fate += f" after {(walk[1] - walk[0]) / 1000:.1f} s"
+            print(f"     {trace.name(member):14s} seated {clock(start):>9s} for {(stop - start) / 1000:5.1f} s,"
+                  f" {'jumped' if own else 'ejected'}, then {fate}")
+    print(f"     jumped {jumped}, ejected {ejected}; off their feet {picked}"
+          + (f" (median {statistics.median(on_foot):.1f} s on foot)" if on_foot else "") + f", died on foot {dead}")
+
+    pickups = holder_spans(trace, "fl.pickup", fl.end)
+    assigned = sum(1 for track in pickups.values() for held, _s, _e in track if held not in ("0", ""))
+    rides = [(member, start, stop, after) for member, track in tracks.items()
+             for start, stop, after in seat_stays(track, CHOPPER_PASSENGER)]
+    reguns = [rec for rec in trace.of("note") if rec.get("k") == "fl.regun"]
+    origins = holder_spans(trace, "fl.origin", fl.end)
+    home = sum(1 for rec in reguns
+               if value_at(origins.get(rec.get("g", 0)), rec["t"]) == str(rec.get("txt", "")))
+    back = sum(1 for _m, _s, _e, after in rides if after == DEMO_GUNNER)
+    rode = [(stop - start) / 1000.0 for _m, start, stop, after in rides if after == DEMO_GUNNER]
+    print(f"\n  choppers: {assigned} pickups assigned (fl.pickup), {len(rides)} rides in a rear seat,"
+          f" {back} ended on a demolisher's gun"
+          + (f" (median ride {statistics.median(rode):.1f} s)" if rode else ""))
+    print(f"     bot hops onto a gun (fl.regun) {len(reguns)}, onto the demolisher that threw them {home}")
+
+    kits = [rec for rec in trace.of("note") if rec.get("k") == "fl.heal"]
+    healed = [rec for rec in trace.of("heal") if rec.get("sp") == FIRST_AID_KIT]
+    print(f"     First Aid Kit: {len(kits)} bot casts (fl.heal), {len(healed)} heal rows,"
+          f" {sum(rec.get('a', 0) - rec.get('oh', 0) for rec in healed):,} healed")
+
+    casts = [rec for rec in trace.of("cast") if rec.get("sp") == GRAB_CRATE]
+    ledger = crate_duplicates(casts)
+    taken = sum(1 for rec in trace.of("note") if rec.get("k") == "fl.crate" and str(rec.get("txt")) == "1")
+    print(f"\n  crate grabs: {ledger['casts']} casts on {ledger['crates']} crates, repeats inside the"
+          f" {CRATE_DESPAWN_MS} ms despawn {ledger['same'] + ledger['cross']} (want 0), crates claimed {taken} (fl.crate)")
+    return 0
+
+
 SECTIONS = (
+    ("mechanics", "catapult throws, his turrets, Systems Shutdowns, jumps, pickups, heals, crate grabs",
+     show_mechanics),
     ("hulls", "why the vehicles died, crews on foot, drive branches, Pursued escapes", show_hulls),
     ("pyrite", "Blue Pyrite stacks per demolisher, and the crate ledger", show_pyrite),
     ("ram", "Battering Ram exposure only", show_ram),
@@ -1747,7 +1919,7 @@ SECTIONS = (
 
 
 def main() -> int:
-    return run_sections(__doc__, SECTIONS)
+    return run_sections(__doc__, SECTIONS, summary=("mechanics",))
 
 
 if __name__ == "__main__":
