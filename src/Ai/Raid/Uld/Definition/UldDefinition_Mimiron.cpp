@@ -208,6 +208,7 @@ void DefineMimiron(EncounterBuilder& e)
     e.Node<MimironProximityMineTrigger, MimironProximityMineAction>(ACTION_RAID - 1);
     e.Node<MimironUnreachableTrigger, MimironUnreachableStepAction>(ACTION_RAID + 2);
     e.Node<MimironBombBotTrigger, MimironBombBotAction>(ACTION_RAID + 2);
+    e.Node<MimironBombTankFormTrigger, MimironBombTankFormAction>(ACTION_RAID + 5.5f);
     e.Node<MimironBombBotTauntTrigger, MimironBombBotTauntAction>(ACTION_RAID + 5);
     e.Node<MimironBombTankHoldTrigger, MimironBombTankHoldAction>(ACTION_RAID);
     e.Node<MimironSlowBombBotTrigger, MimironSlowBombBotAction>(ACTION_RAID + 2);
@@ -230,7 +231,8 @@ void DefineMimiron(EncounterBuilder& e)
 
     e.Block("mimiron bomb tank hold", Role::Tank, MimironBombTank,
             Family::Reach | Family::Charge | Family::TankFace | Family::SetBehind | Family::Follow |
-                Family::CombatFormationMove | Family::Taunt);
+                Family::CombatFormationMove | Family::Taunt,
+            {"caster form"});
 
     e.Block("mimiron charge guard", Role::Any, MimironLethalWindowActive, Family::Charge,
             {"reach melee", "killing spree"});

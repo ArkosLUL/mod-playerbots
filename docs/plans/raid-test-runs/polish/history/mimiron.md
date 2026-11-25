@@ -1,6 +1,6 @@
 # Mimiron polish history
 
-Rounds 1-21 of the Mimiron polish loop, oldest first; [the log](../mimiron.md) holds State and the newest round.
+Rounds 1-22 of the Mimiron polish loop, oldest first; [the log](../mimiron.md) holds State and the newest round.
 
 ## Round 1 (build 02925e260, DC 5443dbc)
 
@@ -2410,3 +2410,79 @@ P4 disperse (Watch). ACU Plasma Ball 6.
 
 **Shared code:** none (Mimiron flee fan and spot helper, findings doc, the `pitfalls.md` entry, reader and
 its test, this log).
+
+## Round 22 (build 6464b824a, round 21 built)
+
+**Data:** window 34 (`window34-mimiron.md`, `--head 6464b824a`, one pull per pool, no DC veto), the
+first on the profession rosters. Traces `603_<pool>_mimiron_<epoch>`: uld1 `…548883`, uld4 `…548880`,
+uld5 `…548883`, uld6 `…548888`, uld2 `…548878`, uld3 `…548869` (epochs 17955488xx); windows 30 and 32
+(`17955393xx`, `17955443xx-44xx`) for the Bomb Bot, taunt and pad baselines. Scratch `mim22/`.
+
+| Pool | Out | P4 at | Deaths before Berserk |
+|---|---|---|---|
+| uld1 A | **kill** 9:10 | 6:51 | 3: P3 Flames; P4 mines 2 |
+| uld4 A | **kill** 9:13 | 6:41 | 3: P2 Heat Wave; P4 Hand Pulse, mine |
+| uld5 B | **kill** 9:05 | 6:31 | 4: P4 Plasma Ball, Shock Blast, Hand Pulse, mine |
+| uld2 B | wipe 10:12 | 7:09 | 7: P3 Plasma Ball, Assault Bot; P4 mine, Frost Bomb 4 (9:53) |
+| uld6 C | **kill** 9:51 | 7:12 | 6: P3 Water Spray 2, Bomb Bot; P4 mines 2, Hand Pulse |
+| uld3 C | wipe 10:23 | 7:43 | 9: P2 Rapid Burst and Heat Wave 6 (5 melee, 3:26-3:31); P4 Water Spray 2, mine |
+
+**Stop rules:** A (uld1 3, uld4 3) and B (uld5 4) met the done rule with hard mode real (64563 at
+7.1-7.2 s, Emergency Mode at 2:23-2:27); C did not (uld6 6). Not polished. Bomb Bots were picked in
+rounds 9 and 20 (the question); this round builds the user's Q10 answer, which State directs.
+
+**Verdict on round 21 (flee legs refuse a spot off the floor): held in A, B and C.** `--floor`: no flee
+leg at Z 803 (window 32: 8 in six pulls); moves sent off the floor are knockback follow-ons at Z 368-391,
+and one P4 `combat formation move` to Z 803.11 (uld4 Ulduad, 7:35, 11 s up to Z 399.5), the generic
+disperse the fan never screened (Watch). Hand Pulse baseline per `--pulse`: two healers out at 8:00
+(uld6), 8:27 (uld2), 8:32 (uld5), 9:16 (uld3), never in uld1 and uld4; 3 Hand Pulse deaths before
+Berserk, the 30 after it in uld2 and uld3 are Berserk.
+
+**Change: Q10 (a), the off-tank takes the phase 3 Bomb Bots.** Not the worst failure (Bomb Bot 1 death;
+window 32: 2, window 30: 12); the user's answer, built as directed.
+
+- Baseline, `--bombbots` and the scratch: 28 bombs in window 34, 13 blew (chased 13, uld6's Uldwak dead;
+  collateral 10, none dead), 0-2 taunted a pull, none on purpose. The victim a bomb spawns with sat
+  10-23 yd off the spawn in 25 of 28 (3.7-9.8 in the rest), a ranged or healer in 19; the spawn is the
+  ACU's ground point, within 2 yd of the room centre in uld1, uld3 and uld5, up to 5-6 in uld4 and uld6,
+  6.5-18 in uld2.
+- Taunts on bombs in windows 30-34 switched the chase within 250 ms: Growl 7 of 7, Death Grip 3 of 4,
+  Righteous Defense 1 of 1 (Feral Charge only on arrival). All four class taunts are 30 yd, 8 s and off
+  the global cooldown (DBC 355, 6795, 56222, 62124), against one bomb every 15 s.
+- Pads, from adds' first sight: Junk and Assault Bots and fire bots come from the arms at ±60° and 180°,
+  so the gaps centre on ±120°. Bystanders within 7 yd of a blast 9.5 yd out at +120° and -120° averaged
+  1.25 and 1.24 over 18 pulls, no side better.
+- Code (Mimiron only, both sizes and modes, with or without a player; a player as that tank does the job
+  himself): `IsMimironBombTank` (`UldEncounter_Mimiron.cpp`) is the first living assist tank while only
+  the ACU is up and not riding. `DeriveMimironSpreadSlot` gives him `p3bomb`: the ACU's ground point plus
+  `ULDUAR_MIMIRON_BOMB_TANK_DISTANCE` 12 at 120° off the P3 centreline, clamped to the room; the arc
+  spread walks him there with its hazard screens. `mimiron bomb bot taunt` (ACTION_RAID + 5) casts the
+  class taunt on the live bomb not on him within 30 yd that is nearest its victim, then attacks it.
+  `GetMimironBombBotBlast` lets him stand in his own bomb's blast instead of kiting. `mimiron bomb tank
+  hold` zeroes reach, charge, tank face, set behind, follow, disperse and the generic taunts; his target
+  guard zeroes the pickers; `mimiron bomb tank hold action` drops a non-bomb target so no ranged threat
+  pulls adds and their melee onto the spot.
+- Cost: he no longer picks up P3 adds; they dealt him 10-30k of their 100-410k a phase.
+- Reader `--bombbots`: the first roster taunt per bomb, by whom and how long after first sight; blasts on
+  the bomb tank (whoever held `p3bomb`); his distance off the ACU through P3 and from each of his bombs'
+  spawn; his target drops. Test `BombTankPull`. Findings doc: the Bomb Bot section, the P3 tank slots,
+  `slot` and `--bombbots` in "What a trace answers".
+
+**Next window should show** (`--bombbots`, `--slots`, `--p3`):
+
+- `p3bomb` held by the off-tank, median ~12 yd off the ACU and within 2 yd of it most of P3; target drops
+  a handful, not one a tick.
+- Most bombs taunted by him within ~0.5 s of first sight and blowing on him; chased ranged and healers
+  near 0 except spawn blasts; collateral at or under 10 hits a window with nobody dead; the bomb tank
+  never dead to a blast.
+- No longer P3 (117-171 s) and no rise in Assault and Junk Bot damage on ranged and healers or in their
+  kills. If melee stand in his blasts, the spot or its distance needs revisiting.
+
+**Not picked.** P4 mines 8 (mixed movers; the disperse in Watch). The P2 storm 7: uld3's melee sector
+lost 5 bots to Rapid Burst and Heat Wave 15-20 s after barrage 1 (`--spin`: raid health 94 to 72 in the
+15 s after, `--wedge`: keep 33, 6 melee dead), a candidate for the next round. Water Spray 4 and the late
+Frost Bomb 4, single pulls each.
+
+**Questions for the user.** None new; Q11 stands as asked in round 21.
+
+**Shared code:** none (Mimiron encounter, findings doc, reader and its test, this log).

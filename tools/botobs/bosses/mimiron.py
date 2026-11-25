@@ -60,7 +60,9 @@ FIREBOT_STEP = "mimiron fire bot action"
 FIREBOT_AOE_GUARD = "mimiron fire bot aoe guard"
 BOMB_BOT_STEP = "mimiron bomb bot action"
 BOMB_TANK_HOLD = "mimiron bomb tank hold action"
+BOMB_TANK_TAUNT = "mimiron bomb bot taunt action"
 BOMB_TANK_SLOT = "p3bomb"
+BEAR_FORMS = (5487, 9634)
 TAUNT_SPELLS = {355: "taunt", 6795: "growl", 56222: "dark command", 62124: "hand of reckoning",
                 49576: "death grip", 31790: "righteous defense"}
 BOMB_TANK_DISTANCE = radius("ULDUAR_MIMIRON_BOMB_TANK_DISTANCE")
@@ -1885,7 +1887,34 @@ def bomb_tank_rows(trace: Trace, samples: Samples, lives: dict[int, dict]) -> di
 
     holds = sum(1 for rec in trace.of("act")
                 if rec.get("a") == BOMB_TANK_HOLD and rec.get("vd") == "OK" and rec.get("g") in tanks)
-    return {"tanks": tanks, "taunts": taunts, "gaps": gaps, "spacing": spacing, "holds": holds}
+    verdicts = collections.Counter(rec.get("vd") for rec in trace.of("act")
+                                   if rec.get("a") == BOMB_TANK_TAUNT and rec.get("g") in tanks)
+    bear = {guid: share for guid in tanks if (share := bear_form_share(trace, guid, span)) is not None}
+    return {"tanks": tanks, "taunts": taunts, "gaps": gaps, "spacing": spacing, "holds": holds,
+            "verdicts": verdicts, "bear": bear}
+
+
+def bear_form_share(trace: Trace, guid: int, span) -> float | None:
+    changes = [(rec["t"], rec.get("r") == 0) for rec in trace.of("aura")
+               if rec.get("d") == guid and rec.get("sp") in BEAR_FORMS]
+    if not changes or not span or span[1] <= span[0]:
+        return None
+
+    start, stop = span
+    since = None if changes[0][1] else start
+    covered = 0
+    for when, on in changes:
+        if when <= start:
+            since = start if on else None
+        elif when < stop:
+            if on and since is None:
+                since = when
+            elif not on and since is not None:
+                covered += when - since
+                since = None
+    if since is not None:
+        covered += stop - since
+    return covered / (stop - start)
 
 
 def show_bombbots(trace: Trace) -> None:
@@ -1929,6 +1958,10 @@ def show_bombbots(trace: Trace) -> None:
               f" {statistics.median(spacing) if spacing else 0:.1f} yd, within 2 yd of {BOMB_TANK_DISTANCE:.0f}"
               f" {near / len(spacing) * 100 if spacing else 0:.0f}% of phase 3; spawn to him at his blasts {gaps} yd;"
               f" target drops {rows['holds']}")
+        verdicts = ", ".join(f"{vd} {n}" for vd, n in sorted(rows["verdicts"].items())) or "none"
+        bear = "".join(f"; {trace.name(g)[:10]} in a bear form {share * 100:.0f}% of phase 3"
+                       for g, share in rows["bear"].items())
+        print(f"  bomb tank taunt action: {verdicts}{bear}")
     print("\n  'chased' is the bomb's target in the snapshot before the blast; a step-out is chased when the nearest"
           " bomb was after the bot itself; the bomb tank is whoever held a p3bomb slot")
 

@@ -1010,6 +1010,17 @@ bool MimironBombTankHoldAction::Execute(Event /*event*/)
     return true;
 }
 
+bool MimironBombTankFormAction::Execute(Event /*event*/)
+{
+    for (char const* form : {"dire bear form", "bear form"})
+    {
+        if (botAI->CanCastSpell(form, bot) && botAI->CastSpell(form, bot))
+            return true;
+    }
+
+    return false;
+}
+
 bool MimironPetControlAction::isUseful()
 {
     MimironPetControlTrigger mimironPetControlTrigger(botAI);

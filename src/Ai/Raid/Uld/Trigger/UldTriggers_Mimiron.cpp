@@ -224,6 +224,15 @@ bool MimironBombTankHoldTrigger::IsActive()
     return target && target->GetEntry() != NPC_BOMB_BOT && IsMimironBombTank(botAI, bot);
 }
 
+bool MimironBombTankFormTrigger::IsActive()
+{
+    if (bot->getClass() != CLASS_DRUID || bot->GetShapeshiftForm() == FORM_BEAR ||
+        bot->GetShapeshiftForm() == FORM_DIREBEAR || !IsMimironBombTank(botAI, bot))
+        return false;
+
+    return botAI->CanCastSpell("dire bear form", bot) || botAI->CanCastSpell("bear form", bot);
+}
+
 bool MimironApproachTargetTrigger::IsActive()
 {
     if (!IsMimironHardModeActive(botAI) || !IsMimironEngaged(botAI))
