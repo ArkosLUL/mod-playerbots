@@ -184,6 +184,8 @@ inline constexpr float ULDUAR_ALGALON_STAR_TEAM_STANDOFF = 25.0f;
 inline constexpr float ULDUAR_ALGALON_STAR_TEAM_HOLD_MIN = 12.0f;
 inline constexpr uint8 ULDUAR_ALGALON_STAR_TEAM_10 = 2;
 inline constexpr uint8 ULDUAR_ALGALON_STAR_TEAM_25 = 3;
+inline constexpr uint8 ULDUAR_ALGALON_STAR_TEAM_EXTRA_25 = 2;
+inline constexpr uint32 ULDUAR_ALGALON_STAR_TEAM_EXTRA_BIG_BANG = 2;
 inline constexpr float ULDUAR_ALGALON_SPLASH_RADIUS = 15.0f;
 inline constexpr float ULDUAR_ALGALON_SPLASH_PAST_REACH = 11.0f;
 inline constexpr float ULDUAR_ALGALON_GROUND_SPLASH_RADIUS = 25.0f;
@@ -366,12 +368,15 @@ struct AlgalonEncounterState
     ObjectGuid finishLatch;
     ObjectGuid finisherLatch;
     ObjectGuid shelterStar;
+    std::unordered_set<ObjectGuid> starTeamExtras;
     float bulkPctPerSec = 0.0f;
+    uint32 bulkTeam = 0;
     uint32 bulkMeasuredCycle = 0;
     uint32 focusSinceMs = 0;
     ObjectGuid bulkFrom;
     uint32 bulkFromMs = 0;
     float bulkFromPct = 0.0f;
+    uint32 bulkFromTeam = 0;
     uint32 lastSmashImpactMs = 0;
 
     std::vector<AlgalonScanUnit> stars;
@@ -384,6 +389,7 @@ struct AlgalonEncounterState
     std::unordered_map<ObjectGuid, std::vector<std::pair<uint32, float>>> starHealthLog;
     std::unordered_map<ObjectGuid, std::pair<uint32, float>> starLeft;
     float teamKillPctPerSec = 0.0f;
+    uint32 teamKillTeam = 0;
     uint32 nextSmashImpactMs = 0;
     std::string lastStarWindow;
     bool focusByDeadline = false;

@@ -2909,19 +2909,22 @@ def under_cycles(trace: Trace) -> list[dict]:
 
 def focus_rates(trace: Trace) -> list[dict]:
     """Per `algalon.focusstar` span: the star's health at its first and last sample, `beyond` its loss a second past
-    the drain (None under two samples), and `under`, whether the plan then marked it `u`."""
+    the drain (None under two samples), `under`, whether the plan then marked it `u`, and `team`, the star team's
+    size at its start (0 without `algalon.starteam`)."""
     def build(trace: Trace) -> list[dict]:
         samples = samples_of(trace)
         windows = window_spans(trace)
+        end = pull_end(trace)
+        team = holder_spans(trace, "algalon.starteam", end)
         out = []
-        for value, start, stop in latch_spans(trace, "algalon.focusstar", pull_end(trace)):
+        for value, start, stop in latch_spans(trace, "algalon.focusstar", end):
             star = as_guid(value)
             if not star:
                 continue
             plan = plan_of(trace, star, start)
             row = {"star": star, "start": start, "stop": stop, "window": value_at(windows, start),
                    "under": bool(plan and plan["mark"] == "u"), "first": None, "last": None, "secs": 0.0,
-                   "beyond": None}
+                   "beyond": None, "team": sum(value_at(spans, start) == "1" for spans in team.values())}
             timed = samples.timed(star, start, stop)
             if timed:
                 (low, first), (high, last) = timed[0], timed[-1]
@@ -3274,19 +3277,28 @@ def show_focus_rates(trace: Trace) -> None:
     if not rows:
         return
     print("  focus spans, the star's health and what it lost beyond the 1 %/s drain, u for an under-star:")
-    bulk = sorted(row["beyond"] for row in rows
-                  if row["under"] and row["window"] == "under" and row["beyond"] is not None)
+    spans = [row for row in rows if row["under"] and row["window"] == "under" and row["beyond"] is not None]
+    bulk = sorted(row["beyond"] for row in spans)
     if bulk:
         print(f"    bulk beyond the drain: median {bulk[len(bulk) // 2]:+.1f} %/s over {len(bulk)} span(s),"
               f" planned {UNDER_TEAM_PCT - 1.0:+.1f}")
+    by_team: dict[int, list[float]] = collections.defaultdict(list)
+    for row in spans:
+        if row["team"]:
+            by_team[row["team"]].append(row["beyond"])
+    if by_team:
+        print("    bulk by the team's size at the span's start: " + ", ".join(
+            f"{size} member(s) median {sorted(rates)[len(rates) // 2]:+.1f} %/s over {len(rates)}"
+            for size, rates in sorted(by_team.items())))
     for row in rows:
         if row["first"] is None:
             health = "never sampled"
         else:
             beyond = "-" if row["beyond"] is None else f"{row['beyond']:+.1f} %/s"
             health = f"{row['first']:5.1f}% > {row['last']:5.1f}% in {row['secs']:4.1f} s, {beyond}"
+        team = f", team {row['team']}" if row["team"] else ""
         print(f"    {clock(row['start']):>9} .. {clock(row['stop']):>9}  {row['window'] or '-':9}"
-              f" {counter_label(trace, row['star'] & 0xFFFFFFFF):16} {'u' if row['under'] else ' '}  {health}")
+              f" {counter_label(trace, row['star'] & 0xFFFFFFFF):16} {'u' if row['under'] else ' '}  {health}{team}")
 
 
 def star_flags(row: dict) -> str:
@@ -5844,7 +5856,8 @@ SECTIONS = (
     ("phasing", "every hole phase: Big Bang or stray, its cause, Dark Matter, walk guard vetoes", show_phasing),
     ("stars", "star deaths, health against the drain, the kill window, the star plan against the death and the Big"
               " Bang hit, wand trims and shots (older traces), under-star switches, releases and health at the cast,"
-              " focus span loss and the bulk's median, bulk finishes, the star team",
+              " focus span loss and team size, the bulk's median overall and per team size, bulk finishes, the star"
+              " team",
      show_stars),
     ("collateral", "star health lost beyond the drain while unfocused, every cast on a star", show_collateral),
     ("holes", "hole stock, empty seconds before each Big Bang, holes lost, urgent spans", show_holes),

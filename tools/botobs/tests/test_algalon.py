@@ -2408,6 +2408,19 @@ class UnderBulk(unittest.TestCase):
                          [(UD_STAR_A, 12000, True, 88.0, 76.0, 2.0), (UD_STAR_B, 16000, True, 84.0, 68.0, 3.0),
                           (UD_STAR_A, 20000, True, 72.0, 60.0, 2.0), (UD_STAR_B, 24000, True, 64.0, 48.0, 3.0)])
 
+    def test_each_focus_span_reads_the_star_team_size_at_its_start(self):
+        self.assertEqual([row["team"] for row in al.focus_rates(self.trace)], [0, 0, 0, 0])
+        self.assertNotIn("bulk by the team's size", render(self.trace, "stars"))
+        records = underdrop_pull() + [note(1000, UD_LOCK, "algalon.starteam", 1),
+                                      note(16000, UD_MAGE, "algalon.starteam", 1)]
+        with tempfile.TemporaryDirectory() as folder:
+            trace = load(folder, records)
+            self.assertEqual([row["team"] for row in al.focus_rates(trace)], [1, 2, 2, 2])
+            text = render(trace, "stars")
+        self.assertIn("    bulk by the team's size at the span's start: 1 member(s) median +2.0 %/s over 1,"
+                      " 2 member(s) median +3.0 %/s over 3\n", text)
+        self.assertIn("88.0% >  76.0% in  4.0 s, +2.0 %/s, team 1\n", text)
+
     def test_a_release_inside_8_s_of_the_cast_is_a_failure(self):
         self.assertIn("under-star star 3 (503) released late 4.0 s before Big Bang 1's cast, at 64% @ 36.0s",
                       self.lines)
