@@ -46,6 +46,14 @@ phase 1 DPS (144-173k/s) match, but test side tanks are landed on 0.34-0.69
 times a second of burrower contact against Bulwark's and Felesta's 0.29-0.37
 (`--tanks`; paladins closest), so they take 6.9-11.6k/s of burrower damage in
 phase 1 against 4.5-6.2k/s, with the healers already putting more on them.
+The extra hits are swings the tank fails to avoid (r2 review, scratch read): a
+burrower's next swing after a landed hit landed too about 71% of the time
+(40-84%) against 51-66%. From the tank's back, where it cannot dodge, parry or
+block, hits land 0.53-0.91 a second of contact against 0.18-0.57 from its front,
+in CT/CU too; test side tanks had a burrower at their back 15-86% of contact
+(median 28%) against 13-34%, and their front rate is up as well (median 0.33
+against 0.27). So mostly the pool tanks' avoidance (gear or stats; the trace
+does not carry them), partly facing.
 
 **Compositions on 37cc72a94 (window 46, 12 valid pulls, all wipes).**
 
@@ -110,7 +118,14 @@ once the side tank carries 6+ stacks). r1's defensive keep from the pull (kept
   is code: one healer sticks to each side tank while it holds burrowers. That
   takes healing from the main tank and the five Penetrating Cold carriers, so
   try it only if the fifth healer's healing goes to the raid instead of the side
-  tanks.
+  tanks. Review note: the extra hits are mostly swings the pool's side tanks
+  fail to dodge, parry or block (a burrower's next swing after a landed hit
+  lands about 71% of the time against 58% on Felesta and Bulwark), so compare
+  their defense and avoidance with those two first: if DC's ilvl 245 tank gear
+  is short there, a fifth healer would hide a gap the user's raid doesn't have.
+  A third choice is code and a plan change: a burrower stands at a side tank's
+  back about 28% of its contact time, where its hits land 2-3 times as often;
+  keeping both in front would cut landed hits by up to a quarter.
 
 ## Round 2 (build 37cc72a94, window 46)
 
@@ -173,6 +188,15 @@ consistent gap. Engage positions match (`--pull`). Answer: a DC refresh matter
 - Rotations match the kills (casts a minute: Felesta Rune Strike 8.8-9.7, Blood
   Boil 5.5-5.9; test DKs 7.3-11.5, 4.8-8.1; Bulwark and test paladins Holy
   Shield 4.8-5.8); burrower lives 30-46 s against 32-43 s.
+- Review, scratch reads over the same contact and landed hits as `--tanks`:
+  - Gaps between one burrower's consecutive landed hits on a side tank: the
+    commonest is 1.2 s in 13 of 14 pulls, 1.3 s in CU, so swings come as fast; one-swing
+    gaps over one- to three-swing gaps (0.95-1.5, 2.15-2.75, 3.35-4.0 s) 0.40-0.84
+    (median 0.71) against CT/CU 0.51-0.66.
+  - Split by the burrower inside or outside the tank's front 180° at the
+    snapshot (no dodge, parry or block from behind): front 0.18-0.57 landed a
+    second of contact (median 0.33), back 0.53-0.91, back share 15-86% (median
+    28%); CT/CU front 0.19-0.28, back 0.53-0.70, back share 13-34%.
 
 **Classification: plan change** (Q1). Nothing the strategy intends fails: the
 keep holds, defensives go under 50%, rotations match.
