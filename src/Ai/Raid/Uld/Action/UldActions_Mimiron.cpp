@@ -1297,7 +1297,7 @@ std::vector<std::pair<uint32, Unit*>> MimironSetDpsPriorityAction::BuildPriority
 
     priority.emplace_back(NPC_JUNK_BOT, SelectByEntry(currentTarget, NPC_JUNK_BOT, junkBots));
 
-    if (IsMimironFireBotCullActive(botAI, bot))
+    if (!PlayerbotAI::IsHeal(bot) && IsMimironFireBotCullActive(botAI, bot))
         priority.emplace_back(NPC_EMERGENCY_FIRE_BOT,
                               SelectByEntry(currentTarget, NPC_EMERGENCY_FIRE_BOT, fireBots));
 

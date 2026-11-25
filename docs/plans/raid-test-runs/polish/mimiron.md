@@ -74,7 +74,7 @@ Water Spray, P4 mines and Hand Pulse.
 - r22: the off-tank takes every P3 Bomb Bot (Q10 a), `p3bomb` slot, class taunt, holds the spot; held.
 - r23: a bear bomb tank shifts to Dire Bear Form in P3 and the hold zeroes `caster form`; held (bear form
   100% of P3 in all five B and C pulls, Bomb Bot deaths 1).
-- r24: fire bots alive when P4 starts stay cull targets; pending.
+- r24: fire bots alive when P4 starts stay cull targets for DPS (the user's Q4 covered H3 only); pending.
 
 **Tried and rejected.**
 
@@ -94,8 +94,8 @@ Water Spray, P4 mines and Hand Pulse.
   a job he does himself.
 - Q1: every Firefighter raid holds a band ~40 yd out through the 1→2 handover and walks in over its last
   ~13 s.
-- Q3: no 15% fire bot sweep. Q4: fire bots kept through P3, culled in H3 (and, from round 24, any H3
-  survivor in P4). Q5: the off-tank tanks the ACU in P4.
+- Q3: no 15% fire bot sweep. Q4: fire bots kept through P3, culled in H3 so P4 starts without them. Q5:
+  the off-tank tanks the ACU in P4.
 - Q6 (a) with Q9 (a): once the beams stop, the P2 wedge takes the fewest-fire 120° arc within 90° of the
   re-aim.
 - Q7 (a): P4 healers on the wedge's front row; Q8: that row stays at 18 yd.
@@ -167,13 +167,16 @@ are kept again: excluded as targets, behind the splash guard.
 
 **Fix** (Mimiron only, hard mode, 10 and 25; a real player kills or ignores them as he likes): the fold
 culls in P4 too (`IsMimironPhase4`), so a survivor stays a DPS priority target after leftover adds, off
-the target exclusions and the splash guard. Nothing summons more in P4 (`SetData(1, 4)` resets the ACU's
+the target exclusions and the splash guard. Healers run `mimiron set dps priority` in P4, so its fire bot
+entry skips them as H3's trigger gate does, and they keep their part (`UldActions_Mimiron.cpp:1300`, review
+fix; else a far fire bot would pull them off the row by `reach spell`). Nothing summons more in P4 (`SetData(1, 4)` resets the ACU's
 events). Reader: `--p4pace` (parts every 30 s, loss rates, the ACU's height, aim and damage by role), test
 `PacePull`. Findings doc: the ACU's height and what it means for melee, the off-tank and the pace; the
 cull in P4.
 
 **Next window should show** (`--firebots`, `--p4pace`): after an H3 that leaves fire bots, P4 closes
-with none (gone = open within ~15 s), P4 Water Spray, siren and splash holds near 0; H3 and P3 unchanged.
+with none (gone = open within ~15 s), P4 Water Spray, siren and splash holds near 0, no healer aimed at
+a fire bot; H3 and P3 unchanged.
 With none left (most pulls) the fix is not exercised.
 
 **Questions for the user.**

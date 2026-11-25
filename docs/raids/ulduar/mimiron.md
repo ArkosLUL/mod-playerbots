@@ -1229,9 +1229,11 @@ set.
 **The cull runs on through phase 4** (`IsMimironPhase4`), since a leftover add can hold the whole
 handover: two of eleven opened with nine fire bots and spent it on leftover Junk and Assault Bots, only
 the tanks hitting fire bots. When phase 4 kept them, four rode a 10-man one and sprayed its last ranged
-DPS dead; in a 25-man one at 1-6% lived 130 s behind the splash guard, the siren silenced 184 raid-s, and
-Berserk caught the ACU at 2.5%. Nothing summons more in phase 4: its `SetData(1, 4)` resets the ACU's
-events. A `p4hold` still keeps held melee off them.
+DPS dead; in a 25-man one, one at 1-6% lived 130 s behind the splash guard, the siren silenced 184 raid-s,
+and Berserk caught the ACU at 2.5%. Nothing summons more in phase 4: its `SetData(1, 4)` resets the ACU's
+events. Held melee (`p4hold`) and healers leave them alone: healers run `mimiron set dps priority` in
+phase 4, but its fire bot entry skips them, as the trigger's gate does in the handover, else a far fire bot
+walks them off their row by `reach spell`.
 
 **Keeping them out of Mimiron's picker is not enough.** The bot tank killed both kept bots on its own,
 since `MimironSetDpsPriorityTrigger` stands down for tanks and `mimiron target guard` only zeroes
