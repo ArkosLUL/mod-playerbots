@@ -1764,7 +1764,8 @@ def show_firebots(trace: Trace) -> None:
               f" spray or siren steps {row['steps']}")
         print(f"       walk-backs after a spray step {row['walkbacks']}; Water Spray hits after one"
               f" {row['walkback_spray_hits']}, {row['walkback_spray_deaths']} dead")
-        ladder = ", ".join(f"+{rung} {count}" for rung, count in sorted(row["ladder"].items(), key=lambda kv: int(kv[0])))
+        ladder = ", ".join(f"+{rung} {count}"
+                           for rung, count in sorted(row["ladder"].items(), key=lambda kv: int(kv[0])))
         print(f"       spray escapes refused on every rung {row['stuck']}; Water Spray hits after one"
               f" {row['stuck_spray_hits']}, {row['stuck_spray_deaths']} dead; ladder legs {ladder or 'none'}")
         if row["barrage_s"]:
@@ -1779,7 +1780,8 @@ def show_firebots(trace: Trace) -> None:
           f" leg within {WALK_BACK_MS / 1000:.1f} s of the same bot's spray step (an accepted fire bot leg whose"
           f" last flee note reads 'spray ok' or 'spray fallback', or 'spray+N' for a ladder rung N yd out),"
           f" and a hit after one lands within {SPRAY_NOTE_MS / 1000:.0f} s of it; an escape refused on every"
-          f" rung is a 'spray unsafe' note, written about once a tick while the bot stands in the lane")
+          " rung is the last rung's 'unsafe' note ('spray+N unsafe', 'spray unsafe' before the ladder),"
+          " written about once a tick while the bot stands in the lane")
 
 
 def unreach_rows(trace: Trace) -> dict:
