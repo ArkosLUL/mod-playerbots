@@ -993,6 +993,8 @@ bool YoggSaronTankLayOnHandsTrigger::IsActive()
 
 bool YoggSaronVigilanceTrigger::IsActive() { return YoggSaronVigilanceTarget(botAI) != nullptr; }
 
+bool YoggSaronGuardianMisdirectTrigger::IsActive() { return YoggSaronMisdirectGuardian(botAI, false) != nullptr; }
+
 bool YoggSaronHealerCombatEngineTrigger::IsActive()
 {
     return PlayerbotAI::IsHeal(bot) && bot->IsAlive() && bot->IsInCombat() &&

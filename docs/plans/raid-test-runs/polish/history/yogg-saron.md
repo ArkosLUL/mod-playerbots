@@ -2309,3 +2309,57 @@ tanks fall sooner and Yogg ends no lower.
 
 **Seen, not picked.** Phase 1 cost 7 nova deaths, no tick killing two; phase 3 leftovers 1-3 everywhere. Hunters
 cast Misdirection 10-15 times a phase 3, all onto one tank (Q4). uld2 bottomed at 12.31% and never crossed.
+
+## Round 26 (2026-11-25, window 44 build 229335cd3: round 25)
+
+**Data.** Window report `scratchpad/window44/window44/window44-yogg-saron.md` (six pulls, one per pool). Traces
+`603_8…1795599012`, `603_7…1795599001`, `603_10…1795599031`, `603_11…1795599039`, `603_9…1795599021`,
+`603_12…1795599050` (uld1-uld6) with `--phase3 --burn --tentacles --brain`, uld1-4 `--novas`; window 39's six with
+`--burn`; scratch reads of leftover targets and ranged damage per target, beacon claims over the 77 Yogg
+traces on disk with drag notes.
+
+Deaths by mechanic (phase 1 / 2 / 3):
+
+- uld1 (A): nova 2 (one melee twice) / — / Immortal Guardian 30; Yogg 7.74%.
+- uld4 (A): nova 3 / Death Ray 1 / Immortal Guardian 27, Gaze 1; Yogg 21.64%.
+- uld2 (B): nova 1 / Death Ray 1 / Immortal Guardian 26, Mercenary Soldier 2, Gaze 1; Yogg 23.72%.
+- uld5 (B): — / — / Immortal Guardian 31; Yogg 3.31%.
+- uld3 (C): nova 1 / — / Immortal Guardian 31; Yogg 2.80%.
+- uld6 (C): — / Curse of Doom 1, skull Gaze 1, Death Ray 1 / Immortal Guardian 28, Drain Life 1; Yogg 11.30%.
+
+**Verdict on round 25 (the burn under 12%): kept**, on Q3's measures. Ranged on Yogg after the crossing 0.98-0.99
+(0.01-0.25), `yogg.burn` on 6-10 bots within 3 s; his fall 0.14 / 0.15 / 0.19%/s (uld1 / uld5 / uld3; window 39
+0.07-0.15). B (uld5) ended at 3.31% (9.41), tanks +20.6 / +45.5 s after it (+26.7); C (uld3) 2.80% (9.70), +28-30
+(+11-20). A's uld1 ended higher, 7.74% (3.63), its first tank dying +7.5 s, 6.7 s after both tanks' beacon drag
+(below); uld6 crossed only at +198 s behind three leftovers and lost both tanks +3.8 / +6.5 s into a collapse
+already running. Not met: 0.25%/s, a kill. uld2 and uld4 never crossed (leftovers). Guardians at 90%+ after 21-40%
+(14-25% before).
+
+**Stop rules.** Not polished: no kill. Phase 3 stays stuck as a race; the both-tank drag is a new root cause.
+
+**Picked: both tanks leave on a beacon drag** (inside phase 3's 173). `YoggSaronBeaconDraggerOrder`
+(`UldEncounter_YoggSaron.cpp:1583`) admitted every bot tank while `tanksAlive > 1`, and a tank is free when only
+marked Guardians hit it, so with the pile all marked both tanks claimed, the stagers too (uld1 10:31.8, uld5
+10:08.2 picked both). The rule's intent, from its commit: "a bot tank only while another tank is left holding the
+pile". Window 44: both tanks dragged in uld1 10:36.9, uld2 8:58.5, uld3 10:27.9, uld5 10:13.1. uld2: fresh G2334
+(8:57.2) killed Uldyaq, Uldyas, Uldyaw, Uldyak, Uldyan, Uldyam 8:59.4-9:09.6 at 94-99%, 33-38 yd from both tanks;
+8 raiders died in the 10.7 s drag, the tanks at 9:12.8 and 9:22.0. uld5: 7 raiders died inside 15 s of the claims, both tanks
++2.2 / +3.4 s after the heal. uld1: Uldxaa died 6.7 s after the release, the pull's first tank death. uld3: tanks
++20-22 s. The 71 older traces had 4 such drags; all 8 had a tank dead +1.9 to +21.9 s after the release. Drags by
+one tank or none with no death in the 20 s before: a tank dead within 25 s in 38 of 120, raiders dead inside them
+51 (0.4 a mark); inside a running collapse they cost more (uld4's 9:52 heal 7, uld3's 11:27 heal 13).
+
+**Fix.** `YoggSaronBeaconDraggerOrder` counts living tanks and those already dragging, and keeps at most
+`alive − dragging − 1` bot tanks (by GUID) at the head of the order, so the next marks go to non-heal paladins and
+DKs, then hunters, then bears; the stage picks follow. A human tank counts as a living tank that never drags, so a
+bot tank still drags beside one. 10-man (one mark) unchanged; same at normal and hard mode. No shared code. Reader:
+`--phase3`'s beacons gain `dragged by` (claimers, tanks dragging of tanks up, raiders dead to the last release) and
+`every tank dragging`; `drag_wave` tested.
+
+**Next window should show** `dragged by` with at most one tank on every mark and `every tank dragging: 0`, raiders
+dead inside a drag 0-1 a mark (uld2 8, uld5 4 here), and no tank death within 20 s of a release where both had dragged.
+Back out if marks go undragged or healed marks reach the pile (`marked pairs`, `other Guardians it reached`).
+
+**Seen, not picked.** Leftovers and the phase 3 opener (open failures 2-3). uld4's ranged stood 34.5 yd from the
+Crusher, in reach (30 + its 4.5), dealing ~6.5k/s a bot against ~11k/s on Guardians elsewhere. uld2's two
+Mercenary Soldier deaths came in phase 3.

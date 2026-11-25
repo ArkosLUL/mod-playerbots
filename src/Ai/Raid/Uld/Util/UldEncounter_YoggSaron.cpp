@@ -246,6 +246,9 @@ struct YoggSaronEncounterState
     TankSwap tankSwap;
     std::unordered_map<ObjectGuid, std::pair<ObjectGuid, uint32>> tankLohClaims;
 
+    RaidObs::ObsGuidMap<ObjectGuid> misdirects{"yogg.misdirect"};
+    std::unordered_map<ObjectGuid, uint32> misdirectClaimMs;
+
     uint32 phase3StartMs = 0;
 
     uint32 hazardNoteMs = 0;
@@ -2369,6 +2372,177 @@ Player* YoggSaronVigilanceTarget(PlayerbotAI* botAI)
     }
 
     return best;
+}
+
+namespace
+{
+bool YoggSaronMisdirectHunter(Player* bot, YoggSaronEncounterState& state)
+{
+    return bot->IsAlive() && bot->HasSpell(SPELL_HUNTER_MISDIRECTION) &&
+           bot->GetPositionZ() >= ULDUAR_YOGG_SARON_BOSS_ROOM_AXIS_Z_PATHING_ISSUE_DETECT &&
+           !state.beaconStages.count(bot->GetGUID()) && !YoggSaronBeaconDragging(bot) &&
+           !YoggSaronBeaconReturning(bot);
+}
+
+bool YoggSaronGuardianFresh(Unit* guardian)
+{
+    if (!IsYoggSaronHoldableGuardian(guardian) || guardian->GetEntry() != NPC_IMMORTAL_GUARDIAN ||
+        !guardian->HasAura(SPELL_RECENTLY_SPAWNED))
+        return false;
+
+    Player* holder = guardian->GetVictim() ? guardian->GetVictim()->ToPlayer() : nullptr;
+
+    return !holder || !PlayerbotAI::IsTank(holder) ||
+           YoggSaronTankThreatLead(holder, guardian) <= ULDUAR_YOGG_SARON_TANK_THREAT_SWITCH_LEAD;
+}
+
+bool YoggSaronRedirecting(Player* bot)
+{
+    return bot->HasAura(SPELL_HUNTER_MISDIRECTION) || bot->HasAura(SPELL_MISDIRECTION);
+}
+
+bool YoggSaronMisdirectInReach(Player* bot, Unit* guardian)
+{
+    return bot->IsWithinDistInMap(guardian, ULDUAR_YOGG_SARON_HUNTER_SHOT_RANGE) && bot->IsWithinLOSInMap(guardian);
+}
+
+bool YoggSaronMisdirectClaimLive(YoggSaronEncounterState const& state, ObjectGuid hunter, uint32 now)
+{
+    auto const claimed = state.misdirectClaimMs.find(hunter);
+
+    return claimed != state.misdirectClaimMs.end() &&
+           getMSTimeDiff(claimed->second, now) < ULDUAR_YOGG_SARON_MISDIRECT_CLAIM_MS;
+}
+
+void YoggSaronReleaseMisdirect(Player* bot, YoggSaronEncounterState& state)
+{
+    state.misdirects.erase(bot->GetGUID());
+    state.misdirectClaimMs.erase(bot->GetGUID());
+}
+}
+
+Player* YoggSaronMisdirectTank(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    Group* group = bot->GetGroup();
+    if (!group)
+        return nullptr;
+
+    YoggSaronEncounterState& state = YoggSaronStateFor(bot);
+    ObjectGuid const shedding = YoggSaronTankSwapLive(bot, state) ? state.tankSwap.from : ObjectGuid::Empty;
+
+    Player* best = nullptr;
+    uint32 bestCount = 0;
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || member == bot || !member->IsAlive() || member->GetMap() != bot->GetMap() ||
+            !PlayerbotAI::IsTank(member) ||
+            member->GetPositionZ() < ULDUAR_YOGG_SARON_BOSS_ROOM_AXIS_Z_PATHING_ISSUE_DETECT ||
+            member->GetGUID() == shedding || state.beaconStages.count(member->GetGUID()) ||
+            YoggSaronBeaconDragging(member) || YoggSaronBeaconReturning(member) || YoggSaronTankLowHold(member))
+            continue;
+
+        uint32 const count = YoggSaronGuardiansOn(member);
+        if (!best || count > bestCount || (count == bestCount && member->GetHealthPct() > best->GetHealthPct()))
+        {
+            best = member;
+            bestCount = count;
+        }
+    }
+
+    return best;
+}
+
+Unit* YoggSaronMisdirectGuardian(PlayerbotAI* botAI, bool claim)
+{
+    Player* bot = botAI->GetBot();
+    if (bot->getClass() != CLASS_HUNTER)
+        return nullptr;
+
+    YoggSaronEncounterState& state = YoggSaronStateFor(bot);
+    if (!YoggSaronMisdirectHunter(bot, state) || !YoggSaronInPhase3(botAI))
+    {
+        YoggSaronReleaseMisdirect(bot, state);
+        return nullptr;
+    }
+
+    uint32 const now = getMSTime();
+    bool const redirecting = YoggSaronRedirecting(bot);
+    bool const ready = !bot->HasSpellCooldown(SPELL_HUNTER_MISDIRECTION);
+    bool const burn = YoggSaronPhase3Burn(botAI);
+    auto const opened = [](Unit* guardian)
+    {
+        Player* holder = guardian->GetVictim() ? guardian->GetVictim()->ToPlayer() : nullptr;
+        return holder && PlayerbotAI::IsTank(holder);
+    };
+
+    auto const own = state.misdirects.find(bot->GetGUID());
+    if (own != state.misdirects.end())
+    {
+        Unit* guardian = botAI->GetUnit(own->second);
+        bool const wanted = redirecting ? !(burn && guardian && opened(guardian))
+                                        : ready && YoggSaronGuardianFresh(guardian);
+        if (guardian && IsYoggSaronHoldableGuardian(guardian) && wanted &&
+            YoggSaronMisdirectClaimLive(state, bot->GetGUID(), now) && YoggSaronMisdirectInReach(bot, guardian))
+            return guardian;
+
+        YoggSaronReleaseMisdirect(bot, state);
+    }
+
+    if (!redirecting && (!ready || !YoggSaronMisdirectTank(botAI)))
+        return nullptr;
+
+    Unit* best = nullptr;
+    int32 bestLeft = 0;
+    for (ObjectGuid const& guid : GetYoggSaronGuardiansInSight(botAI))
+    {
+        Unit* guardian = botAI->GetUnit(guid);
+        if (!YoggSaronGuardianFresh(guardian) || (burn && opened(guardian)) ||
+            !bot->IsWithinDistInMap(guardian, ULDUAR_YOGG_SARON_HUNTER_SHOT_RANGE))
+            continue;
+
+        bool taken = false;
+        for (auto const& [hunter, aim] : state.misdirects)
+            taken = taken || (hunter != bot->GetGUID() && aim == guid && YoggSaronMisdirectClaimLive(state, hunter, now));
+        if (taken)
+            continue;
+
+        Aura const* spawned = guardian->GetAura(SPELL_RECENTLY_SPAWNED);
+        int32 const left = spawned ? spawned->GetDuration() : 0;
+        if (!best || left < bestLeft)
+        {
+            best = guardian;
+            bestLeft = left;
+        }
+    }
+
+    if (best && claim)
+    {
+        state.misdirects[bot->GetGUID()] = best->GetGUID();
+        state.misdirectClaimMs[bot->GetGUID()] = now;
+    }
+
+    return best;
+}
+
+bool YoggSaronMisdirectShotLands(PlayerbotAI* botAI, char const* shot, Unit* guardian)
+{
+    Player* bot = botAI->GetBot();
+    Aura const* window = bot->GetAura(SPELL_MISDIRECTION);
+    if (!window)
+        return bot->HasAura(SPELL_HUNTER_MISDIRECTION);
+
+    uint32 const spellId = botAI->GetAiObjectContext()->GetValue<uint32>("spell id", shot)->Get();
+    SpellInfo const* info = spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
+    if (!info)
+        return false;
+
+    int32 lands = static_cast<int32>(info->CalcCastTime(bot)) + ULDUAR_YOGG_SARON_MISDIRECT_SHOT_MARGIN_MS;
+    if (info->Speed > 0.0f)
+        lands += static_cast<int32>(bot->GetDistance(guardian) / info->Speed * IN_MILLISECONDS);
+
+    return window->GetDuration() >= lands;
 }
 
 bool YoggSaronHealerTargetless(PlayerbotAI* botAI)

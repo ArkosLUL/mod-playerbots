@@ -1479,6 +1479,16 @@ class YoggPhases(unittest.TestCase):
                                            15000)
         self.assertEqual((who, end), ([1, 1], 14000))
 
+    def test_misdirected_openers_take_the_hunters_first_shot_inside_its_claim(self):
+        claims = [(1000, 7, 50), (3000, 7, 0), (4000, 8, 60), (20000, 7, 70)]
+        shots = [(500, 7, 50), (2500, 7, 50), (2000, 7, 50), (3500, 7, 50), (5000, 9, 60), (30000, 7, 70)]
+        self.assertEqual(yogg_saron.misdirected_openers(claims, shots, 8000),
+                         {50: (7, 1000, 2000), 60: (8, 4000, None), 70: (7, 20000, None)})
+
+    def test_misdirected_openers_keep_the_claim_that_shot(self):
+        claims = [(1000, 7, 50), (2000, 7, 0), (2500, 8, 50)]
+        self.assertEqual(yogg_saron.misdirected_openers(claims, [(3000, 8, 50)]), {50: (8, 2500, 3000)})
+
     def test_drag_exposure_counts_only_the_window_after_the_heal(self):
         hits = [(900, 7, 2000), (1500, 7, 9000), (4000, 7, 36000), (5000, 8, 26000), (30000, 7, 40000)]
         self.assertEqual(yogg_saron.drag_exposure(hits, 1000, 20000), {7: (45000, 36000, 2), 8: (26000, 26000, 1)})

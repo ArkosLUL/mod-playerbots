@@ -6,7 +6,7 @@
 (1866, −24), start (1896, −25, 332.3) 84 yd out, doors close 15 s after the pull. Keeper mask Freya only, written as
 instance data by the user's decision, so every kill counts as the hard mode chosen. Reader
 `tools/botobs/bosses/yogg_saron.py` (`--summary` is `--phases` and `--burn`; the room gate is `--room`), tests in
-`tools/botobs/tests/test_botobs.py` (`YoggPhases`); rounds 1-25 in `history/yogg-saron.md`. Window 35 is the first
+`tools/botobs/tests/test_botobs.py` (`YoggPhases`); rounds 1-26 in `history/yogg-saron.md`. Window 35 is the first
 on the professions rosters (all eleven at 450, perks and profession enchants), so trends across window 35 and
 earlier compare unlike rosters.
 
@@ -25,21 +25,23 @@ earlier compare unlike rosters.
   finishing at 8 s left whatever the platform holds. The platform never clears a wave (stock grows each cycle), so
   phase 3 opens mid-stun with 1-4 tentacles (Crusher 2.69M, Corruptor 0.81M).
 - **Phase 3** (Brain at 30%). With no Thorim no Immortal Guardian dies; one spawns every 10 s at ~40 yd from Yogg
-  and leaves stasis at +4 s onto a fixed melee unless a taunt or hit comes first. Ranged stop at 30% (the user's
-  floor), so only tank, area and gaze-time melee damage takes a Guardian to Weakened. Phase 3 ranged rank a Crusher
+  and leaves stasis at +4 s onto a fixed melee unless a taunt or hit comes first (r27: a hunter's misdirected shot
+  opens it on a tank; a bot hunter stands in reach of a third of spawns at spawn, half before a tank holds them).
+  Ranged stop at 30% (the user's floor), so only tank, area and gaze-time melee damage takes a Guardian to
+  Weakened. Phase 3 ranged rank a Crusher
   tier 0 (above Guardians): with 3-4 leftovers they spend 60-120 s on tentacles at ~6.5k/s a bot under Diminish
   Power, no Guardian reaches Weakened, and Yogg's first minute is 5.9-6.8% (7.7-8.9% with 1-2). Shadow Beacon every
   45 s marks 3 Guardians that are dragged to lanes (tank first, then DKs / paladins, hunters, bears). Under 12%
-  ranged burn Yogg (r25): his fall goes from 0.11-0.12 to 0.14-0.19%/s; the tanks then last 4-45 s, so pulls end at
-  2.8-11.3%.
+  ranged burn Yogg (r25): his fall goes from 0.11-0.14 to 0.14-0.19%/s; the tanks then last 4-58 s, so pulls end at
+  1.8-11.3%.
 
-**Compositions on 229335cd3 (window 44, one pull per pool).** No kill; nothing meets the done rule.
+**Compositions on 229335cd3 (window 44 and filler 45, two pulls per pool).** No kill; nothing meets the done rule.
 
-| Design | Pools | Outcome (leftovers at phase 3) |
+| Design | Pools | Outcome: Yogg's end, deaths (leftovers at phase 3) |
 |---|---|---|
-| A | uld1, uld4 | uld1 Yogg 7.74%, 32 deaths (2); uld4 21.64%, 32 (3) |
-| B | uld2, uld5 | uld2 23.72%, 31 (4); uld5 3.31%, 31 (1) |
-| C | uld3, uld6 | uld3 2.80%, 32 (2); uld6 11.30%, 32 (3) |
+| A | uld1, uld4 | uld1 7.74%, 32 (2) / 2.17%, 32 (2); uld4 21.64%, 32 (3) / 3.03%, 32 (2) |
+| B | uld2, uld5 | uld2 23.72%, 31 (4) / 11.81%, 30 (2); uld5 3.31%, 31 (1) / 13.54%, 31 (2) |
+| C | uld3, uld6 | uld3 2.80%, 32 (2) / 15.69%, 32 (2); uld6 11.30%, 32 (3) / 1.83%, 32 (1) |
 
 **Composition differences** (22 pulls on windows 35-37; designs per the roster table, 25-man fields 2 tanks, 4
 healers, 19 DPS):
@@ -47,21 +49,24 @@ healers, 19 DPS):
 1. **B loses its melee in phase 1** more often (4 of 8 pulls lost 3-6 melee in one nova tick; C 1, A 1). No
    composition cause found.
 2. **B's tanks (prot warrior + bear) are the weakest phase 3 pair**: two 30 yd single taunts, no Righteous Defense
-   or Death Grip; fresh Guardians on a raider a median 1.5-2.0 s in window 44 (A 0.8-1.6, C 0.3-0.4); 8-10k/s on
-   the pile. r24's Vigilance helps on its own target.
+   or Death Grip; fresh Guardians on a raider a median 1.2-2.2 s a pull on 229335cd3 (A 0.7-1.6, C 0.3-0.4);
+   8-10k/s on the pile. r24's Vigilance helps on its own target.
 3. **B's and C's ranged deal less in phase 3** (median 79k/s and 87k/s against A's 111k/s). Not root-caused.
 4. **C is closest**: its bear (Growl only) is the weak half.
 
-**Open failures, ranked (window 44).**
+**Open failures, ranked (229335cd3, 12 pulls).**
 
-1. Phase 3 Immortal Guardians, 173: every pull. Stuck as a throughput race (rounds 3-5, 17, 24-25). r26 takes the
-   collapse that came at a beacon both tanks dragged (uld1, uld2, uld5; uld3 20 s later).
-2. Phase 3 leftovers (uld2 4, uld4 3, uld6 3): uld2 and uld4 never crossed 12%, uld6 crossed at +198 s. uld4's
-   Crusher (87%) took 83 s at 28k/s with all 9 ranged on it from 34.5 yd, Diminish Power on 55% of phase 3.
+1. Phase 3 Immortal Guardians, 350: every pull. Stuck as a throughput race (rounds 3-5, 17, 24-25). r26 takes the
+   collapse that came at a beacon both tanks dragged (4 of 38 marks, all in window 44); r27 (Q4) the fresh
+   Guardians: 111 of 179 sat on a raider before a tank held them, killing 15 raiders before the first tank death.
+2. Phase 3 leftovers (1-4 a pull): 4 of 12 pulls never crossed 12% (uld2, uld4 of window 44; uld3 15.69%, uld5
+   13.54% with 2 each), uld6 crossed at +198 s. uld4's Crusher (87%) took 83 s at 28k/s with all 9 ranged on it
+   from 34.5 yd, Diminish Power on 55% of phase 3.
 3. Phase 3 opener: both tanks on platform Corruptors 42-45 yd out at the Brain's 30%, the first Guardian killed a
    melee and a healer in +4.5-7.4 s (uld5, uld6); uld5's warrior took 15 s to the spot.
-4. Shadow Nova 7 (uld4 3, uld1 2 one melee twice, uld2 1, uld3 1), each one melee with nothing up.
-5. Death Ray 3, Lunatic Gaze 3, Captured Mercenary Soldier 2, Curse of Doom 1, Drain Life 1.
+4. Shadow Nova 14 (uld3 4 in filler 45, three on one melee), each one melee with nothing up.
+5. Death Ray 5, Lunatic Gaze 4, Captured Mercenary Soldier 2, Curse of Doom 1, Drain Life 1, Hand of Sacrifice 1,
+   Sara's Blessing 1.
 
 Leads, not picked: a chain-held Guardian on the stack waits on a lower one parked under the 35% floor while both
 bleed (window 37); the DK tank's Death Grip, the warrior's Challenging Shout and the bear's Challenging Roar are held
@@ -72,7 +77,9 @@ a swinging Crusher's reach (round 17); Crusher reach 4.5 since `2026_11_06_01`, 
 18); Army of the Dead ghouls wake phase 3 Guardians; a Diminish Power claim has no timeout, and no tank breaks a
 channel in phase 3; casts finishing on a Guardian gone unkillable (round 20); back-line Guardians the DK's Dark
 Command cannot reach (round 21); a phase 3 tank keeps its platform target and chases back to it while its forced
-walk to the spot reads `wait` (uld5 7:07-7:13).
+walk to the spot reads `wait` (uld5 7:07-7:13); hunters all stand east, so a misdirected opener reaches only spawns
+on that side (stationing them apart is a position change); the control still spends a taunt on a Guardian a hunter
+has claimed.
 
 **Fixes in place.**
 
@@ -100,9 +107,10 @@ walk to the spot reads `wait` (uld5 7:07-7:13).
 - r22 Diminish Power break once that Crusher's stack is carried below (Q2): kept (window 35).
 - r23 a free low Guardian takes the phase 1 focus back outside the handover too: kept (window 37).
 - r24 a warrior tank keeps Vigilance on the other tank in phase 3: kept (window 39).
-- r25 phase 3 ranged drop the Guardians for Yogg under 12% (Q3): kept (window 44: ranged 0.98-0.99 on Yogg after
-  it, his fall 0.14-0.19%/s, B and C end 3.3 / 2.8% against 9.4 / 9.7%; no kill, 0.25%/s not met).
-- r26 at most living tanks − 1 bot tanks drag a beacon mark: pending.
+- r25 phase 3 ranged drop the Guardians for Yogg under 12% (Q3): kept (12 pulls: ranged 0.92-0.99 on Yogg after
+  it, his fall 0.14-0.19%/s, ends 1.8-7.7% in six of its eight crossings; no kill, 0.25%/s not met).
+- r26 at most living tanks − 1 bot tanks drag a beacon mark: pending (no pull yet).
+- r27 a hunter Misdirects each fresh Guardian onto a tank (Q4): pending.
 
 **Tried and rejected.**
 
@@ -126,67 +134,79 @@ re-derive phase 1 positions from the measured orbits, one navprobed position cha
 picked only when it ranks first. Phase 3 burn (Q3, 2026-11-25, built in r25): once Yogg is under 12%, ranged leave
 the Guardians and put everything on him; judged by Yogg's end and the time from 12% to the tank deaths.
 Misdirection on fresh Guardians (Q4, 2026-11-25, yes, for one window since B's fresh Guardians sat on a raider a
-median 1.5-2.0 s in window 44): a hunter puts Misdirection on a bot tank and shoots each fresh Guardian at its spawn,
-so it opens on the tank. Build in r27. The case: a hit ends the 4 s stasis and the redirected threat makes the tank
-its first victim; in window 44 most went to a melee at +4.0 s (first off a tank 5 / 14 of 8 / 20 to melee in B,
-13 / 6 of 18 / 11 in A, 14 / 13 of 20 / 20 in C), and a warrior's or bear's 30 yd taunt reaches them only as they
-walk in. Two hunters give 4 a minute against 6 spawns; hunters already cast Misdirection 5-13 times a phase 3, all
-onto one tank. Risk: a tank that leads by only three shots can still lose the Guardian to the healers' threat.
+median 1.5-2.0 s in window 44, built in r27): a hunter puts Misdirection on a tank and shoots each fresh Guardian at
+its spawn, so it opens on the tank. Two hunters give 4 a minute against 6 spawns. Risk: a tank that leads by only
+a few shots can still lose the Guardian to the healers' threat.
 Left alone by choice: the shaman's Reincarnation onto the stack, late Guardians woken by the back line, the raid
 working the next Guardian while a low one waits out its gap.
 
 **Open questions.** None.
 
-## Round 26 (2026-11-25, window 44 build 229335cd3: round 25)
+## Round 27 (2026-11-25, filler 45 on build 229335cd3: round 25; builds Q4)
 
-**Data.** Window report `scratchpad/window44/window44/window44-yogg-saron.md` (six pulls, one per pool). Traces
-`603_8…1795599012`, `603_7…1795599001`, `603_10…1795599031`, `603_11…1795599039`, `603_9…1795599021`,
-`603_12…1795599050` (uld1-uld6) with `--phase3 --burn --tentacles --brain`, uld1-4 `--novas`; window 39's six with
-`--burn`; scratch reads of leftover targets and ranged damage per target, beacon claims over the 77 Yogg
-traces on disk with drag notes.
+**Data.** Reports `scratchpad/filler45/filler45-yogg-saron.md` (window 44's six pulls and six more on the same build)
+and `scratchpad/window44/window44/window44-yogg-saron.md`. New traces `603_22…1795600849`, `603_27…1795601345`,
+`603_25…1795601264`, `603_23…1795601183`, `603_24…1795601193`, `603_26…1795601325` (uld1, uld4, uld2, uld5, uld3,
+uld6); all twelve with `--phase3`; a scratch read of every phase 3 spawn against the bot hunters' positions. No
+pull on r26's code yet.
 
-Deaths by mechanic (phase 1 / 2 / 3):
+Deaths by mechanic, the six new pulls (phase 1 / 2 / 3):
 
-- uld1 (A): nova 2 (one melee twice) / — / Immortal Guardian 30; Yogg 7.74%.
-- uld4 (A): nova 3 / Death Ray 1 / Immortal Guardian 27, Gaze 1; Yogg 21.64%.
-- uld2 (B): nova 1 / Death Ray 1 / Immortal Guardian 26, Mercenary Soldier 2, Gaze 1; Yogg 23.72%.
-- uld5 (B): — / — / Immortal Guardian 31; Yogg 3.31%.
-- uld3 (C): nova 1 / — / Immortal Guardian 31; Yogg 2.80%.
-- uld6 (C): — / Curse of Doom 1, skull Gaze 1, Death Ray 1 / Immortal Guardian 28, Drain Life 1; Yogg 11.30%.
+- uld1 (A): — / Death Ray 1 / Immortal Guardian 31; Yogg 2.17%.
+- uld4 (A): nova 1, Sara's Blessing 1 / — / Immortal Guardian 30; Yogg 3.03%.
+- uld2 (B): — / — / Immortal Guardian 29, Hand of Sacrifice 1; Yogg 11.81%.
+- uld5 (B): nova 1 / — / Immortal Guardian 29, Gaze 1; Yogg 13.54%.
+- uld3 (C): nova 4 (Uldzaj three times) / Death Ray 1 / Immortal Guardian 27; Yogg 15.69%.
+- uld6 (C): nova 1 / — / Immortal Guardian 31; Yogg 1.83%.
 
-**Verdict on round 25 (the burn under 12%): kept**, on Q3's measures. Ranged on Yogg after the crossing 0.98-0.99
-(0.01-0.25), `yogg.burn` on 6-10 bots within 3 s; his fall 0.14 / 0.15 / 0.19%/s (uld1 / uld5 / uld3; window 39
-0.07-0.15). B (uld5) ended at 3.31% (9.41), tanks +20.6 / +45.5 s after it (+26.7); C (uld3) 2.80% (9.70), +28-30
-(+11-20). A's uld1 ended higher, 7.74% (3.63), its first tank dying +7.5 s, 6.7 s after both tanks' beacon drag
-(below); uld6 crossed only at +198 s behind three leftovers and lost both tanks +3.8 / +6.5 s into a collapse
-already running. Not met: 0.25%/s, a kill. uld2 and uld4 never crossed (leftovers). Guardians at 90%+ after 21-40%
-(14-25% before).
+**Verdicts.** r26 (at most living tanks − 1 bot tanks drag a mark): pending, no pull. Its baseline on r25's code,
+12 pulls: `every tank dragging` 4 of 38 marks (uld1, uld2, uld3, uld5 of window 44, none in the six new), raiders
+dead inside them 12 (uld2 8, uld5 4). r25 (burn under 12%), six more pulls: uld1, uld4, uld6 crossed, his fall
+0.12-0.14 → 0.17-0.18%/s, ends 2.17 / 3.03 / 1.83% with the tanks dead +40-58 s after; uld2 crossed only once both
+tanks were dead, uld3 and uld5 never (2 leftovers each). Kept; no kill.
 
-**Stop rules.** Not polished: no kill. Phase 3 stays stuck as a race; the both-tank drag is a new root cause.
+**Stop rules.** Not polished: no kill. Phase 3 is still the stuck race; this round builds the user's Q4.
 
-**Picked: both tanks leave on a beacon drag** (inside phase 3's 173). `YoggSaronBeaconDraggerOrder`
-(`UldEncounter_YoggSaron.cpp:1583`) admitted every bot tank while `tanksAlive > 1`, and a tank is free when only
-marked Guardians hit it, so with the pile all marked both tanks claimed, the stagers too (uld1 10:31.8, uld5
-10:08.2 picked both). The rule's intent, from its commit: "a bot tank only while another tank is left holding the
-pile". Window 44: both tanks dragged in uld1 10:36.9, uld2 8:58.5, uld3 10:27.9, uld5 10:13.1. uld2: fresh G2334
-(8:57.2) killed Uldyaq, Uldyas, Uldyaw, Uldyak, Uldyan, Uldyam 8:59.4-9:09.6 at 94-99%, 33-38 yd from both tanks;
-8 raiders died in the 10.7 s drag, the tanks at 9:12.8 and 9:22.0. uld5: 7 raiders died inside 15 s of the claims, both tanks
-+2.2 / +3.4 s after the heal. uld1: Uldxaa died 6.7 s after the release, the pull's first tank death. uld3: tanks
-+20-22 s. The 71 older traces had 4 such drags; all 8 had a tank dead +1.9 to +21.9 s after the release. Drags by
-one tank or none with no death in the 20 s before: a tank dead within 25 s in 38 of 120, raiders dead inside them
-51 (0.4 a mark); inside a running collapse they cost more (uld4's 9:52 heal 7, uld3's 11:27 heal 13).
+**Picked: Q4, a hunter Misdirects each fresh Guardian onto a tank.** Baseline over the 12 pulls (`--phase3`), up to
+each first tank death: 111 of 179 Guardians sat on a raider before a tank first held them (median a pull A 0.7-1.6
+s, B 1.2-2.2, C 0.3-0.4), first victim a tank 67 of 179, raiders killed by a fresh Guardian 15 (7 in uld2's
+both-tank drag); `first off a tank` a median +4.0-4.3 s, 5-17 of them to melee a pull. The generic `misdirection on
+main tank` cast 5-13 a phase 3, all on one tank, proccing on whatever the hunter hit.
 
-**Fix.** `YoggSaronBeaconDraggerOrder` counts living tanks and those already dragging, and keeps at most
-`alive − dragging − 1` bot tanks (by GUID) at the head of the order, so the next marks go to non-heal paladins and
-DKs, then hunters, then bears; the stage picks follow. A human tank counts as a living tank that never drags, so a
-bot tank still drags beside one. 10-man (one mark) unchanged; same at normal and hard mode. No shared code. Reader:
-`--phase3`'s beacons gain `dragged by` (claimers, tanks dragging of tanks up, raiders dead to the last release) and
-`every tank dragging`; `drag_wave` tested.
+Mechanics read. `boss_yoggsaron_immortal_guardian::Reset` (`boss_yoggsaron.cpp:1978`) casts Recently Spawned 64497
+(DBC duration 8: 15 s) and roots it for 4 s; `JustEngagedWith` ends the stasis with `SetInCombatWithZone`.
+`ThreatManager::AddThreat` (`ThreatManager.cpp:456-482`) books the redirect share through a nested `AddThreat`
+before the attacker's own, so the tank's reference is created first, `UpdateVictim` picks it and
+`JustStartedThreateningMe` engages the Guardian on it; a spell hit's `SetInCombatWith` (`Spell.cpp:2698`) is combat
+without a threat reference. 34477: 30 s cooldown, 1.5 s GCD; its proc 35079 lasts 4 s (duration 35). Arcane Shot
+instant (cast index 18 plus the ranged 500 ms stays under 0), 6 s cooldown, 40 yd/s.
 
-**Next window should show** `dragged by` with at most one tank on every mark and `every tank dragging: 0`, raiders
-dead inside a drag 0-1 a mark (uld2 8, uld5 4 here), and no tank death within 20 s of a release where both had dragged.
-Back out if marks go undragged or healed marks reach the pile (`marked pairs`, `other Guardians it reached`).
+**Fix.** `yogg-saron guardian misdirect` (`ACTION_RAID + 2`, `YoggSaronMisdirectGuardian` in
+`UldEncounter_YoggSaron.cpp` after `YoggSaronVigilanceTarget`): a bot hunter not dragging, staged or returning claims the oldest fresh Guardian
+(64497 up, unmarked, holdable, on no tank or on one leading by 1.5× at most) within 34 yd in sight, one hunter a
+Guardian (`yogg.misdirect`, 8 s at most); with Misdirection ready it casts it on the tank with the most Guardians,
+then the healthiest, never one shedding a swap or under `YoggSaronTankLowHold`, then shoots (Arcane, Chimera, Aimed,
+Multi-Shot, Steady) only where the shot lands inside the redirect (`YoggSaronMisdirectShotLands`: 34477 unspent, or
+35079's time left over cast + flight + 0.5 s), else the Guardian would open on the hunter. It keeps shooting while
+35079 lasts, not under the burn. `yogg-saron misdirection hold` blocks `misdirection on main tank` in phase 3.
+`…_DISTRACTING_SHOT_RANGE` renamed `…_HUNTER_SHOT_RANGE`. Any tank, humans included; 10 and 25, normal and hard
+mode alike. No shared code. Reader: `--phase3` tags `misdirected +s` per Guardian and prints `misdirected` (claims,
+shots, inside the stasis, first victim a tank; time on a raider and deaths, misdirected against the rest);
+`misdirected_openers` tested.
 
-**Seen, not picked.** Leftovers and the phase 3 opener (open failures 2-3). uld4's ranged stood 34.5 yd from the
-Crusher, in reach (30 + its 4.5), dealing ~6.5k/s a bot against ~11k/s on Guardians elsewhere. uld2's two
-Mercenary Soldier deaths came in phase 3.
+**Reach.** The two bot hunters stood within 35 yd of 57 of 179 spawns at the spawn, 68 inside the stasis, 84 before
+a tank first held them: expect a third to a half of spawns opened, under the 4 of 6 the cooldown allows.
+
+**Next window must show, each judged apart** (r26 acts only between a beacon claim and its release, r27 only on
+Guardians under 15 s old):
+
+- r27: `misdirected` shots near the in-reach spawns, first victim a tank on nearly every shot, inside-stasis shots
+  opening at the shot rather than +4.0 s; misdirected Guardians' time on a raider near 0 against the rest; `raiders
+  killed by a misdirected one` 0; `first off a tank` to ranged not rising. Back out if a misdirected Guardian's first
+  victim is the hunter or it flips to ranged within seconds of the opener.
+- r26: `dragged by` at most one tank a mark, `every tank dragging` 0 (baseline 4 of 38), raiders dead inside a drag
+  0-1 a mark. Deaths inside a drag window are r26's; deaths to a Guardian no tank had held yet are r27's.
+
+**Seen, not picked.** Hunters all stand east, so reach caps r27; stationing them apart is a position change, after
+this window. The control still spends a taunt on a Guardian a hunter has claimed.
+
