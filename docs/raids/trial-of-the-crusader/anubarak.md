@@ -176,6 +176,15 @@ no bot can (two bots and a human off-tank, or three bots, both work). A tank is 
 spec, the main tank the explicit one, else the first living tank: `IsTank` can read false for a tick,
 and a re-read index swaps the sides. A side tank that dies is remembered for the battle res.
 
+**In heroic the class picks the jobs** (user call, 2026-11-25: the bear takes the most burrower
+damage, the class read below). Bots rank paladin, death knight, warrior, druid, assistants first
+within a class; for a side, tank-strategy bots go before tank-by-spec ones (a cat with Thick Hide).
+A flagged human tank keeps him; else the tank-strategy bot ranked third takes him (second of two,
+the only one), latched for the pull, and the flag on a bot, or none, decides nothing. The sides then
+rank as above, the class after bots first, so an unflagged human still takes only a side no bot
+can. DC's aggro start engages him on the flag holder, by then a side tank, so the pickup tank also
+taunts him off a bot side tank.
+
 **A human side tank's side is the tank spot he stands at**, since no bot can tell him one: standing
 within 8 yd of the other side's spot and 4 yd nearer it than his own, he swaps sides with the bot side
 tank, at once when a side just took a new tank (and pre-pull, on the side points), else after 3 s
@@ -482,7 +491,7 @@ Smartface 15, Justice 12).
 
 **Taunt guard.** `anubarak taunt guard` blocks `Taunt`, Righteous Defense included, while the bot's
 current target is him and his victim is another tank, a human included; the pickup tank's own taunt
-off a non-tank is direct and unaffected. He obeys taunt DR, and in phase 1 of the 2026-10-16 kills
+off a non-tank or a bot side tank is direct and unaffected. He obeys taunt DR, and in phase 1 of the 2026-10-16 kills
 the bot main tank taunted him 7 and 15 times (2 and 6 Righteous Defense) through the paladin's
 generic `lose aggro` taunt, trading him with the human tank.
 
@@ -1582,7 +1591,7 @@ personal burst is unrestricted.
 | `escort` | Heroic escort paladin: `walk`, `hold` (shadowing), `post` (at or to its post by the catch), `patch` (waiting by a boosted kiter's patch), `standby` (shadowing a kite with no other paladin's Hand), `none` |
 | `freedom` | `cast` while this paladin owes the kiter Hand of Freedom, `none` |
 | `interrupter` | `1` while the bot holds Shadow Strike duty, `0` once the cast ends |
-| `pickup` | The pickup tank's step: `taunt` (off a non-tank), `attack`, `stepout` (out of Permafrost), `hold` (no leg), `drag` (a leg to the anchor), `submerge` (a leg to the submerge spot), `prestep` (the step round him before a leg), `subhold` (submerge window, no leg to the spot or round a patch) |
+| `pickup` | The pickup tank's step: `taunt` (off a non-tank or a bot side tank), `attack`, `stepout` (out of Permafrost), `hold` (no leg), `drag` (a leg to the anchor), `submerge` (a leg to the submerge spot), `prestep` (the step round him before a leg), `subhold` (submerge window, no leg to the spot or round a patch) |
 | `subspot` | The pickup tank at each submerge-spot search: `x,y,z rN` (N the patch clearance found with) or `none` |
 | `defensive` | What a side tank or the Swarm tank cast, `covered` (one running), `none`, or `kept` (a 120 s+ one held at 50%+ health) |
 | `coldself` | Phase 3 Penetrating Cold carrier's own save: the spell's name, `none` |

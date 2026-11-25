@@ -8,16 +8,18 @@ tests in `tools/botobs/tests/test_anub_arak.py`. Older rounds:
 ## State
 
 **Setup.** Trace slug `anub-arak`, raid `toc`, DC scenario `totc-anubarak` (3
-tanks, 4 healers at 25). A window runs one DC run of two pulls per pool: the
-first waits out the Lich King scene, the second re-pulls in the same instance
-after DC's revive and refresh (`OnPlayerEnter` replayed). Names: pool letters
-x=toc1, y=toc2, z=toc3, u=toc4, v=toc5, w=toc6; slot `aa` main tank (paladin A
-and C, warrior B), side tanks `ab` (bear, B and C) or `am` (blood DK, A) and
-`az` (prot warrior A, prot paladin B, blood DK C). The main tank is the group's
-main tank flag, else its first tank (`StableMainTankGuid`); the other tanks are
-side tanks (`RankSideTanks`). The user's own raid killed 25H on this strategy;
-three pulls are on disk for comparison, Ecoterrorist (bear) on him, side tanks
-Bulwark (prot paladin) and Felesta (blood DK): kills CT
+tanks at 25 and 10, 4 healers at 25, 2 at 10). A window runs one DC run of two pulls per pool:
+the first waits out the Lich King scene, the second re-pulls in the same
+instance after DC's revive and refresh (`OnPlayerEnter` replayed). Names: pool
+letters x=toc1, y=toc2, z=toc3, u=toc4, v=toc5, w=toc6; tanks `aa` (DC's main
+tank flag and its aggro start target: paladin A and C, warrior B), `ab` (bear, B
+and C) or `am` (blood DK, A), `az` (prot warrior A, prot paladin B, blood DK C).
+Up to r4 the flag holder took him and the others the sides. From r5 heroic picks
+by class (boss doc, `AnubarakMainTank`, `RankSideTanks`): on him A `az`
+(warrior), B and C `ab` (bear); side tanks A `aa` + `am` (paladin, DK), B `aa` +
+`az` (warrior, paladin), C `aa` + `az` (paladin, DK). The user's own raid killed
+25H on this strategy; three pulls are on disk for comparison, Ecoterrorist
+(bear) on him, side tanks Bulwark (prot paladin) and Felesta (blood DK): kills CT
 `649_1_anub-arak_1794829976` and CU `649_2_anub-arak_1794938939`, and CV
 `649_1_anub-arak_1795027085` (phase 3 wipe finished by `.die`; its phase 1s
 count).
@@ -48,7 +50,8 @@ with one, the warrior in 7 of A's 10, the paladin in 1 of B's 10. Avoidance and
 hit size match the user's tanks (r3). Facing: a burrower behind lands 0.6-0.7
 hits a second against 0.28 in front, walking or standing; behind time on r3's
 build is forward walks: centre walks 9.6% of contact, `back` decisions the move
-gates drop 6.5%, `fore` walks 2.6% (r4).
+gates drop 6.5%, `fore` walks 2.6% (r4). In the user's kills he opened on
+Felesta and Ecoterrorist took him at 7.7-7.8 s (r5).
 
 **Compositions on 0200b8827 (window 50, 12 valid pulls, all wipes).**
 
@@ -65,9 +68,9 @@ submerges, toc6 `…4848` at 7:28 after three.
 **Open failures, ranked.**
 
 1. Side tank death, then the cascade: burrower melee 318 of 386 deaths; the
-   first death of 11 of 12 pulls. **Stuck (r4):** picked r1 (defensive keep,
-   works), r2 (Q1, answered: 4 healers), r3 (backing up, half works, no change
-   in landed hits or deaths). Waits on Q2 and Q3.
+   first death of 11 of 12 pulls. Picked r1 (defensive keep, works), r2 (Q1,
+   answered: 4 healers), r3 (backing up, half works), stuck r4; r5 builds the
+   user's Q2 (tank jobs by class), so the bear leaves the burrowers.
 2. Phase 3: 9 of 12 reached it, wiped at 5.3-27.1%, each after side tanks died.
 3. Anub'arak melee 27, Penetrating Cold 18, Mandibles 10, Leeching Swarm 4,
    Impale 3, Freezing Slash 3, Shadow Strike 3: mostly inside collapses.
@@ -81,12 +84,11 @@ submerges, toc6 `…4848` at 7:28 after three.
   from the pull until `Swarm`. Verdict r2: works (long casts at 50%+ 4 of 79,
   was 67 of 85).
 - r3: the hold walk backs up, facing its burrowers, while all are on
-  Permafrost (`anub.backup`). Verdict r4: half works. Backed-up walks land 0.28
-  a second; walking behind fell from 27% to 21% of contact, but walking time
-  rose and the landed rate held (0.36 in contact, windows 46 and 49 0.38 and
-  0.36); 38% of the walking under `back` ran forward because the move gates
-  ignore `backwards`: `IsWaitingForLastMove` made 2515 of the 2516 logged hold
-  walk rejections in window 50, `IsDuplicateMove` 1.
+  Permafrost (`anub.backup`). Verdict r4: half works (backed-up walks land 0.28
+  a second, but 38% of the walking under `back` ran forward through the move
+  gates; landed rate and deaths unchanged).
+- r5: heroic tank jobs by class (Q2) and the main tank taunts him off a bot
+  side tank. Verdict: due next window.
 
 **Ideas rejected.**
 
@@ -103,109 +105,81 @@ submerges, toc6 `…4848` at 7:28 after three.
 
 **User answers in force.** The boss doc's user calls (east tank pair in heroic,
 DPS split by side, the push, keep killing phase 3 waves, battle res as is, focus
-once the side tank carries 6+ stacks). r1's defensive keep from the pull (kept
-2026-11-25). Q1 (2026-11-25, restated for r4): polish with 4 healers for now,
-no fifth healer; compare the pool side tanks' defense and avoidance with
-Felesta's and Bulwark's (done r3: no gap) and build the facing fix (built r3).
-- Q2 (2026-11-25): yes. In heroic, bots pick the side tanks by how they take
-  burrower hits, prot paladin first, then blood DK, prot warrior, bear last, and
-  the tank left over takes Anub'arak (at 10 man the same order picks the one side
-  tank), instead of the main tank flag deciding; a human tank keeps the job the
-  flag gives him. Expected: C the user's setup (bear on him, paladin plus DK on
-  burrowers), A paladin plus DK (warrior on him), B paladin plus warrior (bear on
-  him). Bears took 6.1k burrower damage a contact second against a paladin's
-  3.5k and died first in 17 of 20 pulls (r4).
+once the side tank carries 6+ stacks, heroic tank jobs by class). r1's defensive
+keep from the pull (kept 2026-11-25). Q1 (2026-11-25, restated for r4): polish
+with 4 healers for now, no fifth healer; compare the pool side tanks' defense
+and avoidance with Felesta's and Bulwark's (done r3: no gap) and build the
+facing fix (built r3).
+- Q2 (2026-11-25): yes, built r5. In heroic, bots pick the side tanks paladin,
+  DK, warrior, bear, and the tank left over takes Anub'arak (at 10 man the same
+  order picks the one side tank); a human tank keeps the job the main tank flag
+  gives him and the bots fill the other jobs by that order, one code path with
+  or without a real player. This waives r4's stuck rule for failure 1.
 - Q3 (2026-11-25): no. The hold walk is not re-issued when the back-up decision
   flips; the stuck rule stands for r3's gap.
 
 **Open questions.** None.
 
-## Round 4 (build 0200b8827, window 50, stuck)
+## Round 5 (build 0200b8827, no new pulls, Q2 built)
 
-**Data.** `window50-anub-arak.md`: 12 valid pulls on r3's build, first then
-re-pull per pool: toc1 `649_19_…1795614139`, `…4604`; toc4 `649_22_…4270`,
-`…4687`; toc2 `649_20_…4259`, `…4734`; toc5 `649_23_…4313`, `…4765`; toc3
-`649_21_…4269`, `…4745`; toc6 `649_24_…4394`, `…4848`. Baselines window 46 (12,
-`…179560xxxx`) and window 49 (6, `649_19-25_…17956114xx-19xx`, built 14:27
-before r3). `--tanks` and `--phases` on all 30; scratch reads: facing split per
-composition, behind time by mover and `anub.backup`, gait under each value,
-burrower damage per class, first side tank death by class.
+**Data.** No pulls since r4: `window50-anub-arak.md` (12 valid pulls on r3's
+build, read in r4). New read, his first melee targets: the pools' toc1
+`649_19_…4139`, toc2 `649_20_…4259`, toc3 `649_21_…4269` opened on `aa` at
+0.6-1.1 s and it kept him; CT opened on Felesta (2 hits), Ecoterrorist from
+7.8 s, CU Felesta 5 hits, Ecoterrorist from 7.7 s. DC's scenario row
+(`DcTestDungeonRegistry.cpp:475`, 3 tanks at 25 and 10) and its aggro start
+(`DcTestRunRepull.cpp:504` `EngageWithTarget(tank)`, 0 threat, `tank` = the
+flagged slot, `DcTestRunJob.cpp:1220`).
 
-**Deaths.** Burrower melee 318 of 386.
+**Deaths.** As r4: burrower melee 318 of 386; the first death a side tank in 11
+of 12 pulls.
 
-| Pull | Wipe | Burrower / other deaths | First side tank death |
-|---|---|---|---|
-| toc1 …4139 | P3 24.0% | 31 / Anub 2 | Tocxaz (warrior) 5:56 P1c |
-| toc1 …4604 | P3 27.1% | 28 / Anub 3, Cold, Slash | Tocxam (DK) 1:09 P1 |
-| toc4 …4270 | P2c 48.6% | 30 / Impale 2 | Tocuaz (warrior) 3:29 P1b |
-| toc4 …4687 | P1c 60.7% | 33 / - | Tocuaz 1:18 P1 |
-| toc2 …4259 | P3 20.4% | 25 / Anub 2, Swarm, Cold, Shadow Strike | Tocyab (bear) 5:59 P3 |
-| toc2 …4734 | P3 21.0% | 27 / Mandibles 2, Anub 2 | Tocyab 5:53 P3 |
-| toc5 …4313 | P3 26.8% | 27 / Anub 3, Cold | Tocvab (bear) 3:41 P1b |
-| toc5 …4765 | P1b 61.2% | 26 / Impale, Anub, Mandibles, Shadow Strike, Slash | Tocvaz (paladin) 2:42 P1b |
-| toc3 …4269 | P3 10.1% | 21 / Anub 4, Cold 4, Swarm 2, Shadow Strike, Mandibles | Toczab (bear) 1:11 P1 |
-| toc3 …4745 | P3 5.3% | 21 / Cold 6, Anub 5, Swarm | Toczab 1:13 P1 |
-| toc6 …4394 | P3 24.1% | 26 / Anub 3, Mandibles 2, Cold, Slash | Tocwab (bear) 2:43 P1b |
-| toc6 …4848 | P3 14.5% | 23 / Mandibles 4, Cold 4, Anub 2 | Tocwab 5:59 P1c |
+**Stop rules.** Not polished (no kill). Stuck since r4 on failure 1; the user's
+Q2 answer (yes) waives it for this build, Q3 (no) leaves the hold walk as is.
 
-**Stop rules.** Not polished (no kill). Stuck: failure 1 was picked r1, r2 and
-r3 and is still first (above); r3 set r4 to report stuck unless the user waived
-it, and the prompt restated only the 4-healer answer. No strategy change.
+**Previous fix.** r4 changed nothing; r3's verdict stands (half works).
 
-**Previous fix (r3) verdict: half works, no effect on hits or deaths.**
+**Failure and cause.** Failure 1 through the roster: the jobs came from the flag
+(`StableMainTankGuid`: the flag holder on him; `RankSideTanks`: the other tanks
+by bots first, assistants, group order), so B and C held burrowers with the bear
+(6.1k a contact second, first to die in 17 of its 20 pulls) and A with the
+warrior (5.1k) while the paladin (3.5k) sat on him in A and C.
 
-| Contact before phase 3 | A (w46 / w49 → w50) | B | C |
-|---|---|---|---|
-| walking behind share | 31 / 30% → 26% | 26 / 24% → 16% | 24 / 25% → 21% |
-| walking front share | 8 / 7% → 18% | 12 / 8% → 15% | 6 / 8% → 18% |
-| landed a second | 0.39 / 0.37 → 0.39 | 0.38 / 0.33 → 0.32 | 0.37 / 0.39 → 0.37 |
-| walking behind, landed a second | 0.60 / 0.57 → 0.68 | 0.61 / 0.56 → 0.57 | 0.62 / 0.60 → 0.71 |
+**Change (Q2, a plan change the user asked for).**
 
-Against r3's list: `anub.backup back` on all 24 side tanks, yes; walking behind
-27% → 21% of contact, walking front 6-12% → 15-18%, yes; walking landed 0.49 a
-second (0.54, 0.52), but walking behind 0.65 (0.61); all landed 0.40 with hits
-from beyond 6 yd (0.43), 11 of 24 side tanks at 0.43+; first side tank death
-(median, r2's table) A 2:23 (3:35), B 4:47 (2:58), C 1:58 (3:58): one build,
-noise.
+- `ToCHelpers_Anubarak.cpp` `AnubarakMainTank`: heroic, a flagged human tank
+  keeps him; else the tank-strategy bots, alive and in the map, rank paladin, DK,
+  warrior, druid, assistants first within a class, and the one ranked third
+  takes him (second of two, the only one), latched in `state.mainTank` for the pull
+  (`ClearPullLatches` clears it), so a side tank's death never moves him. Normal
+  keeps the flag, else the first living tank.
+- `RankSideTanks`: heroic ranks bots before humans as before, then tank-strategy
+  before tank-by-spec (a cat with Thick Hide never outranks a real tank), class,
+  assistants. Dropped the `walked` skip: a no-op, since the walked main is the
+  first living tank and nothing before it passed the same filter.
+  `GetAnubarakPrepullTanks` uses both, so the pre-pull stands match the pull.
+- `ToCActions_Anubarak.cpp` main tank hold: also taunts him off a bot side tank
+  (`anub.pickup taunt`). The aggro start opens him on `aa`, a side tank in every
+  design now, and the hold only taunted off a non-tank while `anubarak taunt
+  guard` blocks the class taunt with him on a tank.
+- 10 man: the same order; two tanks give the better one the side, DC's three
+  give two sides.
+- Boss doc: the heroic pick, taunt guard, `pickup` row. No shared code.
 
-Where behind time went (hold walk, last `anub.backup`, share of contact, landed
-a second): `frost` 9.6% 0.64, `back` 6.5% 0.69, `fore` 2.6% 0.76; `reach melee`
-1.6%. In front: `back` 10.5% 0.28 (93% backward gait), `frost` 2.3% 0.40,
-`fore` 2.2% 0.31. Before r3 (18 pulls) hold walks were 24.6% behind at 0.61 and
-5.9% front at 0.35. Under `back`, 315 of 825 s walking ran forward (97% forward
-gait). Of 257 flips to `back`, 26 issued a hold walk within 0.3 s, 50 after
-`wait` rejections 0.3-2.6 s later, 181 none before the next change; 161 of the
-257 met a logged `wait` rejection first, the rest none logged (rejections are
-throttled to one a second per action in the trace). Cause:
-`MovementAction::MoveToImpl` drops the move at `IsWaitingForLastMove`
-(MovementActions.cpp:1059, same priority; 2515 of the 2516 logged hold walk
-rejections) or `IsDuplicateMove` (:1047, same destination; 1), neither
-comparing `backwards`, so a flip with the forward walk running changes nothing
-(ToCActions_Anubarak.cpp:435-440).
+Picks per design (25H; the 10H check the same): A on him `az` warrior,
+burrowers `aa` paladin + `am` DK; B on him `ab` bear, burrowers `aa` warrior +
+`az` paladin; C on him `ab` bear, burrowers `aa` paladin + `az` DK (the user's
+setup). Class spells the flag aims (`... on main tank`: Beacon of Light, Sacred
+Shield, Earth Shield, Power Word: Shield, Renew, Lifebloom, Fear Ward, Thorns)
+now land on `aa`, a side tank; Misdirection and Tricks stay blocked all fight
+(`anubarak redirect guard`).
 
-**Side tank class (new read).** 30 pulls, before phase 3 or the tank's death:
-
-| Class | Tank-pulls | Landed a second | Burrower damage a contact second | First side tank death |
-|---|---|---|---|---|
-| bear | 20 | 0.43 | 6.1k | 17 of 20 (B 9, C 8) |
-| warrior | 10 | 0.45 | 5.1k | 7 of A's 10 |
-| blood DK | 20 | 0.40 | 4.5k | 3 of A's 10, 2 of C's 10 |
-| prot paladin | 10 | 0.38 | 3.5k | 1 of B's 10 |
-| Felesta, Bulwark (CT, CU, CV) | 3 each | 0.33, 0.34 | 3.7k, 3.0k | Felesta in CU, Bulwark in CV, both in phase 3 |
-
-The 4 bear deaths in window 50 with `anub.defensive kept` (Toczab 1:13, Tocvab
-3:41, Tocwab 2:43 and 2:57) had frenzied regeneration ready, Tocvab survival
-instincts too, and 94-100% top health in the 6 s before.
-
-**Change.** None to the strategy. Boss doc: r3's measured result and the class
-read. This log.
-
-**Questions** (State has them in full). Q2, a plan change: in heroic pick the
-side tanks by class (prot paladin, blood DK, prot warrior, bear last), the one
-left over on him; recommended yes among bots. Q3: waive the stuck rule to
-re-issue the hold walk when the back-up decision flips; recommended only with
-Q2.
-
-**Next window should show.** Same code, same failure. If Q2 is built: the bear
-(B, C) and the warrior (A) on him; side tank burrower damage a contact second
-nearer 3.5-4.5k; first side tank death later than this table per composition.
+**Next window should show.** `anub.side0`/`side1` the side tanks above, `--tanks`
+naming the main tank above; `anub.pickup taunt` from him in the first seconds
+and him off `aa` within about 2 s, not the user's 7.7 s. Side tank burrower
+damage a contact second nearer 3.5-4.5k (B was bear + paladin, now warrior +
+paladin; C bear + DK, now paladin + DK; A warrior + DK, now paladin + DK); first
+side tank death later than r4's medians (A 2:23, B 4:47, C 1:58); burrower melee
+under 318 of 386. Watch the bear on him in B and C (the user's kills had one)
+and the warrior in A, and whether the paladin side tank holds where B's did (1
+first death in 10). No change in what the hold walk does.

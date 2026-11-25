@@ -759,7 +759,9 @@ bool AnubarakMainTankHoldBossAction::Execute(Event /*event*/)
     Unit* victim = boss->GetVictim();
     Player* victimPlayer = victim ? victim->ToPlayer() : nullptr;
     bool const onNonTank = victim && victim != bot && !IsAnubarakTankPlayer(victimPlayer);
-    if (onNonTank && TryClassTaunt(botAI, bot, boss))
+    bool const onBotSideTank = victimPlayer && victimPlayer != bot && GET_PLAYERBOT_AI(victimPlayer) &&
+                               GetAnubarakBurrowerTankSide(victimPlayer) >= 0;
+    if ((onNonTank || onBotSideTank) && TryClassTaunt(botAI, bot, boss))
     {
         RaidObs::NoteDerived(bot, "anub.pickup", "taunt");
         return true;

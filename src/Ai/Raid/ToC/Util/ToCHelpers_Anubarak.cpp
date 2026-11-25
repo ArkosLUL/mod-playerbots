@@ -196,6 +196,8 @@ const Position ANUBARAK_NORTH_EXITS[] = {{694.50f, 185.36f, 142.12f}, {740.18f, 
 const Position ANUBARAK_SOUTH_EXITS[] = {{694.89f, 102.48f, 142.12f}, {731.99f, 83.38f, 142.12f}};
 constexpr uint8 ANUBARAK_TANK_HOME_NORTH = 1;
 constexpr uint8 ANUBARAK_TANK_HOME_SOUTH = 0;
+constexpr size_t ANUBARAK_SIDE_TANKS = 2;
+constexpr uint8 ANUBARAK_SIDE_TANK_CLASSES[] = {CLASS_PALADIN, CLASS_DEATH_KNIGHT, CLASS_WARRIOR, CLASS_DRUID};
 constexpr float ANUBARAK_REFILL_MAX = 30.0f;
 constexpr float ANUBARAK_REFILL_FLOOR = 45.0f;
 constexpr float ANUBARAK_RAID_POINT_OFFSET = 18.0f;
@@ -811,6 +813,7 @@ void ClearPullLatches(AnubarakState& state)
     state.strikeMemoValid = false;
     state.submergeSpotValid = false;
     state.submergeDragStarted = false;
+    state.mainTank.Clear();
     state.sideTanks[0].Clear();
     state.sideTanks[1].Clear();
     state.humanSwapValid = false;
@@ -913,14 +916,21 @@ bool BossStillFor(AnubarakState const& state, uint32 now, uint32 ms)
     return state.bossStillValid && getMSTimeDiff(state.bossStillMs, now) >= ms;
 }
 
-ObjectGuid StableMainTankGuid(Group* group, bool& walked)
+ObjectGuid FlaggedMainTank(Group* group)
 {
-    walked = false;
     for (Group::MemberSlot const& slot : group->GetMemberSlots())
         if (slot.flags & MEMBER_FLAG_MAINTANK)
             return slot.guid;
 
-    walked = true;
+    return ObjectGuid::Empty;
+}
+
+ObjectGuid StableMainTankGuid(Group* group)
+{
+    ObjectGuid const flagged = FlaggedMainTank(group);
+    if (!flagged.IsEmpty())
+        return flagged;
+
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
@@ -931,29 +941,83 @@ ObjectGuid StableMainTankGuid(Group* group, bool& walked)
     return ObjectGuid::Empty;
 }
 
-std::vector<ObjectGuid> RankSideTanks(Player* bot, Group* group, ObjectGuid const& mainTank, bool walked)
+uint8 SideTankClassRank(Player* member)
 {
-    std::vector<ObjectGuid> ranks[4];
-    bool turnedDown = walked;
+    uint8 rank = 0;
+    for (uint8 tankClass : ANUBARAK_SIDE_TANK_CLASSES)
+    {
+        if (member->getClass() == tankClass)
+            return rank;
+
+        ++rank;
+    }
+
+    return rank;
+}
+
+using TankRank = std::pair<std::array<uint8, 4>, ObjectGuid>;
+
+std::vector<ObjectGuid> SortedTanks(std::vector<TankRank>& ranked)
+{
+    std::stable_sort(ranked.begin(), ranked.end(),
+                     [](TankRank const& a, TankRank const& b) { return a.first < b.first; });
+
+    std::vector<ObjectGuid> tanks;
+    for (TankRank const& rank : ranked)
+        tanks.push_back(rank.second);
+
+    return tanks;
+}
+
+ObjectGuid AnubarakMainTank(Player* bot, Group* group, ObjectGuid const& held)
+{
+    if (!AnubarakHeroic(bot))
+        return StableMainTankGuid(group);
+
+    ObjectGuid const flagged = FlaggedMainTank(group);
+    Player* holder = flagged.IsEmpty() ? nullptr : ObjectAccessor::GetPlayer(*bot, flagged);
+    if (holder && !GET_PLAYERBOT_AI(holder) && IsAnubarakTankPlayer(holder))
+        return flagged;
+
+    Player* kept = held.IsEmpty() ? nullptr : ObjectAccessor::GetPlayer(*bot, held);
+    if (kept && GET_PLAYERBOT_AI(kept))
+        return held;
+
+    std::vector<TankRank> ranked;
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
-        if (member && member->GetGUID() == mainTank)
-            turnedDown = false;
-
-        if (!member || !member->IsAlive() || !member->IsInMap(bot) || member->GetGUID() == mainTank ||
-            turnedDown || !IsAnubarakTankPlayer(member))
-            continue;
-
-        uint8 const rank = (GET_PLAYERBOT_AI(member) ? 0 : 2) + (group->IsAssistant(member->GetGUID()) ? 0 : 1);
-        ranks[rank].push_back(member->GetGUID());
+        if (member && member->IsAlive() && member->IsInMap(bot) && GET_PLAYERBOT_AI(member) &&
+            PlayerbotAI::IsTank(member))
+            ranked.push_back({{SideTankClassRank(member), !group->IsAssistant(member->GetGUID()), 0, 0},
+                              member->GetGUID()});
     }
 
-    std::vector<ObjectGuid> roster;
-    for (std::vector<ObjectGuid> const& rank : ranks)
-        roster.insert(roster.end(), rank.begin(), rank.end());
+    if (ranked.empty())
+        return StableMainTankGuid(group);
 
-    return roster;
+    std::vector<ObjectGuid> const tanks = SortedTanks(ranked);
+    return tanks[std::min(ANUBARAK_SIDE_TANKS, tanks.size() - 1)];
+}
+
+std::vector<ObjectGuid> RankSideTanks(Player* bot, Group* group, ObjectGuid const& mainTank)
+{
+    bool const byClass = AnubarakHeroic(bot);
+    std::vector<TankRank> ranked;
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || !member->IsAlive() || !member->IsInMap(bot) || member->GetGUID() == mainTank ||
+            !IsAnubarakTankPlayer(member))
+            continue;
+
+        PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
+        ranked.push_back({{!memberAI, byClass && memberAI && !PlayerbotAI::IsTank(member),
+                           byClass ? SideTankClassRank(member) : uint8(0), !group->IsAssistant(member->GetGUID())},
+                          member->GetGUID()});
+    }
+
+    return SortedTanks(ranked);
 }
 
 void RefreshSideTanks(Player* bot, AnubarakState& state, bool placed[2])
@@ -967,9 +1031,8 @@ void RefreshSideTanks(Player* bot, AnubarakState& state, bool placed[2])
         return;
     }
 
-    bool walked = false;
-    state.mainTank = StableMainTankGuid(group, walked);
-    std::vector<ObjectGuid> const roster = RankSideTanks(bot, group, state.mainTank, walked);
+    state.mainTank = AnubarakMainTank(bot, group, state.mainTank);
+    std::vector<ObjectGuid> const roster = RankSideTanks(bot, group, state.mainTank);
 
     for (ObjectGuid& held : state.sideTanks)
     {
@@ -5563,9 +5626,8 @@ AnubarakPrepullTanks GetAnubarakPrepullTanks(Player* bot)
     if (!group)
         return tanks;
 
-    bool walked = false;
-    ObjectGuid const mainTank = StableMainTankGuid(group, walked);
-    std::vector<ObjectGuid> const sides = RankSideTanks(bot, group, mainTank, walked);
+    ObjectGuid const mainTank = AnubarakMainTank(bot, group, ObjectGuid::Empty);
+    std::vector<ObjectGuid> const sides = RankSideTanks(bot, group, mainTank);
     for (size_t side = 0; side < 2 && side < sides.size(); ++side)
         tanks.side[side] = sides[side];
 
