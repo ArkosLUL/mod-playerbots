@@ -231,7 +231,7 @@ bool FlameLeviathanVehicleAction::ThrowPassenger(Unit* boss)
         FlameLeviathanIsRamTarget(bot))
         return false;
 
-    if (_vehicleBase->GetCurrentSpell(CURRENT_GENERIC_SPELL))
+    if (_vehicleBase->IsNonMeleeSpellCast(false, true, true))
         return true;
 
     Player* passenger = FlameLeviathanCatapultPassenger(_vehicleBase);
@@ -752,7 +752,7 @@ bool FlameLeviathanDriveAction::Execute(Event /*event*/)
         return true;
     }
 
-    if (_vehicleBase->GetCurrentSpell(CURRENT_GENERIC_SPELL) || Catapult(boss))
+    if (_vehicleBase->IsNonMeleeSpellCast(false, true, true) || Catapult(boss))
     {
         branch("catapult");
         return true;
