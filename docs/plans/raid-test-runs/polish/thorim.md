@@ -96,8 +96,8 @@ past the kill; raid %/s before it 0.46-0.52. A gauntlet healer lost in phase 1 c
 - R28: a stepped ring bot clear of the hazards re-steps while another slot's bot or point is in its jump (slot-clear
   passes only, never across the lit cone); `RingBodyBridgesChain` counts another slot at its point too — pending.
 - R29: a ring walk or Blizzard step started while `ThorimChainWaitDue` holds, ending in another group's jump, waits
-  for the chain (`ThorimRingChainWait`), only from a spot clear of other groups' bodies and while the cone stays
-  escapable (user) — pending.
+  for the chain (`ThorimRingChainWait`), only from a spot clear of other groups' bodies, outside a Blizzard zone and
+  while the cone stays escapable (user) — pending.
 
 **Tried and rejected:**
 - Balcony runner: the user ruled it out (phase 2 with the squad deep in the corridor).
@@ -188,6 +188,11 @@ also in `TickThorim`), note `thorim.ringchainwait` `wait walk|step` / `none`. Wh
 counts the bot settled, new rule `thorim ring chain wait` blocks Reach and Charge, the chain-wait cast hold covers it.
 Reader `--ringwait` (tested in `test_thorim.py`); boss doc "A ring move under the lit orb waits for the chain",
 "Pets never chain". `pb-check` passes.
+
+**Review fix:** nothing kept a held bot out of Blizzard. The replay checked zones only at the hold's start (0 of 703),
+but a step fires on the bunny's 8 yd lead, which it walks in about a second, so a zone can land on a bot held for a
+step. `ThorimRingChainWait` now releases a bot carrying a zone's aura (62576/62602), at the start or mid-wait; boss
+doc bullet "outside Blizzard".
 
 **Next window with R29 should show** (hard-mode pulls; R28's window comes first):
 - `--ringwait`: ~12 waits a pull, p50 ~0.9 s, most released by the landing; waiters hit by the chain while walking

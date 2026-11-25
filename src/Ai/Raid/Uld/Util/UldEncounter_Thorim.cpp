@@ -3464,7 +3464,8 @@ bool ThorimRingChainWait(PlayerbotAI* botAI, Player* bot, Position const& destin
         hold = {state.lightningOrbLitMs, false, false};
 
     if (hold.released || !ThorimChainWaitDue(state, boss) ||
-        bot->GetExactDist2d(&destination) <= ULDUAR_THORIM_RING_CHAIN_MIN_STEP)
+        bot->GetExactDist2d(&destination) <= ULDUAR_THORIM_RING_CHAIN_MIN_STEP ||
+        bot->HasAura(SPELL_SIF_BLIZZARD_ZONE_10) || bot->HasAura(SPELL_SIF_BLIZZARD_ZONE_25))
         return ThorimReleaseRingChainHold(bot, hold);
 
     if (!hold.waiting && (!RingSpotInOtherGroupJump(bot, boss, destination, true) ||

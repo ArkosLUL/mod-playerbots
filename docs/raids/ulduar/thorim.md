@@ -399,6 +399,8 @@ way is not stopped. It holds only:
   regardless, 7 replayed chains grew, against 1.
 - **while the cone stays escapable:** a bot inside the ring's cone line waits only if its destination is
   in reach setting off at the bar's end or the cap (`ThorimWalkBeatsCone`, the camp's test).
+- **outside Blizzard:** a bot in a zone (aura 62576/62602) moves at once, and a zone landing on a waiting
+  bot releases it: the bunny walks the 8 yd lead in about a second.
 
 While it waits the movement guard counts it settled, `thorim ring chain wait` blocks `Reach` and `Charge`,
 and `ThorimChainWaitCastHoldMultiplier` holds cast-time spells; `thorim.ringchainwait` reads `wait walk` or
