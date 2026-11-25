@@ -2647,3 +2647,80 @@ lust (uld6); uld6's healers in Blizzard; Smash on melee standing inside the Colo
 **Questions for the user:** none new; question 1 (State) stays open.
 
 **Shared code touched:** none (Thorim files and the Thorim reader).
+
+## Round 26 (window 39: build 6694fb83e with round 25)
+
+**Data:** `window39-thorim.md` (session scratchpad), one valid pull per pool; traces
+`603_{1,4,2,5,3,6}_thorim_{1795560092,1795560103,1795560093,1795560101,1795560098,1795560104}` (uld1, uld4, uld2,
+uld5, uld3, uld6), read with `thorim.py --colossus/--chains/--shelters` and the new `--chainwait`, `postmortem.py
+--death`, and session scratchpad `thorim_r26/` scripts (`replay.py`: the wait rule over the 95 Thorim pulls on disk,
+53 of them hard mode; `healer_moves.py`).
+
+| Pool | Out | Deaths by mechanic |
+|---|---|---|
+| uld1 (A) | wipe, hard, 14.0% | CL 2 (tank to slot 2 +57.3 s; camp orb 2 walkers +87.2 s), LC 2 (camp walkers, Volley / Frost Nova), then tanks +155.6 s, Thorim melee 19, CL 5, LC 2, Blizzard 1, US 1 |
+| uld4 (A) | **kill, hard, 0** | none |
+| uld2 (B) | kill, normal, 1 | P1 Honor Guard melee (ranged) |
+| uld5 (B) | wipe, hard, 39.0% | none before the tanks (+78.4 s, Volley then melee); Thorim melee 24, US 2, Blizzard 1, Frostbolt 1 |
+| uld3 (C) | kill, normal, 2 | P1 gauntlet healer at the Giant hold (Cleave); CL 1 (opening under lust) |
+| uld6 (C) | kill, normal, 4 | P1 gauntlet healer at the Giant hold (Cleave); CL 3 (slot 1, tanks, slot 0, +56.9 s) |
+
+**Stop rules:** waived for Thorim (user, 2026-11-24). Done rule on this build: A has a hard-mode kill (uld4, 0
+deaths); B and C killed only in normal mode.
+
+**Round 25 verdict (gauntlet healers 15 yd short of the leader): held on the Smash in A, B and C.** `--colossus`:
+healers within 6 yd of his target 0, Smash hits on healers 0, deaths 0 (w37: 4 hit, 3 dead); healers 9.8 yd behind
+him at 175-177° (uld3) or 17.4-17.8 yd off his flank (uld2, uld5), none out of heal range; no Smash cast in uld1,
+uld4, uld6. Watch items: corridor Runic Smash killed no healer. The Giant hold did: uld3 Uldzae (at the Giant, 0.1 yd)
+and uld6 Uldwae, whose `thorim gauntlet positioning action` moves ran from the ramp top (z 438) to the leader's exact
+spot (2187.79, −432.78), the trail's fallback when the path is not normal; Rune Detonation, Stomp and Honor Guard
+Cleave, both pulls then normal mode. Before R25 every trail took that spot, so the fallback is what is left
+(failure 3). Hard-mode phase 2 3 of 6 (w37 5 of 6): uld3 and uld6 after the healer loss; uld2 (no loss, the Colossus
+lived through two Smashes) unexplained.
+
+**Failure built: the user's Q1 (a), camp Chain Lightning through shelter walkers** (failure 2's camp share).
+- uld1 +87.2 s, orb 2: Uldxas, Uldxao, Uldxav (slot 1), Uldxap (slot 2), Uldxaw; Uldxaw dead at hop 5. Uldxap's walk
+  to row (2, 2) passed 0.8 yd from another slot's body, Uldxav's 2.4 yd; the replayed chain with the held walkers standing
+  stops after four hops, none on Uldxap or Uldxaw.
+- 53 hard-mode pulls on disk, before the first tank death: camp chain deaths by orb 4, 6, 10, 0, 0, 0, 0 (orbs 0-6),
+  16 of 20 under orbs 1 and 2; chains of 4+ camp hits 5 and 6 there.
+- Timing over 395 hard-mode casts, from the lit stamp: cast start p50 506 ms, p90 995, max 1523; landing p50 1049,
+  p90 1552, max 2095. 191 of 586 lit orbs had no cast: the trace's cast hook fires after `CheckCast`, and
+  `boss_thorim.cpp:737` repeats the event in 15 s whether or not the cast goes out.
+- **Classification: plan change, answered by the user** (Q1 (a)); built as answered.
+
+**Fix** (`UldEncounter_Thorim.cpp/.h`, `UldMultipliers_Thorim.cpp/.h`, `UldDefinition_Thorim.cpp`, Thorim only, no
+size, mode or player branch): `ThorimCampChainWait` decides once per orb on orbs 1 and 2
+(`ULDUAR_THORIM_CHAIN_WAIT_ORBS`): a camp bot whose straight walk to its row passes within 5 yd plus both reaches of
+any floor member outside its own ranged slot (a real player has no slot, so counts) stands, note `slot N orb M wait`,
+until the Chain Lightning cast bar ends (`chainLightningEndMs` from Thorim's current spell, read in `TickThorim` and
+on each call). No bar by lit + 1 s (`ULDUAR_THORIM_CHAIN_WAIT_CAP_MS`) releases it; a cast ended up to 5 s before the
+lit counts as landed. It waits only if, setting off at the bar's end or the cap, the row or a cone step is in reach,
+or it stands out of the lit cone (`ThorimCampShelterInTime` / `ThorimCampConeStep` take a set-off time).
+`ThorimChainWaitCastHoldMultiplier` zeroes cast-time and channelled spells while it waits. Beyond the answer's text,
+both from the replay: the cap and the reach guard. Reader `--chainwait`, tested in `test_thorim.py`; boss doc:
+"A walk that passes another slot's body waits for the chain" and the section. `pb-check` passes (syntax, pblint,
+codestyle, botobs).
+
+**Replay** (`replay.py`, 53 hard-mode pulls, 1,251 orb 1 and 2 walks; set-off at the landing + 150 ms or the cap;
+the chain re-run hop by hop to the nearest unhit body within 8 yd, pets included; cone hit ≤ 37.5° off its axis, the
+widest decoded hit 37.2°; a delayed walk replayed as its own track shifted, or a straight walk to the step):
+- 651 walks wait (453 before the first tank death), 548 set off later; the guard lets 63 walk (2 chain hits, 0 dead).
+- Chain: all 14 walkers a chain killed (10 before the first tank death) stand at the landing; on the 80 chains the hop
+  model reproduces, camp hits 143 → 118, at hop 5 or later 14 → 4.
+- Cone: 11 delayed walks newly end in it, 11 leave it (5 / 5 before the first tank death). Normal mode (42 pulls):
+  405 waits, 1 new cone hit, 3 chain deaths stand at the landing.
+
+**Next window should show** (hard-mode pulls, `--chainwait`, `--shelters`):
+- waits on orbs 1-2 with crossing walks, most released by the landing; waiters hit by the chain while walking ~0;
+  camp chain deaths under orbs 1-2 before the first tank death 0-1 a window, chains of 4+ camp hits there ≤ 1.
+- cone hits and deaths on waiters before the first tank death ≤ 1 a window; `--shelters` hits on walks no higher than
+  w39 (uld1: 2 hit, 2 dead).
+- Watch: Thorim %/s over the first 100 s not lower (the wait holds cast-time spells up to ~1 s an orb).
+
+**Seen, not picked:** the Giant hold trail fallback (failure 3, next); tank to ring chains (uld1 +57.3 s, uld6 +56.9
+s); the opening chain under lust (uld3); uld5's Volley on the holder.
+
+**Questions for the user:** none.
+
+**Shared code touched:** none (Thorim files and the Thorim reader).

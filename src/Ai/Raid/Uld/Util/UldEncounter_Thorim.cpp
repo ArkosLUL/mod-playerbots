@@ -3271,6 +3271,24 @@ static std::array<Position, 9> const ULDUAR_THORIM_SIF_BLIZZARD_PATH = {
     Position(2109.3f, -246.4f, 419.4f),   Position(2117.9f, -238.6f, 419.4f), Position(2128.8f, -232.1f, 419.4f),
     Position(2151.9f, -237.5f, 419.4f),   Position(2164.9f, -256.3f, 419.4f), Position(2161.5f, -280.0f, 419.4f)};
 
+static size_t ThorimBlizzardLegOf(Position const& bunny)
+{
+    size_t from = 0;
+    float nearest = std::numeric_limits<float>::max();
+    for (size_t leg = 0; leg + 1 < ULDUAR_THORIM_SIF_BLIZZARD_PATH.size(); ++leg)
+    {
+        float const distance = ThorimSegmentDistance2d(bunny, ULDUAR_THORIM_SIF_BLIZZARD_PATH[leg],
+                                                       ULDUAR_THORIM_SIF_BLIZZARD_PATH[leg + 1]);
+        if (distance < nearest)
+        {
+            nearest = distance;
+            from = leg;
+        }
+    }
+
+    return from;
+}
+
 static std::vector<std::pair<Position, Position>> ThorimBlizzardPathAhead(Player* bot)
 {
     ThorimBlizzardSpots(bot);
@@ -3278,25 +3296,46 @@ static std::vector<std::pair<Position, Position>> ThorimBlizzardPathAhead(Player
     std::vector<std::pair<Position, Position>> legs;
     for (Position const& bunny : ThorimStateFor(bot).blizzardBunnies)
     {
-        size_t from = 0;
-        float nearest = std::numeric_limits<float>::max();
-        for (size_t leg = 0; leg + 1 < ULDUAR_THORIM_SIF_BLIZZARD_PATH.size(); ++leg)
-        {
-            float const distance = ThorimSegmentDistance2d(bunny, ULDUAR_THORIM_SIF_BLIZZARD_PATH[leg],
-                                                           ULDUAR_THORIM_SIF_BLIZZARD_PATH[leg + 1]);
-            if (distance < nearest)
-            {
-                nearest = distance;
-                from = leg;
-            }
-        }
-
+        size_t const from = ThorimBlizzardLegOf(bunny);
         legs.emplace_back(bunny, ULDUAR_THORIM_SIF_BLIZZARD_PATH[from + 1]);
         for (size_t leg = from + 1; leg + 1 < ULDUAR_THORIM_SIF_BLIZZARD_PATH.size(); ++leg)
             legs.emplace_back(ULDUAR_THORIM_SIF_BLIZZARD_PATH[leg], ULDUAR_THORIM_SIF_BLIZZARD_PATH[leg + 1]);
     }
 
     return legs;
+}
+
+static bool ThorimRingBlizzardAhead(Player* bot, Position const& spot)
+{
+    if (!bot)
+        return false;
+
+    ThorimBlizzardSpots(bot);
+
+    for (Position const& bunny : ThorimStateFor(bot).blizzardBunnies)
+    {
+        Position from = bunny;
+        float left = ULDUAR_THORIM_RING_BLIZZARD_LEAD;
+        for (size_t leg = ThorimBlizzardLegOf(bunny) + 1; leg < ULDUAR_THORIM_SIF_BLIZZARD_PATH.size() && left > 0.0f;
+             ++leg)
+        {
+            Position const& next = ULDUAR_THORIM_SIF_BLIZZARD_PATH[leg];
+            float const length = from.GetExactDist2d(next.GetPositionX(), next.GetPositionY());
+            Position to = next;
+            if (length > left)
+                to = Position(from.GetPositionX() + (next.GetPositionX() - from.GetPositionX()) * left / length,
+                              from.GetPositionY() + (next.GetPositionY() - from.GetPositionY()) * left / length,
+                              next.GetPositionZ());
+
+            if (ThorimSegmentDistance2d(spot, from, to) < ULDUAR_THORIM_RING_BLIZZARD_CLEARANCE)
+                return true;
+
+            left -= length;
+            from = next;
+        }
+    }
+
+    return false;
 }
 
 bool ThorimWalkUnderBlizzard(Player* bot, Position const& from, Position const& to)
@@ -3417,7 +3456,7 @@ bool ThorimRingBlizzardCovered(Player* bot, Position const& ringPoint)
     if (!bot)
         return false;
 
-    bool const covered = ThorimSpotUnderBlizzard(bot, ringPoint) ||
+    bool const covered = ThorimSpotUnderBlizzard(bot, ringPoint) || ThorimRingBlizzardAhead(bot, ringPoint) ||
                          (bot->GetExactDist2d(&ringPoint) > ULDUAR_THORIM_RING_ARRIVE_TOLERANCE &&
                           !ThorimSpotUnderBlizzard(bot, *bot) && ThorimWalkUnderBlizzard(bot, *bot, ringPoint));
 
@@ -3449,7 +3488,8 @@ bool ThorimRingBlizzardStep(PlayerbotAI* botAI, Player* bot, Position& out)
     auto const outOfCone = [boss, orb, coneBearing](float x, float y)
     { return !orb || !InLightningChargeCone(BearingFromBoss(boss, x, y), coneBearing); };
 
-    if (!ThorimSpotUnderBlizzard(bot, *bot) && outOfCone(bot->GetPositionX(), bot->GetPositionY()))
+    if (!ThorimSpotUnderBlizzard(bot, *bot) && !ThorimRingBlizzardAhead(bot, *bot) &&
+        outOfCone(bot->GetPositionX(), bot->GetPositionY()))
         return false;
 
     Position ring;
@@ -3514,11 +3554,12 @@ bool ThorimRingBlizzardStep(PlayerbotAI* botAI, Player* bot, Position& out)
             (pass.clearOfPath && pathAhead.empty()))
             continue;
 
-        auto const accept = [boss, pass, tankClearance, &outOfCone, &clearOf, &clearOfPath, &otherSlots,
+        auto const accept = [bot, boss, pass, tankClearance, &outOfCone, &clearOf, &clearOfPath, &otherSlots,
                              &camp](float x, float y)
         {
             if (x < ULDUAR_THORIM_ARENA_BOX_MIN_X || x > ULDUAR_THORIM_ARENA_BOX_MAX_X ||
-                y < ULDUAR_THORIM_ARENA_BOX_MIN_Y || y > ULDUAR_THORIM_ARENA_BOX_MAX_Y || !outOfCone(x, y))
+                y < ULDUAR_THORIM_ARENA_BOX_MIN_Y || y > ULDUAR_THORIM_ARENA_BOX_MAX_Y || !outOfCone(x, y) ||
+                ThorimRingBlizzardAhead(bot, Position(x, y, 0.0f)))
                 return false;
 
             if (pass.pastRing && boss->GetExactDist2d(x, y) < ULDUAR_THORIM_MELEE_RING_RADIUS)

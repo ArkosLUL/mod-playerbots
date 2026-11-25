@@ -10,7 +10,9 @@
                                ring and camp spacing, hazards on each tank
     thorim.py <file> --blizzard  each Sif Blizzard against the melee ring: slot points it covered, who
                                  stood in it and how long, ticks taken, step-outs (how many landed on
-                                 the bunny's path ahead or under a zone soon after) and the walk back
+                                 the bunny's path ahead or under a zone soon after, how many walked
+                                 across its path ahead and how far short of the crossing the bunny
+                                 was) and the walk back
     thorim.py <file> --chains    each Chain Lightning hop by hop: which groups (tank, camp, a ring slot, a
                                  slot stepped out of Blizzard or walking back from it) it crossed between
                                  and how far, who died after which crossing
@@ -222,11 +224,38 @@ def segment_gap(point, start, end) -> float:
     return dist2(point, (start[0] + dx * along, start[1] + dy * along))
 
 
-def path_ahead_gap(point, bunny) -> float:
+def legs_ahead(bunny) -> list:
     legs = list(zip(SIF_BLIZZARD_PATH, SIF_BLIZZARD_PATH[1:]))
     leg = min(range(len(legs)), key=lambda index: segment_gap(bunny, *legs[index]))
-    ahead = [(bunny, legs[leg][1])] + legs[leg + 1:]
-    return min(segment_gap(point, start, end) for start, end in ahead)
+    return [(bunny, legs[leg][1])] + legs[leg + 1:]
+
+
+def path_ahead_gap(point, bunny) -> float:
+    return min(segment_gap(point, start, end) for start, end in legs_ahead(bunny))
+
+
+def segment_crossing(start, end, first, second):
+    rx, ry = end[0] - start[0], end[1] - start[1]
+    sx, sy = second[0] - first[0], second[1] - first[1]
+    across = rx * sy - ry * sx
+    if not across:
+        return None
+    qx, qy = first[0] - start[0], first[1] - start[1]
+    along_walk = (qx * sy - qy * sx) / across
+    along_leg = (qx * ry - qy * rx) / across
+    if not (0.0 <= along_walk <= 1.0 and 0.0 <= along_leg <= 1.0):
+        return None
+    return start[0] + rx * along_walk, start[1] + ry * along_walk
+
+
+def crossing_lead(start, end, bunny) -> float | None:
+    run = 0.0
+    for first, second in legs_ahead(bunny):
+        hit = segment_crossing(start, end, first, second)
+        if hit:
+            return run + dist2(first, hit)
+        run += dist2(first, second)
+    return None
 
 
 def chain_casts(trace: Trace, start: int, players: set) -> list[list[dict]]:
@@ -639,6 +668,10 @@ class RingBlizzard:
             self.steps[note.get("g")].append((note["t"], str(note.get("txt")) == "1"))
         self.probed = bool(self.steps)
         self.hits = [rec for rec in trace.of("dmg") if rec.get("sp") in BLIZZARD and rec.get("d") in self.ring]
+        self.orders = collections.defaultdict(list)
+        for rec in trace.of("move"):
+            if rec.get("ok") and rec.get("g") in self.ring:
+                self.orders[rec["g"]].append(rec["t"])
         self.bunny_track: list[tuple[int, float, float]] = []
         self.zone_track: list[tuple[int, list]] = []
         self.casts = self._casts()
@@ -734,6 +767,16 @@ class RingBlizzard:
         step_moves = [rec for rec in self.trace.of("move")
                       if begin <= rec["t"] < end and rec.get("ok") and rec.get("by") == BLIZZARD_MOVER
                       and rec.get("g") in self.ring]
+        leads, crossing_ticks = [], 0
+        for rec in step_moves:
+            lead = self.crossing(rec)
+            if lead is None:
+                continue
+            leads.append(lead)
+            following = next((t for t in self.orders.get(rec["g"], []) if t > rec["t"]), None)
+            until = min(following if following is not None else rec["t"] + STEP_OVERRUN_MS,
+                        rec["t"] + STEP_OVERRUN_MS)
+            crossing_ticks += sum(1 for hit in self.hits if hit["d"] == rec["g"] and rec["t"] <= hit["t"] < until)
         deaths = sum(1 for death in combat_deaths(self.trace)
                      if begin <= death["t"] < end and death["g"] in self.ring
                      and blow_spell(death) in BLIZZARD)
@@ -751,7 +794,15 @@ class RingBlizzard:
         return {"covered": covered, "in_zone": in_zone, "stays": stays, "ticks": ticks, "damage": damage,
                 "steps": len(step_moves), "onto_path": sum(1 for rec in step_moves if self.onto_path(rec)),
                 "overrun": sum(1 for rec in step_moves if self.overrun(rec)), "deaths": deaths,
-                "stepped_ms": stepped_ms, "out_ms": out_ms, "walks": walks, "walk_ticks": walk_ticks}
+                "stepped_ms": stepped_ms, "out_ms": out_ms, "walks": walks, "walk_ticks": walk_ticks,
+                "leads": leads, "crossing_ticks": crossing_ticks}
+
+    def crossing(self, move: dict) -> float | None:
+        bunny = self._latest(self.bunny_track, move["t"])
+        start = at(self.trace, move["g"], move["t"], NEAREST, CHAIN_POSITION_MS)
+        if "x" not in move or not bunny or not start or move["t"] - bunny[0] > BUNNY_FRESH_MS:
+            return None
+        return crossing_lead(start, (move["x"], move["y"]), bunny[1:])
 
     def onto_path(self, move: dict) -> bool:
         bunny = self._latest(self.bunny_track, move["t"])
@@ -780,8 +831,11 @@ class RingBlizzard:
 
 
 def step_points(read: dict) -> str:
+    leads = read["leads"]
+    across = (f", {len(leads)} across it with the bunny p50 {yd(quantile(leads, .5))} yd short of the crossing, "
+              f"{read['crossing_ticks']} ticks before the next order" if leads else ", 0 across it")
     return (f"{read['onto_path']} onto the bunny's path ahead, {read['overrun']} under a zone within "
-            f"{STEP_OVERRUN_MS // 1000} s")
+            f"{STEP_OVERRUN_MS // 1000} s{across}")
 
 
 def ring_blizzard_line(blizzard: RingBlizzard, label: str, read: dict) -> str:
@@ -822,7 +876,7 @@ def show_blizzard(trace: Trace) -> None:
     total = {"covered": collections.Counter(), "in_zone": collections.Counter(),
              "stays": collections.defaultdict(list), "ticks": collections.Counter(),
              "damage": collections.Counter(), "steps": 0, "onto_path": 0, "overrun": 0, "deaths": 0,
-             "stepped_ms": 0, "out_ms": 0, "walks": [], "walk_ticks": 0}
+             "stepped_ms": 0, "out_ms": 0, "walks": [], "walk_ticks": 0, "leads": [], "crossing_ticks": 0}
     for index, cast in enumerate(blizzard.casts, 1):
         read = blizzard.read(cast)
         label = (f"blizzard {index} +{(cast['begin'] - start) / 1000.0:.1f}..+{(cast['end'] - start) / 1000.0:.1f} s")
@@ -831,9 +885,10 @@ def show_blizzard(trace: Trace) -> None:
             total[key].update(read[key])
         for guid, stays in read["stays"].items():
             total["stays"][guid] += stays
-        for key in ("steps", "onto_path", "overrun", "deaths", "stepped_ms", "out_ms", "walk_ticks"):
+        for key in ("steps", "onto_path", "overrun", "deaths", "stepped_ms", "out_ms", "walk_ticks", "crossing_ticks"):
             total[key] += read[key]
         total["walks"] += read["walks"]
+        total["leads"] += read["leads"]
     stays = [stay / 1000.0 for values in total["stays"].values() for stay in values]
     print(f"  all: ring melee in a zone {sum(total['in_zone'].values()) / 1000.0:.1f} bot-s, stays p50 "
           f"{yd(quantile(stays, .5))} max {yd(max(stays) if stays else None)} s, "

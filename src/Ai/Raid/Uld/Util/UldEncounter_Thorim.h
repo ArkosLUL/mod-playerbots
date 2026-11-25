@@ -68,6 +68,7 @@ inline constexpr float ULDUAR_THORIM_BLIZZARD_ZONE_REACH = 9.8f;
 inline constexpr float ULDUAR_THORIM_RING_BLIZZARD_CLEARANCE = 11.0f;
 inline constexpr float ULDUAR_THORIM_RING_BLIZZARD_STEP_RADIUS = 15.0f;
 inline constexpr float ULDUAR_THORIM_RING_BLIZZARD_LAST_STEP_RADIUS = 20.0f;
+inline constexpr float ULDUAR_THORIM_RING_BLIZZARD_LEAD = 8.0f;
 
 inline constexpr float ULDUAR_THORIM_BLIZZARD_SCAN_RANGE = 70.0f;
 
