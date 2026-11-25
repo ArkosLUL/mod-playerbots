@@ -2939,6 +2939,66 @@ class KiteBlocked(unittest.TestCase):
             self.assertEqual(al.stuck_constellations(load(folder, cut)), {})
 
 
+MW_SWING, MW_FLANK, MW_GUARD = 8401, 8402, 8403
+MW_HOLE = CREATURE | 601
+MW_END = 30000
+
+
+def mw_offset(guid: int, when: int) -> tuple[float, float]:
+    if guid == MW_SWING:
+        return (0, 30) if when < 20000 else (6, 8)
+    return (-25, 0) if guid == MW_FLANK else (2, 2)
+
+
+def melee_way_pull() -> list[dict]:
+    members = (MW_SWING, MW_FLANK, MW_GUARD)
+    return [
+        {"e": "hdr", "v": 13, "ts": 1789500000000, "map": 603, "inst": 4, "diff": 1, "boss": "algalon-the-observer",
+         "roster": [{"g": MW_SWING, "n": "Swing", "r": "melee", "c": "rogue", "h": 0},
+                    {"g": MW_FLANK, "n": "Flank", "r": "melee", "c": "warrior", "h": 0},
+                    {"g": MW_GUARD, "n": "Guard", "r": "tank", "c": "warrior", "h": 0}]},
+        {"t": 0, "e": "pull", "boss": "algalon-the-observer", "src": "engage"},
+        {"t": 1, "e": "unit", "g": ALGALON, "en": al.NPC_ALGALON, "n": "Algalon the Observer", "b": 1},
+        {"t": 1, "e": "unit", "g": MW_HOLE, "en": al.NPC_BLACK_HOLE, "n": "Black Hole"},
+        note(0, MW_GUARD, "algalon.phase", 2),
+        note(10000, MW_SWING, "algalon.spot", "melee"), note(20000, MW_SWING, "algalon.spot", "none"),
+        *({"t": when, "e": "snap", "hz": [],
+           "u": [row(guid, mw_offset(guid, when), 100.0, ALGALON) for guid in members]
+           + [row(ALGALON, (0, 0), 90.0, MW_GUARD), row(MW_HOLE, (0, 12), 100.0, 0)]}
+          for when in range(0, MW_END, 500)),
+        {"t": MW_END, "e": "end", "out": "wipe"},
+    ]
+
+
+class MeleeWayIn(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        cls.trace = load(cls.folder.name, melee_way_pull())
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_a_hole_across_the_way_in_counts_apart_from_a_clear_flank(self):
+        rows = {row["guid"]: row["P1"] for row in al.melee_rows(self.trace)}
+        self.assertEqual(set(rows), {MW_SWING, MW_FLANK})
+        self.assertEqual(rows[MW_SWING], {"blocked": 20000, "reach": 9500, "spot": 10000})
+        self.assertEqual(rows[MW_FLANK], {"out": 29500})
+
+    def test_the_blocked_seconds_reach_the_verdict(self):
+        self.assertIn((None, "melee held off him by a hole across the way in 20.0 s in P1, 9.5 s in his reach"),
+                      al.failures(self.trace))
+        self.assertIn("P1: 9.5 s in reach, 20.0 s blocked by a hole, 29.5 s out otherwise, 10.0 s on the melee spot",
+                      render(self.trace, "melee"))
+
+    def test_a_straight_way_past_a_hole_beside_it_is_not_blocked(self):
+        self.assertTrue(al.way_in_blocked((0.0, 30.0), (0.0, 0.0), [(0.0, 12.0)]))
+        self.assertFalse(al.way_in_blocked((0.0, 30.0), (0.0, 0.0), [(9.0, 20.0)]))
+        self.assertTrue(al.way_in_blocked((0.0, 30.0), (0.0, 0.0), [(5.0, 20.0)]))
+        self.assertFalse(al.way_in_blocked((0.0, 30.0), (0.0, 0.0), [(3.0, 31.0)]))
+
+
 class EveryView(unittest.TestCase):
     def test_every_section_reads_empty_on_another_boss(self):
         trace = Trace(FULL)

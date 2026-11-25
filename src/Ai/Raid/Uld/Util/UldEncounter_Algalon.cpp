@@ -1937,6 +1937,8 @@ char const* StarTeamSpot(Player* bot, Unit* boss, AlgalonEncounterState const& s
     return nullptr;
 }
 
+bool MeleeHoleSpot(Player* bot, Unit* boss, AlgalonEncounterState const& state, Position& spot);
+
 char const* SwapTankSlot(Player* bot, PlayerbotAI* botAI, Position& slot)
 {
     Unit* boss = GetAlgalon(botAI);
@@ -2017,6 +2019,12 @@ char const* RawSlot(Player* bot, Position& slot)
         return team;
     }
 
+    if (!kind && MeleeHoleSpot(bot, boss, *state, spot))
+    {
+        slot = spot;
+        return "melee";
+    }
+
     return kind;
 }
 
@@ -2081,6 +2089,48 @@ AlgalonScanUnit const* HoleAcrossPath(AlgalonEncounterState const& state, Positi
     }
 
     return nullptr;
+}
+
+bool MeleeHoleSpot(Player* bot, Unit* boss, AlgalonEncounterState const& state, Position& spot)
+{
+    if (state.holes.empty() || PlayerbotAI::IsRanged(bot) || PlayerbotAI::IsTank(bot) || IsAlgalonPhased(bot))
+        return false;
+
+    PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
+    if (!botAI || botAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get() != boss)
+        return false;
+
+    float const reach = bot->GetMeleeRange(boss);
+    if (bot->GetExactDist2d(boss) <= reach)
+        return false;
+
+    float const bearing = boss->GetAngle(bot);
+    if (!AlgalonWalkEntersField(bot, boss->GetPositionX() + std::cos(bearing) * reach,
+                                boss->GetPositionY() + std::sin(bearing) * reach))
+        return false;
+
+    float const radius = reach - ULDUAR_ALGALON_MELEE_SPOT_INSET;
+    float closest = std::numeric_limits<float>::max();
+    bool closestClear = false;
+    for (uint8 step = 0; step < ULDUAR_ALGALON_SWEEP_BEARINGS; ++step)
+    {
+        float const angle = static_cast<float>(step) * ULDUAR_ALGALON_SWEEP_ANGLE_STEP;
+        float const x = boss->GetPositionX() + std::cos(angle) * radius;
+        float const y = boss->GetPositionY() + std::sin(angle) * radius;
+        if (!AlgalonSpotInRoom(x, y) || !ClearOfHoles(state, x, y))
+            continue;
+
+        bool const clear = !HoleAcrossPath(state, bot->GetPosition(), x, y, false);
+        float const distance = bot->GetExactDist2d(x, y);
+        if ((clear && !closestClear) || (clear == closestClear && distance < closest))
+        {
+            closest = distance;
+            closestClear = clear;
+            spot = Position(x, y, ULDUAR_ALGALON_ROOM_CENTER.GetPositionZ());
+        }
+    }
+
+    return closest != std::numeric_limits<float>::max();
 }
 
 bool FindHoleDetour(Player* bot, AlgalonEncounterState const& state, AlgalonScanUnit const& hole, Position const& to,
@@ -2604,18 +2654,23 @@ uint32 BulkLeftHp(AlgalonScanUnit const& star)
     return due > stop ? due - stop : 0;
 }
 
+float BulkClosingPctPerSec(AlgalonEncounterState const& state)
+{
+    float const measured = state.bulkPctPerSec > 0.0f ? TeamSpeed(state, state.bulkPctPerSec, state.bulkTeam)
+                                                      : TeamSpeed(state, state.teamKillPctPerSec, state.teamKillTeam);
+    float const pctPerSec = measured > 0.0f ? std::min(measured, ULDUAR_ALGALON_UNDER_TEAM_PCT_PER_SEC)
+                                            : ULDUAR_ALGALON_UNDER_TEAM_PCT_PER_SEC;
+    return std::max(1.0f, pctPerSec - ULDUAR_ALGALON_STAR_DRAIN_PCT_PER_SEC);
+}
+
 int32 BulkWorkMs(AlgalonEncounterState const& state, AlgalonScanUnit const& star)
 {
     uint32 const left = BulkLeftHp(star);
     if (!left)
         return 0;
 
-    float const measured = state.bulkPctPerSec > 0.0f ? TeamSpeed(state, state.bulkPctPerSec, state.bulkTeam)
-                                                      : TeamSpeed(state, state.teamKillPctPerSec, state.teamKillTeam);
-    float const pctPerSec = measured > 0.0f ? std::min(measured, ULDUAR_ALGALON_UNDER_TEAM_PCT_PER_SEC)
-                                            : ULDUAR_ALGALON_UNDER_TEAM_PCT_PER_SEC;
-    float const closing = std::max(1.0f, pctPerSec - ULDUAR_ALGALON_STAR_DRAIN_PCT_PER_SEC);
-    return static_cast<int32>(left / (star.tickHp * closing) * IN_MILLISECONDS) + ULDUAR_ALGALON_UNDER_SWITCH_MS;
+    return static_cast<int32>(left / (star.tickHp * BulkClosingPctPerSec(state)) * IN_MILLISECONDS) +
+           ULDUAR_ALGALON_UNDER_SWITCH_MS;
 }
 
 bool UnderFrozen(AlgalonEncounterState const& state, uint32 now)
@@ -2863,17 +2918,24 @@ void ValidateUnderFinish(Group* group, AlgalonEncounterState& state)
     state.finisherLatch = ObjectGuid::Empty;
 }
 
-uint32 FinishHandOverHp(AlgalonEncounterState const& state, AlgalonScanUnit const& star)
+uint32 FinishHandOverHp(AlgalonEncounterState const& state, AlgalonScanUnit const& star, uint32 now)
 {
     uint32 const pair = ULDUAR_ALGALON_STAR_TEAM_10;
     uint32 const members = std::max(static_cast<uint32>(state.starTeam.size()), pair);
-    return star.tickHp * ULDUAR_ALGALON_UNDER_FINISH_TICKS * members / pair;
+    uint32 const margin = star.tickHp * ULDUAR_ALGALON_UNDER_FINISH_TICKS * members / pair;
+    int32 const alone = MsUntil(state.nextBigBangMs, now) - ULDUAR_ALGALON_UNDER_SWITCH_MS;
+    if (alone <= 0)
+        return 0;
+
+    float const finisherPctPerSec = BulkClosingPctPerSec(state) / static_cast<float>(members);
+    float const reach = star.tickHp * finisherPctPerSec * static_cast<float>(alone) / IN_MILLISECONDS;
+    return std::min(margin, static_cast<uint32>(reach));
 }
 
-bool HandOverFinish(Group* group, AlgalonEncounterState& state, AlgalonScanUnit const& star)
+bool HandOverFinish(Group* group, AlgalonEncounterState& state, AlgalonScanUnit const& star, uint32 now)
 {
     uint32 const left = BulkLeftHp(star);
-    if (!state.finishLatch.IsEmpty() || !left || left > FinishHandOverHp(state, star))
+    if (!state.finishLatch.IsEmpty() || !left || left > FinishHandOverHp(state, star, now))
         return false;
 
     Player* finisher = ElectFinisher(group, state);
@@ -2912,7 +2974,7 @@ AlgalonScanUnit const* UnderBulkStar(Group* group, AlgalonEncounterState& state,
     if (state.bigBangCasting || !state.nextBigBangMs)
         return nullptr;
 
-    if (latched && !HandOverFinish(group, state, *latched))
+    if (latched && !HandOverFinish(group, state, *latched, now))
         return latched;
 
     int32 work = 0;
@@ -2924,7 +2986,7 @@ AlgalonScanUnit const* UnderBulkStar(Group* group, AlgalonEncounterState& state,
         return nullptr;
 
     AlgalonScanUnit const* next = PickBulkStar(state);
-    if (next && HandOverFinish(group, state, *next))
+    if (next && HandOverFinish(group, state, *next, now))
         next = PickBulkStar(state);
 
     if (!next)

@@ -1286,3 +1286,80 @@ pulls and in Big Bang 2's window, at most one wave-3 star off after its hit; exp
 and 3 under window 38's 22 (uld1 3, uld2 10, uld5 8, uld6 1); wave-3 `early` releases not above window 38's two;
 P1 not past 348 s. If `early` releases rise, the finish hand-off should scale with the team (a bug fix, not a
 question).
+
+## Round 16 (2026-11-25, window 46 build 37cc72a94: round 15)
+
+**Data.** `window46-algalon.md`; every pull's `--verdict`, `--deaths`, `--stars`; `--defensives`, `--tankheal`,
+`--tanks`, `--bigbang` on uld2, uld4, uld5, uld6; `--collateral` on uld3, uld4, uld6. Scratch `alg16/peek.py` (one
+star's samples, hits and casts), folded into the reader as the early-release breakdown below.
+
+| Pool | Trace `603_*_algalon-the-observer_*` | Out | Deaths (reader causes) |
+|---|---|---|---|
+| uld1 A | `603_1_…_1795602671` | kill 6:16 | 2: star 1, Barrage 1 |
+| uld4 A | `603_4_…_1795602673` | wipe 6:52 | 34: loose 20, on tank 6, star 6, Smash, Big Bang |
+| uld2 B | `603_2_…_1795602672` | wipe 6:36 | 32: loose 15, star 10 (9 after Berserk), on tank 5, Barrage 2 |
+| uld5 B | `603_5_…_1795602674` | wipe 4:49 | 31: loose 15, on tank 6, Barrage 5, star 4, Big Bang |
+| uld3 C | `603_3_…_1795602672` | wipe 5:09 | 33: loose 14, star 8, Barrage 6, on tank 4, Smash |
+| uld6 C | `603_6_…_1795602675` | wipe 7:02 | 35: loose 21, star 7, Big Bang 3, Barrage 2, on tank, other |
+
+**Stop rules.** Not polished: only A killed (uld1, 2 dead). Not stuck: the under-star hand-off was picked once
+before (r12) and is the first pick of its margin.
+
+**Verdict on round 15: held** for wave 3's leftovers after Big Bang 2. Team 5 bulk medians +3.4 (uld1), +4.2,
++2.7, +4.0, +2.8, +4.5 against team 3's +1.6 to +2.3. Wave-3 stars under Big Bang 2: uld1 2/3 (1879 `late` at 56%),
+uld2 3/4, uld3 3/3, uld4 0/3, uld5 2/3, uld6 2/3. Off after its hit: 4 stars, 3 dead (w38: 22). A: uld1 held, uld4's
+three went before Big Bang 2 instead (below); B held in both; C held in uld3, uld6's 1887 went `early` by splash.
+P1 294-325 s where it ended (w38 310-348).
+
+**Picked: under-stars released `early` after the finisher hand-off.** Bug. `HandOverFinish`
+(`UldEncounter_Algalon.cpp:2873`) hands a bulk star over at 5 ticks over its line whatever the team's size;
+`StopCastsAtLine` then cuts the leavers' casts, but no shot already flying, and a volley can cross the 5 ticks in
+one 250 ms tick. `--stars` per early release (from its last sample over its band to the release):
+
+- uld4 1844 (team 5): 46.2% at 2:53.937 (5.5 ticks over), Mind Blast + Explosive Shot to 41.9% by the next tick,
+  hand-off 2:54.266; then Lightning Bolt 4.8% and Shadow Bolt 2.6% flying, 33.5% at 2:54.742: `early`, deadline
+  kill 3:13.9 (8 under, 0 dead).
+- uld4 1843 (team 5): hand-off 3:08.037 at 33.8%; Lightning Bolt 4.9% flying and the hunter's shots after its
+  latch cleared, 7.5%: 19.7%, 0.4% under the release line; chewed into Big Bang 2's cast at 3:29.5 with a meteor
+  live (11 hit, 4 dead, 1 more to the meteor).
+- uld2 1925 (team 3): hand-off 4:22.115 at 47.5%; Arcane Missiles 7.6% still flying: `early` 4:26.4 at 33%.
+- uld3 1918 (team 3): 5.0 ticks over its line, a hair over the hand-off, from 3:54.755 to 3:55.966 with three
+  casts under way; Arcane Blast 6.3% and Chimera Shot 2.9% landed 30 ms apart, Lightning Bolt 4.3% 0.4 s later:
+  73.5 → 60%. 1919: Arcane Blast 6.3% crossed its line before the hand-off, then Aimed Shot 2.6% and Mirror
+  Image. Both `early` 60.4 s before the cast; deadline kills 4:13.9 (0 dead) and 4:30.3 (10 under, 4 dead with 3
+  healers), the pair dead by 4:46.
+- uld6 1887 (team 5): in its band at 3:03 after the finish; Living Bomb 2.0% from an off-team mage, Ignite,
+  Wandering Plague: splash, a lead.
+
+**Fix** (Algalon files only):
+
+- `FinishHandOverHp` (`:2866`): the hand-off margin is 2.5 ticks per team member (`…_UNDER_FINISH_TICKS` × size /
+  `…_STAR_TEAM_10`): 5 for two (10-man unchanged), 7.5 for three, 12.5 for five. Replay by hand: 1844 hands over
+  at 53.9% (2:52.927), before the Arcane Blast, Mind Blast, Shadow Bolt and Lightning Bolt that took it under; 1918
+  at 3:54.755, cutting Arcane Blast and Lightning Bolt; 1919 at 82.2%, before its Arcane Blast; 1925 2.5% higher,
+  so its Arcane Missiles end near the line.
+  Cost: the finisher alone does 2.5% (team 3) or 7.5% (team 5) more, ~1-4 s beside the team's next star. A
+  cycle's last star has none, so its finish runs against the cast: w46's lone finishers did 0.7-4 %/s beyond the
+  drain, and uld3's 1871 (team 5, last of Big Bang 2) reached the cast at 9.4%, its band's top, after a 4.4 s
+  finish at 0.7 %/s; at 12.5 ticks it hands over ~4 s earlier and meets the cast ~6 ticks over its line (review).
+- Reader: `--stars` prints under each `early` release who hit it from its last sample over its band to the
+  release (`team`, `left`, `finisher`, `off`), the team's size and the hand-off; finish rows carry the team's size.
+  Tests: `UnderOvershoot`, `UnderFinish` updated.
+- `docs/raids/ulduar/algalon.md`: the Bulk bullet.
+
+Bots only (the team never takes a human), so a player changes nothing; 10-man keeps 5 ticks.
+
+Shared code: none.
+
+**Not picked:** under-stars in the cast catching runners (~10 dead, leads); B's holders at P1 + 162-164 s (Q2).
+
+**Next window should show.** `--stars`: `early` releases under w46's 6, none with `left` over 2.5% per team member;
+finish rows at team 5 and 3 with the rest of the team under 5%; wave-3 under Big Bang 2 at least w46's 12 of 19;
+under-stars `above` their band at the cast not over w46's 0 (the longer finish is the risk), no rise in `late`. One
+`above` on a cycle's last star (Big Bang 2 at team 5 first) means the hand-off margin needs a cap by what the lone
+finisher can do before the cast (a bug fix).
+
+**Review.** Trace rows bear out 1843, 1844 and 1925: the `cast` row is stamped at the cast's start, and the
+Lightning Bolts, Arcane Blasts and Shadow Bolt that crossed the line were still casting at the earlier hand-off
+(1843, 1844), where the cut takes them; 1925's Arcane Missiles were all flying by 4:21.2. The new reader and
+fixture docstrings went (comments rule); the last-star risk went into the cost line and the watch above.

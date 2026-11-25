@@ -217,6 +217,10 @@ TEAM_FAR_YD = 40.0
 HOLE_REACH_YD = 43.0
 NEARHOLE_YD = _radius_or("ULDUAR_ALGALON_FAR_HOLE_YARDS", 35.0)
 NEARHOLE_LEAD_MS = 15000
+FIELD_STAND_YD = _radius_or("ULDUAR_ALGALON_FIELD_STAND_CLEARANCE", 7.5)
+FIELD_PATH_YD = _radius_or("ULDUAR_ALGALON_FIELD_PATH_CLEARANCE", 6.3)
+MELEE_BANG_TAIL_MS = 4000
+MELEE_BLOCKED_MS = 10000
 
 # The phase latch and the pull note trail his first swing by up to a tick.
 INTRO_LEAD_MS = 1500
@@ -5566,6 +5570,99 @@ def show_formation(trace: Trace) -> None:
           f" stalls are {STALL_MS // 1000} s+ stationary windows with accepted moves")
 
 
+def segment_gap(start, stop, point) -> float:
+    dx, dy = stop[0] - start[0], stop[1] - start[1]
+    length = dx * dx + dy * dy
+    share = 0.0 if not length else max(0.0, min(1.0, ((point[0] - start[0]) * dx + (point[1] - start[1]) * dy)
+                                               / length))
+    return math.hypot(start[0] + dx * share - point[0], start[1] + dy * share - point[1])
+
+
+def way_in_blocked(bot, him, holes) -> bool:
+    gap = dist2(bot, him)
+    if not gap or not holes:
+        return False
+    stop = (him[0] + (bot[0] - him[0]) * MELEE_REACH / gap, him[1] + (bot[1] - him[1]) * MELEE_REACH / gap)
+    if any(dist2(stop, hole) < FIELD_STAND_YD for hole in holes):
+        return True
+    inside = [hole for hole in holes if dist2(bot, hole) <= SHELTER_RADIUS]
+    leaving = min(inside, key=lambda hole: dist2(bot, hole)) if inside else None
+    return any(segment_gap(bot, stop, hole) < min(FIELD_PATH_YD, max(dist2(bot, hole) - 0.5, SHELTER_RADIUS))
+               for hole in holes if hole is not leaving)
+
+
+def melee_rows(trace: Trace) -> list[dict]:
+    def build(trace: Trace) -> list[dict]:
+        samples = samples_of(trace)
+        boss = boss_guid(trace)
+        fights = [(start, stop, label) for start, stop, label in phases(trace)[0] if label in ("P1", "P2")]
+        if boss is None or not fights:
+            return []
+        end = pull_end(trace)
+        pair, _ = swap_pair(trace)
+        handler = latch_spans(trace, "algalon.handler", end)
+        phased = all_phases(trace)
+        spot = holder_spans(trace, "algalon.spot", end)
+        bangs = [(cast["start"], cast["end"] + MELEE_BANG_TAIL_MS) for cast in big_bang_casts(trace)]
+        holes = hole_guids(trace)
+        members = [guid for guid in roster_guids(trace) if trace.role(guid) == "melee" and guid not in pair]
+        out = {guid: {"guid": guid, **{label: collections.Counter() for _, _, label in fights}} for guid in members}
+        for start, stop, label in fights:
+            for _, when, weight in samples.steps(start, stop):
+                him = samples.row(boss, when)
+                if not alive(him) or any(low <= when < high for low, high in bangs):
+                    continue
+                here = [found[1:3] for hole in holes_at(samples, holes, when)
+                        if (found := samples.row(hole, when))]
+                for guid in members:
+                    row = samples.row(guid, when)
+                    if (not alive(row) or target_of(row) != boss or phased_at(phased, guid, when) or
+                            as_guid(value_at(handler, when)) == guid):
+                        continue
+                    tally = out[guid][label]
+                    if dist2(row[1:3], him[1:3]) <= MELEE_REACH:
+                        tally["reach"] += weight
+                    elif way_in_blocked(row[1:3], him[1:3], here):
+                        tally["blocked"] += weight
+                    else:
+                        tally["out"] += weight
+                    if value_at(spot.get(guid, []), when) == "melee":
+                        tally["spot"] += weight
+        return [row for row in out.values() if any(sum(row[label].values()) for _, _, label in fights)]
+
+    return cached(trace, "_algalon_melee", build)
+
+
+def melee_totals(trace: Trace) -> dict[str, collections.Counter]:
+    totals: dict[str, collections.Counter] = {}
+    for row in melee_rows(trace):
+        for label, tally in row.items():
+            if label != "guid":
+                totals.setdefault(label, collections.Counter()).update(tally)
+    return totals
+
+
+def show_melee(trace: Trace) -> None:
+    print("MELEE ON HIM")
+    rows = melee_rows(trace)
+    if not rows:
+        print("  no melee bot outside the swap pair was sampled on him in phase 1 or 2")
+        return
+    show_absent(trace, "algalon.spot")
+    totals = melee_totals(trace)
+    print(f"  seconds alive, unphased and on him, outside each Big Bang's cast and the {MELEE_BANG_TAIL_MS // 1000} s"
+          f" after it: in his reach ({MELEE_REACH:.2f} yd) / out of it with the straight way in crossing a hole"
+          " (the walk guard's test) / out of it otherwise; spot: on algalon.spot melee")
+    for row in sorted(rows, key=lambda item: trace.name(item["guid"])):
+        parts = "   ".join(f"{label} {row[label]['reach'] / 1000:5.1f} / {row[label]['blocked'] / 1000:5.1f} /"
+                           f" {row[label]['out'] / 1000:5.1f}" for label in totals)
+        spot = sum(row[label]["spot"] for label in totals)
+        print(f"    {who(trace, row['guid']):28} {parts}   spot {spot / 1000:5.1f}")
+    for label, tally in totals.items():
+        print(f"  {label}: {tally['reach'] / 1000:.1f} s in reach, {tally['blocked'] / 1000:.1f} s blocked by a hole,"
+              f" {tally['out'] / 1000:.1f} s out otherwise, {tally['spot'] / 1000:.1f} s on the melee spot")
+
+
 # ----------------------------------------------------------------------------------------- darkmatter
 
 def dark_matter_rows(trace: Trace) -> list[dict]:
@@ -5878,6 +5975,11 @@ def failures(trace: Trace) -> list[tuple[int | None, str]]:
             out.append((row["loose_from"], f"Unleashed Dark Matter loose for {loose / 1000:.1f} s (mostly on"
                                            f" {trace.name(victim)}) @ {secs(row['loose_from'])}"))
 
+    for label, tally in melee_totals(trace).items():
+        if tally["blocked"] >= MELEE_BLOCKED_MS:
+            out.append((None, f"melee held off him by a hole across the way in {tally['blocked'] / 1000:.1f} s in"
+                              f" {label}, {tally['reach'] / 1000:.1f} s in his reach"))
+
     p1 = phase_start(trace, "P1")
     for rec in trace.of("cast"):
         if rec.get("sp") == SPELL_ASCEND and rec["t"] not in explained:
@@ -5934,6 +6036,8 @@ SECTIONS = (
                    " explosion and the bots under its line, every personal press and cover against its star's death,"
                    " personal buttons at each explosion death", show_defensives),
     ("formation", "each ring bot's distance to its slot and to him, spot branches, stalls", show_formation),
+    ("melee", "each melee bot's seconds on him in his reach, held off by a hole across its way in, or out"
+              " otherwise, per phase, and on the melee spot", show_melee),
     ("darkmatter", "phase 2 Unleashed Dark Matter: loose seconds, handler damage, kills", show_darkmatter),
     ("verdict", "one line per detected failure, in time order", show_verdict),
 )

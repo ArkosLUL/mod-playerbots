@@ -241,6 +241,7 @@ inline constexpr float ULDUAR_ALGALON_OFFTANK_STEP = 7.0f;
 inline constexpr uint8 ULDUAR_ALGALON_MELEE_STAGE_SPOTS = 10;
 inline constexpr uint32 ULDUAR_ALGALON_MELEE_RELEASE_MS = 8000;
 inline constexpr uint32 ULDUAR_ALGALON_MELEE_RELEASE_ANYWAY_MS = 20000;
+inline constexpr float ULDUAR_ALGALON_MELEE_SPOT_INSET = 3.0f;
 inline constexpr uint32 ULDUAR_ALGALON_OPENER_MS = 20000;
 inline constexpr float ULDUAR_ALGALON_TRICKS_RANGE = 20.0f;
 inline constexpr float ULDUAR_ALGALON_MISDIRECTION_RANGE = 100.0f;
