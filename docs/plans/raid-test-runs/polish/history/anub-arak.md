@@ -237,3 +237,93 @@ speed: ask the rim crawl question.
 
 **Previous fix (r2) verdict.** r2 changed only the reader and no pulls ran
 since, so r1's verdict stands (works).
+
+## Round 4 (build 0200b8827, window 50, stuck)
+
+**Data.** `window50-anub-arak.md`: 12 valid pulls on r3's build, first then
+re-pull per pool: toc1 `649_19_…1795614139`, `…4604`; toc4 `649_22_…4270`,
+`…4687`; toc2 `649_20_…4259`, `…4734`; toc5 `649_23_…4313`, `…4765`; toc3
+`649_21_…4269`, `…4745`; toc6 `649_24_…4394`, `…4848`. Baselines window 46 (12,
+`…179560xxxx`) and window 49 (6, `649_19-25_…17956114xx-19xx`, built 14:27
+before r3). `--tanks` and `--phases` on all 30; scratch reads: facing split per
+composition, behind time by mover and `anub.backup`, gait under each value,
+burrower damage per class, first side tank death by class.
+
+**Deaths.** Burrower melee 318 of 386.
+
+| Pull | Wipe | Burrower / other deaths | First side tank death |
+|---|---|---|---|
+| toc1 …4139 | P3 24.0% | 31 / Anub 2 | Tocxaz (warrior) 5:56 P1c |
+| toc1 …4604 | P3 27.1% | 28 / Anub 3, Cold, Slash | Tocxam (DK) 1:09 P1 |
+| toc4 …4270 | P2c 48.6% | 30 / Impale 2 | Tocuaz (warrior) 3:29 P1b |
+| toc4 …4687 | P1c 60.7% | 33 / - | Tocuaz 1:18 P1 |
+| toc2 …4259 | P3 20.4% | 25 / Anub 2, Swarm, Cold, Shadow Strike | Tocyab (bear) 5:59 P3 |
+| toc2 …4734 | P3 21.0% | 27 / Mandibles 2, Anub 2 | Tocyab 5:53 P3 |
+| toc5 …4313 | P3 26.8% | 27 / Anub 3, Cold | Tocvab (bear) 3:41 P1b |
+| toc5 …4765 | P1b 61.2% | 26 / Impale, Anub, Mandibles, Shadow Strike, Slash | Tocvaz (paladin) 2:42 P1b |
+| toc3 …4269 | P3 10.1% | 21 / Anub 4, Cold 4, Swarm 2, Shadow Strike, Mandibles | Toczab (bear) 1:11 P1 |
+| toc3 …4745 | P3 5.3% | 21 / Cold 6, Anub 5, Swarm | Toczab 1:13 P1 |
+| toc6 …4394 | P3 24.1% | 26 / Anub 3, Mandibles 2, Cold, Slash | Tocwab (bear) 2:43 P1b |
+| toc6 …4848 | P3 14.5% | 23 / Mandibles 4, Cold 4, Anub 2 | Tocwab 5:59 P1c |
+
+**Stop rules.** Not polished (no kill). Stuck: failure 1 was picked r1, r2 and
+r3 and is still first (above); r3 set r4 to report stuck unless the user waived
+it, and the prompt restated only the 4-healer answer. No strategy change.
+
+**Previous fix (r3) verdict: half works, no effect on hits or deaths.**
+
+| Contact before phase 3 | A (w46 / w49 → w50) | B | C |
+|---|---|---|---|
+| walking behind share | 31 / 30% → 26% | 26 / 24% → 16% | 24 / 25% → 21% |
+| walking front share | 8 / 7% → 18% | 12 / 8% → 15% | 6 / 8% → 18% |
+| landed a second | 0.39 / 0.37 → 0.39 | 0.38 / 0.33 → 0.32 | 0.37 / 0.39 → 0.37 |
+| walking behind, landed a second | 0.60 / 0.57 → 0.68 | 0.61 / 0.56 → 0.57 | 0.62 / 0.60 → 0.71 |
+
+Against r3's list: `anub.backup back` on all 24 side tanks, yes; walking behind
+27% → 21% of contact, walking front 6-12% → 15-18%, yes; walking landed 0.49 a
+second (0.54, 0.52), but walking behind 0.65 (0.61); all landed 0.40 with hits
+from beyond 6 yd (0.43), 11 of 24 side tanks at 0.43+; first side tank death
+(median, r2's table) A 2:23 (3:35), B 4:47 (2:58), C 1:58 (3:58): one build,
+noise.
+
+Where behind time went (hold walk, last `anub.backup`, share of contact, landed
+a second): `frost` 9.6% 0.64, `back` 6.5% 0.69, `fore` 2.6% 0.76; `reach melee`
+1.6%. In front: `back` 10.5% 0.28 (93% backward gait), `frost` 2.3% 0.40,
+`fore` 2.2% 0.31. Before r3 (18 pulls) hold walks were 24.6% behind at 0.61 and
+5.9% front at 0.35. Under `back`, 315 of 825 s walking ran forward (97% forward
+gait). Of 257 flips to `back`, 26 issued a hold walk within 0.3 s, 50 after
+`wait` rejections 0.3-2.6 s later, 181 none before the next change; 161 of the
+257 met a logged `wait` rejection first, the rest none logged (rejections are
+throttled to one a second per action in the trace). Cause:
+`MovementAction::MoveToImpl` drops the move at `IsWaitingForLastMove`
+(MovementActions.cpp:1059, same priority; 2515 of the 2516 logged hold walk
+rejections) or `IsDuplicateMove` (:1047, same destination; 1), neither
+comparing `backwards`, so a flip with the forward walk running changes nothing
+(ToCActions_Anubarak.cpp:435-440).
+
+**Side tank class (new read).** 30 pulls, before phase 3 or the tank's death:
+
+| Class | Tank-pulls | Landed a second | Burrower damage a contact second | First side tank death |
+|---|---|---|---|---|
+| bear | 20 | 0.43 | 6.1k | 17 of 20 (B 9, C 8) |
+| warrior | 10 | 0.45 | 5.1k | 7 of A's 10 |
+| blood DK | 20 | 0.40 | 4.5k | 3 of A's 10, 2 of C's 10 |
+| prot paladin | 10 | 0.38 | 3.5k | 1 of B's 10 |
+| Felesta, Bulwark (CT, CU, CV) | 3 each | 0.33, 0.34 | 3.7k, 3.0k | Felesta in CU, Bulwark in CV, both in phase 3 |
+
+The 4 bear deaths in window 50 with `anub.defensive kept` (Toczab 1:13, Tocvab
+3:41, Tocwab 2:43 and 2:57) had frenzied regeneration ready, Tocvab survival
+instincts too, and 94-100% top health in the 6 s before.
+
+**Change.** None to the strategy. Boss doc: r3's measured result and the class
+read. This log.
+
+**Questions** (State has them in full). Q2, a plan change: in heroic pick the
+side tanks by class (prot paladin, blood DK, prot warrior, bear last), the one
+left over on him; recommended yes among bots. Q3: waive the stuck rule to
+re-issue the hold walk when the back-up decision flips; recommended only with
+Q2.
+
+**Next window should show.** Same code, same failure. If Q2 is built: the bear
+(B, C) and the warrior (A) on him; side tank burrower damage a contact second
+nearer 3.5-4.5k; first side tank death later than this table per composition.
