@@ -607,6 +607,25 @@ class SyntheticPull(unittest.TestCase):
         self.assertEqual(row["walk_ins"], {mm.FORMATION: 1})
         self.assertEqual(row["vx_moved"], 0.0)
 
+    def test_an_escape_past_90_degrees_and_the_blast_on_a_bot_whose_last_escape_it_was(self):
+        records = mimiron_pull() + [
+            {"t": 28500, "e": "note", "g": AGONY, "k": "mimiron.flee", "txt": "frostbomb ok -22 (back0)"},
+            {"t": 28600, "e": "note", "g": TREE, "k": "mimiron.flee", "txt": "frostbomb ok +113 (back0)"},
+            {"t": 29000, "e": "note", "g": TREE, "k": "mimiron.flee", "txt": "frostbomb ok -90 (back0)"},
+            {"t": 30000, "e": "note", "g": BULWARK, "k": "mimiron.flee", "txt": "frostbomb ok -113 (back0)"},
+        ]
+        with tempfile.TemporaryDirectory() as folder:
+            path = pathlib.Path(folder) / "603_2_mimiron_1789700001.ndjson"
+            path.write_text("\n".join(json.dumps(rec) for rec in records) + "\n", encoding="utf-8")
+            trace = Trace(path)
+            row = mm.bomb_rows(trace)[0]
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                mm.show_bomb(trace)
+        self.assertEqual((row["wide"], row["wide_hits"]), (2, 1))
+        self.assertIn("escape legs past 90 deg off straight away 2, blast hits on a bot whose last escape was one 1",
+                      out.getvalue())
+
     def test_slot_changes_split_by_cause(self):
         cell = mm.slot_churn(self.trace)["P2"]
         self.assertEqual(cell["new"], 2)
@@ -935,6 +954,28 @@ class FireBotPull(unittest.TestCase):
             path.write_text("\n".join(json.dumps(rec) for rec in records) + "\n", encoding="utf-8")
             rows = {row["label"]: row for row in mm.firebot_rows(Trace(path))}
         self.assertEqual(rows["P4"]["walkbacks"], 1)
+
+    def test_an_escape_refused_on_every_rung_the_spray_after_it_and_a_ladder_leg(self):
+        records = firebot_pull() + [
+            {"t": 14500, "e": "note", "g": SHADOW, "k": "mimiron.flee", "txt": "spray unsafe (back0 spray11)"},
+            {"t": 15000, "e": "note", "g": SHADOW, "k": "mimiron.flee", "txt": "spray+12 unsafe (back0 spray11)"},
+            {"t": 17500, "e": "note", "g": TREE, "k": "mimiron.flee", "txt": "spray+8 ok +22 (back0 spray2)"},
+            move(18500, TREE, "reach spell", 0.0, 20.0),
+        ]
+        with tempfile.TemporaryDirectory() as folder:
+            path = pathlib.Path(folder) / "603_7_mimiron_1789700010.ndjson"
+            path.write_text("\n".join(json.dumps(rec) for rec in records) + "\n", encoding="utf-8")
+            trace = Trace(path)
+            rows = {row["label"]: row for row in mm.firebot_rows(trace)}
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                mm.show_firebots(trace)
+        p4 = rows["P4"]
+        self.assertEqual((p4["stuck"], p4["stuck_spray_hits"], p4["stuck_spray_deaths"]), (2, 1, 1))
+        self.assertEqual(p4["ladder"], {"8": 1})
+        self.assertEqual(p4["walkbacks"], 1)
+        self.assertIn("spray escapes refused on every rung 2; Water Spray hits after one 1, 1 dead; ladder legs +8 1",
+                      out.getvalue())
 
     def test_the_view_prints_each_phase(self):
         out = io.StringIO()

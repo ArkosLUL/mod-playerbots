@@ -2562,3 +2562,78 @@ Bot section and "What a trace answers".
 **Questions for the user.** None.
 
 **Shared code:** none (Mimiron definition, trigger and action, reader and its test, findings doc, this log).
+
+## Round 24 (build 06854755f, round 23 built, stock spawn)
+
+**Data:** window 49 (`window49-mimiron-10n-job4.md`, six pulls; `window49-mimiron-25n-job3.md`, one) and
+filler 47 on round 22's build (`filler47-mimiron-10n-job1.md`, `filler47-mimiron-25n-job2.md`). Traces
+`603_<inst>_mimiron_<epoch>`: window 49 10n uld1 `18_1795611027`, uld2 `16_1795610997`, uld3
+`17_1795611002`, uld4 `15_1795610986`, uld5 `21_1795611503`, uld6 `14_1795610924`, 25n uld5
+`13_1795610900`; filler 47 10n uld4-6 `28_1795605526`, `29_1795605527`, `30_1795605512`, 25n uld1-3
+`31_1795605531`, `32_1795605540`, `33_1795605546`. Hard mode real in all thirteen. Scratch `mim24/`.
+
+| Pool | Out | Deaths |
+|---|---|---|
+| 10n uld1 A | wipe 4:34 | 11: P1 mine (healer, 0:25), Napalm Shell; P2 Rapid Burst 4, Heat Wave 5 |
+| 10n uld2 B | wipe 7:20 | 11: P2 Rapid Burst; P3 Water Spray 5, Junk Bot 3, Assault Bot, ACU |
+| 10n uld3 C | Berserk | 11: P2 Heat Wave (hunter); P4 Hand Pulse; Berserk 9 |
+| 10n uld4 A | **kill** 9:08 | 1: P4 Rocket Strike |
+| 10n uld5 B | Berserk | 10: P1 Plasma Blast (tank), Napalm Shell (mage); P4 Hand Pulse; Berserk 7 |
+| 10n uld6 C | Berserk | 11: P2 Frost Bomb (hunter); P3 Bomb Bot; P4 Water Spray 2 (mage, shaman); Berserk 7 |
+| 25n uld5 B | **kill** 9:15 | 11: P2 Rapid Burst 2; P4 Hand Pulse 6, Laser Barrage, mine |
+
+**Stop rules:** not polished (25n has only B on this build; 10n B and C open). Not stuck: this round's
+failure is new.
+
+**Verdict on round 23 (bear bomb tank in bear form): held.** `--bombbots` on all five B and C pulls (10n
+uld2, uld3, uld5, uld6, 25n uld5): the bear in a bear form 100% of P3, taunt action OK 4-5 and FAILED 0 a
+pull (window 46: FAILED 4-9, 0%), 4-5 bombs taunted each (median 40-1206 ms after first sight), every
+blast on him but one; Bomb Bot deaths 1 (uld6 collateral, 5:10) against 6 at 10n in window 46 and 10 in
+filler 47.
+
+**Not picked first: 10n P4 runs out the clock (plan question Q12).** `--p4pace`: the ACU sits 15.0 yd
+above the chassis through every P4 (z 379.3/364.3, five pulls, both sizes); `IsWithinMeleeRange` is 3D
+(`Unit.cpp:790`) and its reach 0 gives 5 yd. Melee aimed at it dealt their ranged spells only (bear
+0.1-0.2k/s, rogue 0.4-1.0k/s; 174 `arc spread <-> reach melee` A-B-A in uld3). The ACU lost 0.33%/s with
+both ranged alive (uld4, 134 s), 0.19% with one (uld3, ACU 8% at Berserk), 0.13% (uld5) and 0.11% (uld6,
+none left from 7:23). The pair waits at the floor, so P4 lasts the ACU's HP over ranged damage.
+
+**Failure picked: fire bots left by H3 are kept in P4 (bug).** Q4 culls them in H3 "so phase 4 starts
+without them"; `ScanMimironFireBots` (`UldEncounter_Mimiron.cpp:2210`) folds live ones to the cull only
+while `IsMimironPhase4Handover` reads a spent, unselectable ACU, so once P4 makes it selectable survivors
+are kept again: excluded as targets, behind the splash guard.
+
+- 2 of 11 H3s read opened with nine fire bots (10n uld6, filler 47 25n uld2). DPS spent the handover on
+  leftover adds: uld6 melee on a Junk Bot then the Assault Bot 6:16-6:47, uld2 all 15 DPS on one Assault
+  Bot 6:41-7:10; only the tanks hit fire bots.
+- uld6: four into P4 at 36-56%, two alive at the end; Water Spray killed the mage at 7:23 (its last
+  ranged DPS) and the shaman at 8:08, splash holds 41; the ACU then lost 0.11%/s, Berserk at 28%.
+- 25n uld2: six into P4, one at 1-6% alive 7:50-10:00; Deafening Siren through P4, 184 raid-s silenced,
+  splash holds 62; Berserk with the ACU at 2.5%, 30 dead.
+- The other nine H3s ended with none (`--firebots`).
+
+**Fix** (Mimiron only, hard mode, 10 and 25; a real player kills or ignores them as he likes): the fold
+culls in P4 too (`IsMimironPhase4`), so a survivor stays a DPS priority target after leftover adds, off
+the target exclusions and the splash guard. Healers run `mimiron set dps priority` in P4, so its fire bot
+entry skips them as H3's trigger gate does, and they keep their part (`UldActions_Mimiron.cpp:1300`, review
+fix; else a far fire bot would pull them off the row by `reach spell`). Nothing summons more in P4 (`SetData(1, 4)` resets the ACU's
+events). Reader: `--p4pace` (parts every 30 s, loss rates, the ACU's height, aim and damage by role), test
+`PacePull`. Findings doc: the ACU's height and what it means for melee, the off-tank and the pace; the
+cull in P4.
+
+**Next window should show** (`--firebots`, `--p4pace`): after an H3 that leaves fire bots, P4 closes
+with none (gone = open within ~15 s), P4 Water Spray, siren and splash holds near 0, no healer aimed at
+a fire bot; H3 and P3 unchanged.
+With none left (most pulls) the fix is not exercised.
+
+**Questions for the user.**
+
+- **Q12 (plan change, roster): 10-man ranged damage on the P4 ACU.** The ACU hovers out of melee reach in
+  P4, so only ranged attacks bring it down, and the other two parts must wait for it. 10-man brings two
+  ranged DPS; with both alive P4 took 134 s and the kill came at 9:08, with one lost before or early in P4
+  it ran past Berserk in three of six window 49 pulls. Options: (a) put a third ranged DPS among each
+  design's first six (for example a warlock for the rogue), which changes every 10-man pull of every
+  boss; (b) 10-man healers also hit the ACU in P4 while the raid is healthy (~1-2k/s, risks the Hand Pulse
+  race); (c) leave it and waive the 10n stop rule for Mimiron. Recommendation: (a).
+
+**Shared code:** none (Mimiron fire bot fold, reader and its test, findings doc, this log).

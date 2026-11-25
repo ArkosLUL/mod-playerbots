@@ -1,6 +1,6 @@
 # Mimiron polish log (hard mode, Firefighter, 25 and 10)
 
-Rounds 1-23: [history/mimiron.md](history/mimiron.md).
+Rounds 1-24: [history/mimiron.md](history/mimiron.md).
 
 ## State
 
@@ -18,7 +18,8 @@ Older windows compare directly.
 **Rosters.** From window 34 every pool has all eleven professions at 450 with their perks and profession
 enchants: compare deaths with window 33 and older only by mechanic and target, never by total. Tanks:
 A blood DK off-tank, B and C a bear. 10-man takes the first six DPS, the same classes in every design:
-rogue, DK, enh shaman, ret paladin, mage, hunter (four melee, two ranged).
+rogue, DK, enh shaman, ret paladin, mage, hunter (four melee, two ranged); a warlock joins Mimiron's
+10-man group from the build after window 50 (Q12).
 
 **Fight model.** Z1 13 s; P1 MK II 69-94 s; Z2+H1 48 s (the raid holds a band 40 yd out, walks in 12.75 s
 before P2); P2 VX-001 68-100 s; H2 24 s; P3 ACU 115-171 s at 25, set by Magnetic Core landings ~54 s apart
@@ -27,35 +28,47 @@ before P2); P2 VX-001 68-100 s; H2 24 s; P3 ACU 115-171 s at 25, set by Magnetic
 In P4 the ACU hovers 15 yd above the chassis (z 379.3 against 364.3 in every snapshot), out of every
 melee swing, so its pace is the ranged's and the pair waits on it (`--p4pace`). At 10n that makes P4 the
 DPS check: both ranged alive, 0.33-0.37%/s and 134 s (window 49 uld4 kill); one left, 0.13-0.19%/s and
-Berserk. At 25n P4 is a mana race: once two of four healers are out Hand Pulse kills (`--pulse`). What
-loses bodies: the P2 storm after a barrage (Heat Wave, Rapid Burst, the Frost Bomb), P3 adds at 10,
-Water Spray, P4 mines and Hand Pulse.
+Berserk. At 25n P4 is a mana race: once two of four healers are out Hand Pulse kills (`--pulse`), so a
+healer lost early in P4 is a wipe (window 50 uld1). What loses bodies: the P2 storm after a barrage
+(Heat Wave, Rapid Burst, the Frost Bomb), P3 Water Spray where fire bots crowd the melee and adds at 10,
+the opening P4 Frost Bomb, P4 mines and Hand Pulse.
 
 **Compositions.**
 
-- `06854755f` (window 49, round 23 built): 25n only uld5 B, kill 9:15 with 11 (a DC setup check stopped
-  the job; DC 0b2488a). 10n: A **met** (uld4 kill 9:08 with 1; uld1 P2 wipe 11); B no (uld2 P3 wipe 11,
-  uld5 Berserk 10); C no (uld3 and uld6 Berserk, 11 each). Hard mode real in all seven.
+- `0200b8827` (window 50, round 23's code), 25n: A no (uld1 wipe 32, uld4 kill 8), B **met** (uld2 kill
+  3; uld5 kill 12), C **met** (uld6 kill 1, uld3 kill 2). Hard mode real in all six.
+- `06854755f` (window 49, round 23 built): 10n A **met** (uld4 kill 9:08 with 1; uld1 P2 wipe 11); B no
+  (uld2 P3 wipe 11, uld5 Berserk 10); C no (uld3 and uld6 Berserk, 11 each).
 - `37cc72a94` (windows 46 and filler 47, round 22 built), 25n: A **met** (uld4 kill 1, uld1 kill 6), C
-  **met** (uld3 kill 0, uld6 kill 6), B not (uld5 kill 10, uld2 Berserk 30 with the ACU at 2.5%).
+  **met**, B not.
+- Round 24 (merged) and round 25 have no pulls yet.
 
-**Open failures, ranked** (window 49, 66 deaths):
+**Open failures, ranked** (window 50, 25n, 59 deaths):
 
-1. 10n P4 out of clock: uld3, uld5, uld6 Berserk (23). Each lost a ranged DPS first (P1 Napalm Shell, P2
-   Heat Wave, P2 Frost Bomb, then a P4 Water Spray). Q12.
-2. P2 storm 14: uld1 9 after its two healers fell (P1 mine 0:25, Rapid Burst 2:50); one each in uld2,
-   uld3, uld6; 25n uld5 2.
-3. Hand Pulse 8 (25n uld5 6). Q11 dropped.
-4. Water Spray 7: uld2's four melee at 5:14 from two sprays 0.1 s apart as the ACU lifted; uld6's two in
-   P4 from fire bots left over from H3 (round 24).
-5. 10n P3 adds 5 (uld2, after its Water Spray four); P1 4 (mine, Napalm Shell 2, Plasma Blast on a tank).
+1. A lost a healer to the opening P4 Frost Bomb in both pulls. uld4: a `combat formation move` put the
+   holy paladin at 31 yd 1.5 s before the blast and the escape's +112.5° leg cut back to ~29 yd (r25).
+   uld1: a `detour -65` slot leg (waypoint (2791.7, 2557.4), 48 yd off centre) left the resto shaman at
+   46 yd east, where every fan bearing was refused as `move` (bearing 0 `nopath`) and the fallback walked
+   it out to 58 yd, 25.4 yd from the bomb. Then the 7:11 tank-spot drag (39 yd west) left the healers
+   walking 40-58 yd off VX-001 under Hand Pulse: paladin dead 7:17, shaman 7:25, 18 Hand Pulse deaths,
+   Self Repair with the ACU at 4.2%, wipe. A detour bound needs navprobe of the east edge (x 2785-2800,
+   y 2535-2560) first (tried and rejected without it).
+2. Water Spray 6 (uld4 4, uld2 2): three stood 3-4 s in a lane on `spray unsafe` (r25); one walked back by
+   `mimiron approach target action` 40 ms after the 2.5 s hold; one had no escape at all (the reader's
+   lanes had it in one for 2 s); one after a fire dodge.
+3. Hand Pulse in the 25n mana race: uld5 B 8 after two of four healers ran dry at 8:43 (Q11 dropped).
+4. Bomb Bot 4: uld5 3 (2 of 4 taunted; one blew at its first sample on 4 bots, one on the bear and 7
+   more); uld4 1.
+5. Rapid Burst 3 (uld4, uld5, uld6), mines 4 (uld1 2, uld3 2).
+6. 10n P4 out of clock (window 49: uld3, uld5, uld6 Berserk); Q12's warlock lands next build.
 
 **Fixes in place** (round: what; verdict).
 
 - r1: hazard read without a sight test, standing bots leave fire at any health in a handover; held.
 - r2-3: handover hold band and walk-in, one code path with or without a player; held.
 - r4: core fetch at any ACU health; held.
-- r5: spray escape crosses to the far side, lanes 18 yd, no siren screen on it; held.
+- r5: spray escape crosses to the far side, lanes 18 yd, no siren screen on it; held, but crowded lanes
+  beat both steps (r25).
 - r6: melee walk back into sight after Shock Blast; held.
 - r7: holder screen (60.1 yd) and unreachable step; held.
 - r8: stranded walk-in least-burn leg; Rapid Burst read via the Burst Target; both held.
@@ -72,9 +85,10 @@ Water Spray, P4 mines and Hand Pulse.
 - r20: a spray step starts the 2.5 s fire hold; held.
 - r21: the flee fan refuses a destination off the floor (Z 803.11); held.
 - r22: the off-tank takes every P3 Bomb Bot (Q10 a), `p3bomb` slot, class taunt, holds the spot; held.
-- r23: a bear bomb tank shifts to Dire Bear Form in P3 and the hold zeroes `caster form`; held (bear form
-  100% of P3 in all five B and C pulls, Bomb Bot deaths 1).
-- r24: fire bots alive when P4 starts stay cull targets for DPS (the user's Q4 covered H3 only); pending.
+- r23: a bear bomb tank shifts to Dire Bear Form in P3 and the hold zeroes `caster form`; held.
+- r24: fire bots alive when P4 starts stay cull targets for DPS (Q13); pending, no pulls.
+- r25: spray escape ladder (8 and 12 yd after the lane-edge step); Frost Bomb escape fan stops at 90°;
+  pending.
 
 **Tried and rejected.**
 
@@ -108,87 +122,80 @@ Water Spray, P4 mines and Hand Pulse.
 
 **Open questions.** None.
 
-**Watch.** Melee and the off-tank sent to the unreachable P4 ACU walk between slot and stack (174 `arc
-spread <-> reach melee` A-B-A in uld3's P4); if a core change seats it without hover, melee reach it and
-the P4 model changes. The H3 cull loses to leftover Junk and Assault Bots (DPS take those first). The P2
-Frost Bomb fuse: melee and tanks flee to one clump, a burst on one hits all. The P4 `combat formation move`
-(generic disperse 4.0, shared code) runs unscreened off-slot: walk-ins into live bombs, mine hits (uld1's
-P1 healer at 0:25). Siren legs across a spray lane. A bot stuck off the navmesh has no flee leg at all.
+**Watch.** `combat formation move` (generic disperse 4.0, shared code) runs unscreened off-slot in P4:
+20-25 walk-ins a bomb in uld1, uld2 and uld6, one that started uld4's healer death; adding it to
+`mimiron frost bomb guard` is the next step if bomb hits on escapers remain. The P4 tank-spot drag moves the raid
+25-39 yd every ~30 s under Hand Pulse. Melee and the off-tank sent to the unreachable P4 ACU walk between
+slot and stack; if a core change seats it without hover, the P4 model changes. The H3 cull loses to
+leftover Junk and Assault Bots. The P2 Frost Bomb fuse: melee and tanks flee to one clump. The barrage
+dodge walks onto a live P4 bomb when no ring step is clean (9 of 44 bomb hits, all within 10 s of
+Berserk). Siren legs across a spray lane. A bot off the navmesh has no flee leg at all.
 `mimiron.phase` flickers (H3 0.3 s, P2b 0.25 s), splitting reader spans. Shared code, not raised: healer
 mana (priests overheal P3), Reincarnation into the killing lane, Ice Block ending inside a Frost Bomb
 fuse. DC side: auras carried over a logout, Boomer XP-500 trash west of the room.
 
-## Round 24 (build 06854755f, round 23 built, stock spawn)
+## Round 25 (build 0200b8827, round 23's code, stock spawn)
 
-**Data:** window 49 (`window49-mimiron-10n-job4.md`, six pulls; `window49-mimiron-25n-job3.md`, one) and
-filler 47 on round 22's build (`filler47-mimiron-10n-job1.md`, `filler47-mimiron-25n-job2.md`). Traces
-`603_<inst>_mimiron_<epoch>`: window 49 10n uld1 `18_1795611027`, uld2 `16_1795610997`, uld3
-`17_1795611002`, uld4 `15_1795610986`, uld5 `21_1795611503`, uld6 `14_1795610924`, 25n uld5
-`13_1795610900`; filler 47 10n uld4-6 `28_1795605526`, `29_1795605527`, `30_1795605512`, 25n uld1-3
-`31_1795605531`, `32_1795605540`, `33_1795605546`. Hard mode real in all thirteen. Scratch `mim24/`.
+**Data:** window 50 (`window50-mimiron.md`, 25n, one pull per pool). Traces `603_<inst>_mimiron_<epoch>`:
+uld1 `25_1795615039`, uld2 `26_1795615062`, uld3 `27_1795615070`, uld4 `28_1795615233`, uld5
+`29_1795615273`, uld6 `30_1795615427`. Hard mode real in all six (64563 at 7.08-7.14 s, 64582 cast).
+Scratch `mim25/` (bomb hits over 99 traces, spray stats and a ladder replay over the last 40).
 
 | Pool | Out | Deaths |
 |---|---|---|
-| 10n uld1 A | wipe 4:34 | 11: P1 mine (healer, 0:25), Napalm Shell; P2 Rapid Burst 4, Heat Wave 5 |
-| 10n uld2 B | wipe 7:20 | 11: P2 Rapid Burst; P3 Water Spray 5, Junk Bot 3, Assault Bot, ACU |
-| 10n uld3 C | Berserk | 11: P2 Heat Wave (hunter); P4 Hand Pulse; Berserk 9 |
-| 10n uld4 A | **kill** 9:08 | 1: P4 Rocket Strike |
-| 10n uld5 B | Berserk | 10: P1 Plasma Blast (tank), Napalm Shell (mage); P4 Hand Pulse; Berserk 7 |
-| 10n uld6 C | Berserk | 11: P2 Frost Bomb (hunter); P3 Bomb Bot; P4 Water Spray 2 (mage, shaman); Berserk 7 |
-| 25n uld5 B | **kill** 9:15 | 11: P2 Rapid Burst 2; P4 Hand Pulse 6, Laser Barrage, mine |
+| uld1 A | wipe 10:24 | 32: P4 Frost Bomb (healer 6:41), Hand Pulse 18 from 7:17, mines 2, then Self Repair: Plasma Ball 5, MK II 5, Flames 2 |
+| uld2 B | **kill** 9:35 | 3: P3 Water Spray 2 (6:16); P4 Flames |
+| uld3 C | **kill** 9:09 | 2: mines (P1, P4) |
+| uld4 A | **kill** 9:34 | 8: P2 Rapid Burst; P3 Water Spray 4, Bomb Bot; P4 Frost Bomb (healer 7:15), Hand Pulse |
+| uld5 B | **kill** 9:28 | 12: P2 Rapid Burst; P3 Bomb Bot 3; P4 Hand Pulse 8 (after 8:43) |
+| uld6 C | **kill** 8:44 | 1: P2 Rapid Burst |
 
-**Stop rules:** not polished (25n has only B on this build; 10n B and C open). Not stuck: this round's
-failure is new.
+**Stop rules:** not polished (A open on this build; 10n B and C open on window 49's). Not stuck: `spray
+unsafe` was picked once before (r5), the Frost Bomb escape bearing never.
 
-**Verdict on round 23 (bear bomb tank in bear form): held.** `--bombbots` on all five B and C pulls (10n
-uld2, uld3, uld5, uld6, 25n uld5): the bear in a bear form 100% of P3, taunt action OK 4-5 and FAILED 0 a
-pull (window 46: FAILED 4-9, 0%), 4-5 bombs taunted each (median 40-1206 ms after first sight), every
-blast on him but one; Bomb Bot deaths 1 (uld6 collateral, 5:10) against 6 at 10n in window 46 and 10 in
-filler 47.
+**Verdict on round 24:** none, its build has no pulls. Round 23 (bear bomb tank) held again: every B and C
+bomb tank in a bear form, uld2 and uld6 5 of 5 and 4 of 4 taunted on him; uld5 taunted 2 of 4.
 
-**Not picked first: 10n P4 runs out the clock (plan question Q12).** `--p4pace`: the ACU sits 15.0 yd
-above the chassis through every P4 (z 379.3/364.3, five pulls, both sizes); `IsWithinMeleeRange` is 3D
-(`Unit.cpp:790`) and its reach 0 gives 5 yd. Melee aimed at it dealt their ranged spells only (bear
-0.1-0.2k/s, rogue 0.4-1.0k/s; 174 `arc spread <-> reach melee` A-B-A in uld3). The ACU lost 0.33%/s with
-both ranged alive (uld4, 134 s), 0.19% with one (uld3, ACU 8% at Berserk), 0.13% (uld5) and 0.11% (uld6,
-none left from 7:23). The pair waits at the floor, so P4 lasts the ACU's HP over ranged damage.
+**Failure picked: Water Spray escapes refused on every step (bug).** `MimironFireBotAction`
+(`UldActions_Mimiron.cpp:1171`) tried the lane edge (5 yd less the bot's offset) and the far side (5
+plus it); with six fire bots round the melee (12 lanes) both land in other lanes, so the fan logged
+`spray none` and `spray unsafe` every tick and the bot stood in its line until the spray came. uld2
+6:12.7-6:16.7: Uldyar, Uldyag and the tank Uldyaa 4 s in a lane, two dead; uld4 6:13.9-6:17.2 Ulduax 3 s,
+dead. Last 40 traces: 142 hits, 30 dead, 10 of them within 3.5 s of a `spray unsafe` (37 hits). Replay of
+the 170 stuck moments (lanes rebuilt as the C++ does): 25 not in a lane by the model, 40 cleared at the
+edge step (the model's lanes differ), 80 at 8 yd, 25 at 12, none unresolved; out of every lane in a
+median 0.8 s, at most 1.6.
 
-**Failure picked: fire bots left by H3 are kept in P4 (bug).** Q4 culls them in H3 "so phase 4 starts
-without them"; `ScanMimironFireBots` (`UldEncounter_Mimiron.cpp:2210`) folds live ones to the cull only
-while `IsMimironPhase4Handover` reads a spent, unselectable ACU, so once P4 makes it selectable survivors
-are kept again: excluded as targets, behind the splash guard.
+**Second, independent and small: the Frost Bomb escape's 112.5° bearings (bug).** The fan takes the hop
+onto 34 yd at any bearing to ±112.5°; past 90° the leg passes closer to the bomb than it starts, at
+112.5° from 31 yd down to 28.6 over 30 yd. Over 60 traces the ±112.5° legs were 158 of 5,053 escapes and
+the last leg before 11 of 20 blast hits on an escaping bot (9 dead); ±22.5-45° 1,020 legs, none. uld4
+7:13.7: `combat formation move` took Ulduab 32.7→31 yd, the escape went `ok +113` (bearings to 90°
+refused for mines and fire), hit at 29.2 yd.
 
-- 2 of 11 H3s read opened with nine fire bots (10n uld6, filler 47 25n uld2). DPS spent the handover on
-  leftover adds: uld6 melee on a Junk Bot then the Assault Bot 6:16-6:47, uld2 all 15 DPS on one Assault
-  Bot 6:41-7:10; only the tanks hit fire bots.
-- uld6: four into P4 at 36-56%, two alive at the end; Water Spray killed the mage at 7:23 (its last
-  ranged DPS) and the shaman at 8:08, splash holds 41; the ACU then lost 0.11%/s, Berserk at 28%.
-- 25n uld2: six into P4, one at 1-6% alive 7:50-10:00; Deafening Siren through P4, 184 raid-s silenced,
-  splash holds 62; Berserk with the ACU at 2.5%, 30 dead.
-- The other nine H3s ended with none (`--firebots`).
+**Fix** (Mimiron only, hard mode, 10 and 25, with or without a player):
 
-**Fix** (Mimiron only, hard mode, 10 and 25; a real player kills or ignores them as he likes): the fold
-culls in P4 too (`IsMimironPhase4`), so a survivor stays a DPS priority target after leftover adds, off
-the target exclusions and the splash guard. Healers run `mimiron set dps priority` in P4, so its fire bot
-entry skips them as H3's trigger gate does, and they keep their part (`UldActions_Mimiron.cpp:1300`, review
-fix; else a far fire bot would pull them off the row by `reach spell`). Nothing summons more in P4 (`SetData(1, 4)` resets the ACU's
-events). Reader: `--p4pace` (parts every 30 s, loss rates, the ACU's height, aim and damage by role), test
-`PacePull`. Findings doc: the ACU's height and what it means for melee, the off-tank and the pace; the
-cull in P4.
+- After the edge step both sides repeat at 8 and 12 yd (`ULDUAR_MIMIRON_FIREBOT_SPRAY_ESCAPE_LADDER`,
+  notes `spray+8`, `spray+12`); only the last rung's far side takes the unscreened fallback.
+- The Frost Bomb escape fan refuses a bearing past 90° (`ULDUAR_MIMIRON_FROST_BOMB_FAN_MAX`, counted as
+  `bomb`); with all to 90° refused, the unit flee's fallback walks straight away.
+- Reader: `--firebots` adds the `spray unsafe` notes, the Water Spray hits and deaths within 3 s of one,
+  and ladder legs by rung, and counts a ladder leg as a spray step for walk-backs; `--bomb` adds escape
+  legs past 90° and the blast hits whose victim's last escape was one. Tests for both. Findings doc:
+  both fixes and the reader lines.
 
-**Next window should show** (`--firebots`, `--p4pace`): after an H3 that leaves fire bots, P4 closes
-with none (gone = open within ~15 s), P4 Water Spray, siren and splash holds near 0, no healer aimed at
-a fire bot; H3 and P3 unchanged.
-With none left (most pulls) the fix is not exercised.
+**Next window should show** (`--firebots`, `--bomb`): P3 `spray escapes refused on every rung` near 0
+(window 50: uld2 133, uld4 20) with `ladder legs +8`/`+12` in their place, Water Spray deaths at 1 or
+fewer a pull; `escape legs past 90 deg` 0 and no blast hit after an escape. Round 24's check stands: after
+an H3 that leaves fire bots, P4 closes with none.
 
-**Questions for the user.**
+**Not picked.**
 
-- **Q12 (plan change, roster): 10-man ranged damage on the P4 ACU.** The ACU hovers out of melee reach in
-  P4, so only ranged attacks bring it down, and the other two parts must wait for it. 10-man brings two
-  ranged DPS; with both alive P4 took 134 s and the kill came at 9:08, with one lost before or early in P4
-  it ran past Berserk in three of six window 49 pulls. Options: (a) put a third ranged DPS among each
-  design's first six (for example a warlock for the rogue), which changes every 10-man pull of every
-  boss; (b) 10-man healers also hit the ACU in P4 while the raid is healthy (~1-2k/s, risks the Hand Pulse
-  race); (c) leave it and waive the 10n stop rule for Mimiron. Recommendation: (a).
+- uld1's stranded healer: needs navprobe of the east edge before a detour bound (State, failure 1).
+- The `combat formation move` walk-in into the P4 bomb (Watch); the bearing fix covers uld4's death.
+- uld5's Bomb Bots: 2 of 4 taunted, one on the pile at its first sample.
+- The P4 tank-spot drag under Hand Pulse (uld1 7:11, 39 yd); Hand Pulse in the mana race (Q11 dropped).
 
-**Shared code:** none (Mimiron fire bot fold, reader and its test, findings doc, this log).
+**Questions for the user.** None.
+
+**Shared code:** none (Mimiron action and constants, reader and its test, findings doc, this log).

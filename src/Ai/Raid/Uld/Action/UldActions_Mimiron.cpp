@@ -131,6 +131,7 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
         centre = std::clamp(off, -ULDUAR_MIMIRON_FLEE_FAN_MAX, ULDUAR_MIMIRON_FLEE_FAN_MAX);
     }
     float const sweep = toward ? 2.0f * ULDUAR_MIMIRON_FLEE_FAN_MAX : ULDUAR_MIMIRON_FLEE_FAN_MAX;
+    bool const bombFlee = fallbackFrom && fallbackFrom->GetEntry() == NPC_FROST_BOMB;
 
     std::vector<Position> const mines = GetMimironMines(botAI);
     std::vector<MimironBombBotBlast> const bombBotBlasts = GetMimironBombBotBlasts(botAI, bot);
@@ -149,6 +150,12 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
                 float const offAway = centre + sign * delta;
                 if (std::fabs(offAway) > ULDUAR_MIMIRON_FLEE_FAN_MAX + 0.001f)
                     continue;
+
+                if (bombFlee && std::fabs(offAway) > ULDUAR_MIMIRON_FROST_BOMB_FAN_MAX + 0.001f)
+                {
+                    ++refusedBomb;
+                    continue;
+                }
 
                 float const angle = away + offAway;
 
@@ -1184,19 +1191,28 @@ bool MimironFireBotAction::Execute(Event /*event*/)
             continue;
 
         float const out = side >= 0.0f ? 1.0f : -1.0f;
-        for (float const across : {1.0f, -1.0f})
+        size_t const rungs = std::size(ULDUAR_MIMIRON_FIREBOT_SPRAY_ESCAPE_LADDER);
+        for (size_t rung = 0; rung <= rungs; ++rung)
         {
-            float const step = ULDUAR_MIMIRON_FIREBOT_SPRAY_HALF_WIDTH + ULDUAR_MIMIRON_FIREBOT_SPRAY_SIDESTEP -
-                               across * std::fabs(side);
-            float const dir = across * out;
-            Position const dest(bot->GetPositionX() - dir * step * std::sin(facing),
-                                bot->GetPositionY() + dir * step * std::cos(facing), bot->GetPositionZ());
+            char what[16] = "spray";
+            if (rung > 0)
+                snprintf(what, sizeof(what), "spray+%.0f", ULDUAR_MIMIRON_FIREBOT_SPRAY_ESCAPE_LADDER[rung - 1]);
 
-            if (MoveTowardClearOfMines(dest, MovementPriority::MOVEMENT_FORCED, across < 0.0f, true, "spray",
-                                       true, false))
+            for (float const across : {1.0f, -1.0f})
             {
-                NoteMimironFireDodge(bot);
-                return true;
+                float const step = rung == 0 ? ULDUAR_MIMIRON_FIREBOT_SPRAY_HALF_WIDTH +
+                                                   ULDUAR_MIMIRON_FIREBOT_SPRAY_SIDESTEP - across * std::fabs(side)
+                                             : ULDUAR_MIMIRON_FIREBOT_SPRAY_ESCAPE_LADDER[rung - 1];
+                float const dir = across * out;
+                Position const dest(bot->GetPositionX() - dir * step * std::sin(facing),
+                                    bot->GetPositionY() + dir * step * std::cos(facing), bot->GetPositionZ());
+
+                if (MoveTowardClearOfMines(dest, MovementPriority::MOVEMENT_FORCED, rung == rungs && across < 0.0f,
+                                           true, what, true, false))
+                {
+                    NoteMimironFireDodge(bot);
+                    return true;
+                }
             }
         }
 

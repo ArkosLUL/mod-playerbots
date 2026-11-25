@@ -76,6 +76,9 @@ BOMB_BOT_KILL_MS = 300
 BOMB_RADIUS = radius("ULDUAR_MIMIRON_FROST_BOMB_RADIUS")
 BOMB_STAND = radius("ULDUAR_MIMIRON_FROST_BOMB_STAND_RADIUS")
 BOMB_CLEARANCE = radius("ULDUAR_MIMIRON_FROST_BOMB_CLEARANCE")
+BOMB_WIDE_DEG = 90
+BOMB_FLEE = re.compile(r"frostbomb (ok|fallback)(?: ([+-]\d+))?")
+SPRAY_FLEE = re.compile(r"spray(?:\+(\d+))? (\w+)")
 SPRAY_LENGTH = radius("ULDUAR_MIMIRON_FIREBOT_SPRAY_LENGTH")
 SPRAY_HALF_WIDTH = radius("ULDUAR_MIMIRON_FIREBOT_SPRAY_HALF_WIDTH")
 SPRAY_REACH = radius("ULDUAR_MIMIRON_FIREBOT_SPRAY_REACH")
@@ -691,6 +694,11 @@ def bomb_rows(trace: Trace) -> list[dict]:
     blasts = [rec for rec in trace.of("dmg") if rec.get("sp") in SPELL_FROST_BOMB_EXPLOSIONS]
     moves = accepted_moves(trace)
     dodges = [rec for recs in moves.values() for rec in recs if rec.get("by") == BOMB_DODGE]
+    escapes: dict[int, list[tuple[int, bool]]] = collections.defaultdict(list)
+    for rec in notes(trace, "mimiron.flee"):
+        match = BOMB_FLEE.match(str(rec.get("txt", "")))
+        if match:
+            escapes[rec["g"]].append((rec["t"], bool(match.group(2)) and abs(int(match.group(2))) > BOMB_WIDE_DEG))
 
     sampled = {}
     for index, snap in enumerate(samples.snaps):
@@ -706,7 +714,8 @@ def bomb_rows(trace: Trace) -> list[dict]:
         when = cast["t"]
         row = {"t": when, "seen": None, "spot": None, "inside": collections.Counter(), "moving": 0.0,
                "casting": 0.0, "out_of_reach": 0, "hits": 0, "escapes": 0, "short_stand": 0,
-               "short_clearance": 0, "walk_ins": collections.Counter(), "vx_moved": 0.0}
+               "short_clearance": 0, "walk_ins": collections.Counter(), "vx_moved": 0.0, "wide": 0,
+               "wide_hits": 0}
         rows.append(row)
         first = min((found for found in sampled.values() if when <= found[0] <= when + LANDING_MS),
                     default=None)
@@ -753,7 +762,13 @@ def bomb_rows(trace: Trace) -> list[dict]:
                 if off_segment((unit[1], unit[2]), (rec["x"], rec["y"]), spot) < min(stood, BOMB_STAND):
                     row["walk_ins"][rec.get("by", "?")] += 1
 
-        row["hits"] = sum(1 for rec in blasts if seen <= rec["t"] <= seen + FUSE_MS + 1500)
+        fused = [rec for rec in blasts if seen <= rec["t"] <= seen + FUSE_MS + 1500]
+        row["hits"] = len(fused)
+        row["wide"] = sum(1 for legs in escapes.values() for at, wide in legs
+                          if wide and when <= at <= seen + FUSE_MS + 500)
+        for rec in fused:
+            last = [wide for at, wide in escapes.get(rec.get("d"), []) if when <= at <= rec["t"]]
+            row["wide_hits"] += bool(last) and last[-1]
         for rec in dodges:
             if when <= rec["t"] <= seen + FUSE_MS + 500:
                 landed = dist2((rec["x"], rec["y"]), spot)
@@ -783,11 +798,15 @@ def show_bomb(trace: Trace) -> None:
         if row["escapes"]:
             print(f"            {row['escapes']} escapes, {row['short_stand']} under {BOMB_STAND:.0f} yd,"
                   f" {row['short_clearance']} under {BOMB_CLEARANCE:.0f}")
+        if row["wide"] or row["wide_hits"]:
+            print(f"            escape legs past {BOMB_WIDE_DEG} deg off straight away {row['wide']},"
+                  f" blast hits on a bot whose last escape was one {row['wide_hits']}")
         walk_ins = ", ".join(f"{by} {n}" for by, n in row["walk_ins"].most_common())
         print(f"            walks into the live bomb {sum(row['walk_ins'].values())}"
               f"{f' ({walk_ins})' if walk_ins else ''}; VX-001 moved {row['vx_moved']:.0f} yd over the fuse")
     print(f"\n  a walk-in is an accepted leg, any mover but the bomb's own escape, that ran deeper inside"
-          f" {BOMB_STAND:.0f} yd of the bomb than the bot stood")
+          f" {BOMB_STAND:.0f} yd of the bomb than the bot stood; an escape past {BOMB_WIDE_DEG} deg is a"
+          f" 'frostbomb ok' note with that bearing, a leg that passes closer to the bomb than it starts")
 
 
 # ---------------------------------------------------------------------------------------------- slots
@@ -1628,22 +1647,36 @@ def firebot_rows(trace: Trace) -> list[dict]:
         swept = [when for when in sweeps if rec["t"] <= when < stop]
         windows.append((rec["t"], swept[-1] + 1 if swept else stop))
     spray_notes: dict[int, list[int]] = collections.defaultdict(list)
+    stuck_notes: dict[int, list[int]] = collections.defaultdict(list)
     flee_times: dict[int, list[int]] = collections.defaultdict(list)
     flee_texts: dict[int, list[str]] = collections.defaultdict(list)
     for rec in notes(trace, "mimiron.flee"):
         text = str(rec.get("txt", ""))
         flee_times[rec["g"]].append(rec["t"])
         flee_texts[rec["g"]].append(text)
-        if text.startswith("spray"):
+        match = SPRAY_FLEE.match(text)
+        if match:
             spray_notes[rec["g"]].append(rec["t"])
+            if match.group(2) == "unsafe":
+                stuck_notes[rec["g"]].append(rec["t"])
 
-    def spray_step(guid: int, when: int) -> bool:
+    def spray_step(guid: int, when: int) -> str | None:
         index = bisect.bisect_right(flee_times[guid], when + FLEE_NOTE_LAG_MS) - 1
-        return index >= 0 and flee_texts[guid][index].split()[:2] in (["spray", "ok"], ["spray", "fallback"])
+        match = SPRAY_FLEE.match(flee_texts[guid][index]) if index >= 0 else None
+        if not match or match.group(2) not in ("ok", "fallback"):
+            return None
+        return match.group(1) or ""
 
     walkbacks: dict[int, list[int]] = collections.defaultdict(list)
+    ladder_legs: list[tuple[int, str]] = []
     for guid, recs in moves.items():
-        spray_steps = [rec["t"] for rec in recs if rec.get("by") == FIREBOT_STEP and spray_step(guid, rec["t"])]
+        spray_steps = []
+        for rec in recs:
+            rung = spray_step(guid, rec["t"]) if rec.get("by") == FIREBOT_STEP else None
+            if rung is not None:
+                spray_steps.append(rec["t"])
+                if rung:
+                    ladder_legs.append((rec["t"], rung))
         for rec in recs:
             if rec.get("by") in WALK_BACK_MOVERS and any(
                     0 < rec["t"] - when <= WALK_BACK_MS for when in spray_steps):
@@ -1657,6 +1690,9 @@ def firebot_rows(trace: Trace) -> list[dict]:
 
     def walked_back(guid: int, at: int) -> bool:
         return any(0 <= at - when <= SPRAY_NOTE_MS for when in walkbacks[guid])
+
+    def stuck(guid: int, at: int) -> bool:
+        return any(0 <= at - when <= SPRAY_NOTE_MS for when in stuck_notes[guid])
 
     rows = []
     for low, high, label in spans[first:]:
@@ -1677,6 +1713,7 @@ def firebot_rows(trace: Trace) -> list[dict]:
         spray = [rec.get("a", 0) for rec in inside if rec["sp"] == SPELL_WATER_SPRAY]
         barrage_hits = [rec for rec in inside if rec["sp"] == SPELL_WATER_SPRAY and in_barrage(rec["t"])]
         walked = [rec for rec in inside if rec["sp"] == SPELL_WATER_SPRAY and walked_back(rec["d"], rec["t"])]
+        stranded = [rec for rec in inside if rec["sp"] == SPELL_WATER_SPRAY and stuck(rec["d"], rec["t"])]
         rows.append({
             "label": label, "span": (low, high),
             "open": counts[0] if counts else 0, "close": counts[-1] if counts else 0,
@@ -1699,6 +1736,10 @@ def firebot_rows(trace: Trace) -> list[dict]:
             "walkback_spray_hits": len(walked),
             "walkback_spray_deaths": sum(1 for guid, when in spray_killed
                                          if low <= when < high and walked_back(guid, when)),
+            "stuck": sum(1 for times in stuck_notes.values() for when in times if low <= when < high),
+            "stuck_spray_hits": len(stranded),
+            "stuck_spray_deaths": sum(1 for guid, when in spray_killed if low <= when < high and stuck(guid, when)),
+            "ladder": collections.Counter(rung for when, rung in ladder_legs if low <= when < high),
         })
     return rows
 
@@ -1723,6 +1764,10 @@ def show_firebots(trace: Trace) -> None:
               f" spray or siren steps {row['steps']}")
         print(f"       walk-backs after a spray step {row['walkbacks']}; Water Spray hits after one"
               f" {row['walkback_spray_hits']}, {row['walkback_spray_deaths']} dead")
+        ladder = ", ".join(f"+{rung} {count}"
+                           for rung, count in sorted(row["ladder"].items(), key=lambda kv: int(kv[0])))
+        print(f"       spray escapes refused on every rung {row['stuck']}; Water Spray hits after one"
+              f" {row['stuck_spray_hits']}, {row['stuck_spray_deaths']} dead; ladder legs {ladder or 'none'}")
         if row["barrage_s"]:
             print(f"       in barrage windows ({row['barrage_s']:.0f} s): Water Spray {row['barrage_spray_hits']} hits,"
                   f" {row['barrage_spray_deaths']} dead, {row['barrage_spray_silent']} with no spray note before;"
@@ -1733,8 +1778,10 @@ def show_firebots(trace: Trace) -> None:
           f" {SPIN_WINDOW_MS / 1000:.1f} s without them), and 'no spray note' means the victim wrote none in"
           f" the {SPRAY_NOTE_MS / 1000:.0f} s before the hit; a walk-back is an accepted {', '.join(WALK_BACK_MOVERS)}"
           f" leg within {WALK_BACK_MS / 1000:.1f} s of the same bot's spray step (an accepted fire bot leg whose"
-          f" last flee note reads 'spray ok' or 'spray fallback'), and a hit after one lands within"
-          f" {SPRAY_NOTE_MS / 1000:.0f} s of it")
+          f" last flee note reads 'spray ok' or 'spray fallback', or 'spray+N' for a ladder rung N yd out),"
+          f" and a hit after one lands within {SPRAY_NOTE_MS / 1000:.0f} s of it; an escape refused on every"
+          " rung is the last rung's 'unsafe' note ('spray+N unsafe', 'spray unsafe' before the ladder),"
+          " written about once a tick while the bot stands in the lane")
 
 
 def unreach_rows(trace: Trace) -> dict:
