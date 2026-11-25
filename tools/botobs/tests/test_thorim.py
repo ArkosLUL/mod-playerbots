@@ -234,6 +234,17 @@ class RingBlizzard(unittest.TestCase):
         text = printed(thorim.show_blizzard, load(sorted(records, key=lambda rec: rec.get("t", 0))))
         self.assertIn("stepped 7.0 bot-s, out of reach 7.0 of them, in another slot's jump 4.0;", text)
 
+    def test_a_dead_slots_point_leaves_the_jump(self):
+        records = blizzard_pull()
+        records[0]["roster"].append({"g": MELEE_B, "n": "Edge", "r": "melee", "c": 4, "h": 0})
+        for rec in records:
+            if rec.get("e") == "snap":
+                rec["u"].append([MELEE_B, 2140.0, -265.0, 419.6, 0, 100 if rec["t"] <= 24000 else 0, 0, THORIM])
+        records.append({"t": 1000, "e": "note", "g": MELEE_B, "k": "thorim.ringspot",
+                        "txt": "slot 0 bearing 54 solved 54"})
+        text = printed(thorim.show_blizzard, load(sorted(records, key=lambda rec: rec.get("t", 0))))
+        self.assertIn("stepped 7.0 bot-s, out of reach 7.0 of them, in another slot's jump 4.0;", text)
+
     def test_step_points_on_the_bunny_path_and_under_a_zone(self):
         records = blizzard_pull()
         for rec in records:

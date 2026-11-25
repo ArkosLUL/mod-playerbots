@@ -3564,8 +3564,8 @@ bool ThorimRingBlizzardStep(PlayerbotAI* botAI, Player* bot, Position& out)
             (pass.clearOfPath && pathAhead.empty()) || (clearHere && !pass.clearOfSlots))
             continue;
 
-        auto const accept = [bot, boss, pass, tankClearance, &outOfCone, &clearOf, &clearOfPath, &otherSlots,
-                             &camp](float x, float y)
+        auto const accept = [botAI, bot, boss, pass, clearHere, tankClearance, &outOfCone, &clearOf, &clearOfPath,
+                             &otherSlots, &camp](float x, float y)
         {
             if (x < ULDUAR_THORIM_ARENA_BOX_MIN_X || x > ULDUAR_THORIM_ARENA_BOX_MAX_X ||
                 y < ULDUAR_THORIM_ARENA_BOX_MIN_Y || y > ULDUAR_THORIM_ARENA_BOX_MAX_Y || !outOfCone(x, y) ||
@@ -3577,6 +3577,9 @@ bool ThorimRingBlizzardStep(PlayerbotAI* botAI, Player* bot, Position& out)
 
             if ((pass.clearOfSlots && !clearOf(otherSlots, x, y)) || (pass.clearOfCamp && !clearOf(camp, x, y)) ||
                 (pass.clearOfPath && !clearOfPath(x, y)))
+                return false;
+
+            if (clearHere && RingWalkCrossesLitCone(botAI, bot, Position(x, y, 0.0f)))
                 return false;
 
             return !pass.clearOfTanks ||

@@ -93,7 +93,8 @@ past the kill; raid %/s before it 0.46-0.52. A gauntlet healer lost in phase 1 c
   across it leaves before the bunny gets there — held (w46: ring in a zone 4-13 bot-s against 20-76, ring Blizzard
   deaths 0; cost: melee in reach before the first tank death 76% against 80%, raid %/s there −2%; kept).
 - R28: a stepped ring bot clear of the hazards re-steps while another slot's bot or point is in its jump (slot-clear
-  passes only); `RingBodyBridgesChain` counts another slot at its point too — pending (next window).
+  passes only, never across the lit cone); `RingBodyBridgesChain` counts another slot at its point too — pending
+  (next window).
 
 **Tried and rejected:**
 - Balcony runner: the user ruled it out (phase 2 with the squad deep in the corridor).
@@ -187,13 +188,14 @@ largest bug share; 14 of w46's 21 deaths before the first tank death were chains
 stepped bot clear of the hazards hold only while no other slot's bot or point (`RingStepChainBodies`, the camp aside)
 lies in its jump; else it re-steps through the slot-clear passes only and holds when they find nothing.
 `RingBodyBridgesChain` also counts another slot at its point (`RingSlotPoint`, shared with `RingStepChainBodies`).
-Reader `--blizzard`: stepped bot-seconds in another slot's jump (tested in `test_thorim.py`); boss doc: "It breaks
-for a Chain Lightning bridge too", "Clear at the step is not clear for the stay". `pb-check` passes (syntax, pblint,
-codestyle, botobs).
+Reader `--blizzard`: stepped bot-seconds in another living slot's jump (tested in `test_thorim.py`); boss doc: "It
+breaks for a Chain Lightning bridge too", "Clear at the step is not clear for the stay". `pb-check` passes (syntax,
+pblint, codestyle, botobs). Review: the re-step skips a point whose walk crosses the lit cone (R24's rule; it fires
+on the lit orb), and the reader counts a slot's point only while that slot has a living floor bot (uld3 47.7 → 31.2).
 
 **Next window should show** (hard-mode pulls):
 - `--chains` "through a stepped slot: slot to slot" deaths 0 (w44-w46: 9 in 15 pulls).
-- `--blizzard` "in another slot's jump" well under w46's 40.1 / 19.4 / 6.3 / 3.5 / 47.7 / 4.7; steps a few more,
+- `--blizzard` "in another slot's jump" well under w46's 40.1 / 19.4 / 6.3 / 3.5 / 31.2 / 4.7; steps a few more,
   out of reach within ~10 bot-s of w46's 263 / 315 / 238 / 207 / 307 / 282.
 - Ring chain deaths before the first tank death under w46's 11; R27 holding (ring in a zone ≤ ~13 bot-s, no ring
   Blizzard death); melee in reach and %/s before the first tank death not lower.

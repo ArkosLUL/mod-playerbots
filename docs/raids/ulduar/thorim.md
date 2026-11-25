@@ -485,7 +485,7 @@ re-solve on the lit orb or a walk back puts another slot's point in its jump, an
 four casts crossed into a slot through a stepped bot already standing there ≥ 0.8 s, 9 dead (slot 2 to
 slot 1 at 2.5 and 8.0 yd, 3 each). So a stepped bot clear of all three and the cone re-steps while
 another slot's bot or point (the camp aside) lies in its jump, through the passes that clear the slots
-only, and holds when they find nothing.
+only, never walking across the lit cone (above), and holds when they find nothing.
 
 **Blind to where the bunny goes, the step ran ahead of it.** Cleared of the live zones and the bunny
 alone, the nearest point lay within 11 yd of the bunny's next legs for 41-84% of a pull's steps, and at
@@ -1454,8 +1454,9 @@ navprobes, not a nudge, and each new point needs the hazard check navprobe does 
   stays, longest, ticks, damage); deaths; step moves, those whose point lay under 11 yd off the bunny's
   walk ahead or under a zone's 9.8 yd reach within 8 s, those whose walk crossed that walk ahead (the
   bunny's p50 path yards short of the crossing, ticks until the bot's next order), stepped bot-seconds,
-  those past 9.0 yd of him and those within 8.5 yd of another slot's bot or point; the walk back from a
-  step's end to within 9.0 yd, ticks on the way. Traces without `thorim.ringstep` read all but the steps.
+  those past 9.0 yd of him and those within 8.5 yd of another living slot's bot or point; the walk back
+  from a step's end to within 9.0 yd, ticks on the way. Traces without `thorim.ringstep` read all but the
+  steps.
 - `--chains`: each Chain Lightning hop by hop as groups (tank, camp, a ring slot, marked stepped on its
   step point or within 3 s of leaving it), the yards between groups, `(lust)` when both bodies carried
   Heroism or Bloodlust (8.9 yd jump), deaths per group; then deaths by the crossing that reached them,

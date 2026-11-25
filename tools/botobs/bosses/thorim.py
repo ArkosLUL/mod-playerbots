@@ -808,11 +808,11 @@ class RingBlizzard:
     @staticmethod
     def _in_other_slot_jump(guid, row, rows: dict, slot_of: dict, points: dict) -> bool:
         own = slot_of.get(guid)
-        spots = [point for slot, point in points.items() if slot != own]
+        spots = []
         for other, slot in slot_of.items():
             body = rows.get(other)
             if slot != own and body is not None and body[5] > 0 and body[3] <= FLOOR_Z:
-                spots.append(body[1:3])
+                spots += [body[1:3], points[slot]]
         return any(dist2(row[1:3], other) <= RING_CHAIN_CLEARANCE for other in spots)
 
     def crossing(self, move: dict) -> float | None:
