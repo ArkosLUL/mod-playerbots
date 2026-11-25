@@ -375,6 +375,13 @@ reads it, never inside `IsActive`. Rules (`ToCDefinition_Staging.cpp`):
   limit.
 - `toc staging tank form guard` blocks `caster form` for tanks: a druid tank drops bear form out of
   combat and nothing shifts it back.
+- `toc staging ritual guard` blocks `ritual of souls`, `join ritual of souls` and `use soulwell`.
+  The hold's walk waits out a helper's movement lock
+  ([pitfalls.md](../../engine/pitfalls.md#movement-that-silently-no-ops)), so the helper reached the
+  portal and was then walked back, which breaks the channel the ritual needs
+  (`GameObject::CheckRitualList`): no ritual completed, helpers took turns walking all settle, and
+  on 25H 2026-11-25 a side tank's walk pulled Anub'arak. A human warlock's portal gets no bot helper
+  either.
 
 **Resistance.** Fire, Frost and Shadow Resistance Aura rank 5 (48947, 48945, 48943) and Aspect of the
 Wild rank 4 (49071, nature) are `APPLY_AREA_AURA_RAID` + `MOD_RESISTANCE_EXCLUSIVE` 130: one holder
