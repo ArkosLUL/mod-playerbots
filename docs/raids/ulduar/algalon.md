@@ -183,13 +183,15 @@ aftermath, the 209.4 meteor and its `smashrecovery` leave 219.4-230.9 clear: roo
 left after Big Bang 2 cost 1.5 dead a pull, two cost 6.2 (25 pulls), whether the second was killed 11-14 s after the
 first or drained onto the meteor. Two are left when the bulk lands only one: the plan takes as many as its measured
 speed fits by cast − 5 s, two only from +2.9 %/s beyond the drain, and a planned second can still go `late` at
-38-70%. So its speed (median +1.9 %/s; landing both took ~+3.1) decides it.
+38-70%. So its speed decides it (three members: median +1.9 %/s; landing both took ~+3.1): on 25-man two more
+ranged join the star team for it (below).
 
 - **Plan**, per tick outside the cast, only with a disperser latched (a tank soaker would take each explosion
   whole), started afresh at each cast: a new star joins if its drain death isn't before the window and the
   team's work ends 5 s before the cast (at 6 %/s, or the measured speed when lower, less the drain, which moves
   the band: the bulk's own, averaged over a span from past its first casts and dropped after a cycle with none,
-  else a paced kill's), smallest first; the rest are paced. **A planned star stays planned**:
+  else a paced kill's; either's excess over the drain scaled by the team's size now over then), smallest first;
+  the rest are paced. **A planned star stays planned**:
   re-planned each tick, all were dropped 6 s before the cast, and three died together after the strip and killed
   18. It is released for good (`algalon.underdrop`) only `early`, dying before hit − 5 s (the stretch's reach);
   `late`, between cast −15 and −8 s once its bulk, behind every star the bulk takes first (latched, then most
@@ -238,16 +240,18 @@ speed fits by cast − 5 s, two only from +2.9 %/s beyond the drain, and a plann
 **Paced**, the rest:
 
 A latched **star team** of 2 damage dealers (3 on 25-man), ranged first and melee only to fill a raid short on ranged,
-kills them; the target exclusions keep every other bot on Algalon, and an `OwnTargeting` rule keeps
-`dps assist` from pulling the team back, since a star is no attacker until something hits it. The team
-is cleared (`algalon.focusstar`) onto a star only when its death is **planned**. Splash near him takes
-1-2.4 %/s on top of the drain, so a star's forecast death is its health over its measured loss (the slope of a
+kills them. On 25-man two more ranged join from wave 3's spawn (a star first seen after Big Bang 1 ends, while one
+lives) to Big Bang 2's cast; the core three stay after. The target exclusions keep every other bot on Algalon, and
+an `OwnTargeting` rule keeps `dps assist` from pulling the team back, since a star is no attacker until something
+hits it. The team is cleared (`algalon.focusstar`) onto a star only when its death is **planned**. Splash near
+him takes 1-2.4 %/s on top of the drain, so a star's forecast death is its health over its measured loss (the slope of a
 4 s log, never under the drain; under 2 s of log reads as the drain alone), not its health. A kill lands at its health over 9-5.5 %/s (whole kills ran
 6.2-7.8 %/s on 25-man) plus the team's walk (mean distance past 28 yd at 7 yd/s) and a 2 s start (every kill's first
 2 s only matched the drain; none for a star already losing 3.5 %/s), or over its own slope once the team is on
-it. Any other star is planned up to the speed the team last showed on its focus (capped
-at 12 %/s, `…_STAR_KILL_PEAK_PCT_PER_SEC`: a last 15% once went at 16 %/s, but only for a second): one
-just dropped keeps dying that fast, and planned at 9 %/s it was opened again every other tick.
+it. Any other star is planned up to the speed the team last showed on its focus, scaled to the team's size like
+the bulk's (capped at 12 %/s before scaling, `…_STAR_KILL_PEAK_PCT_PER_SEC`: a last 15% once went at 16 %/s, but
+only for a second): one just dropped keeps dying that fast, and planned at 9 %/s it was opened again every other
+tick.
 A death is **clear** outside 1 s before Big Bang to
 3 s after the hit and 4 s before to 5 s after a meteor impact (6-11 k on everyone, then the explosion: 3-4 died
 each time one landed 0.9-1.3 s after), and 8 s from the last explosion and every other star's forecast death.

@@ -1156,25 +1156,41 @@ Player* ElectHandler(Player* bot, AlgalonEncounterState const& state, std::vecto
     return nullptr;
 }
 
+bool StarTeamReinforced(Player* bot, AlgalonEncounterState const& state)
+{
+    if (!bot->GetMap()->Is25ManRaid() || state.bigBangCasting || !state.lastBigBangEndMs ||
+        state.bigBangCount + 1 != ULDUAR_ALGALON_STAR_TEAM_EXTRA_BIG_BANG)
+        return false;
+
+    return std::any_of(state.stars.begin(), state.stars.end(), [&state](AlgalonScanUnit const& star)
+                       { return static_cast<int32>(star.firstSeenMs - state.lastBigBangEndMs) > 0; });
+}
+
 void ElectStarTeam(Player* bot, AlgalonEncounterState& state)
 {
     Group* group = bot->GetGroup();
     if (!group)
         return;
 
+    bool const reinforced = StarTeamReinforced(bot, state);
     std::vector<ObjectGuid> leaving;
     for (ObjectGuid const& guid : state.starTeam)
     {
         Player* member = FindGroupMember(group, guid);
-        if (!InFight(member) || !IsDamageDealer(member))
+        if (!InFight(member) || !IsDamageDealer(member) || (!reinforced && state.starTeamExtras.count(guid)))
             leaving.push_back(guid);
     }
 
     for (ObjectGuid const& guid : leaving)
+    {
         state.starTeam.erase(guid);
+        state.starTeamExtras.erase(guid);
+    }
 
-    uint8 const size =
+    size_t const core =
         bot->GetMap()->Is25ManRaid() ? ULDUAR_ALGALON_STAR_TEAM_25 : ULDUAR_ALGALON_STAR_TEAM_10;
+    size_t const extras = reinforced ? ULDUAR_ALGALON_STAR_TEAM_EXTRA_25 : 0;
+    size_t const size = core + extras;
     if (state.starTeam.size() >= size)
         return;
 
@@ -1200,8 +1216,24 @@ void ElectStarTeam(Player* bot, AlgalonEncounterState& state)
         if (state.starTeam.size() >= size)
             break;
 
-        state.starTeam.insert(candidate->GetGUID());
+        if (state.starTeam.size() - state.starTeamExtras.size() < core)
+            state.starTeam.insert(candidate->GetGUID());
+        else if (state.starTeamExtras.size() < extras && IsRangedDps(candidate))
+        {
+            state.starTeam.insert(candidate->GetGUID());
+            state.starTeamExtras.insert(candidate->GetGUID());
+        }
     }
+}
+
+float TeamSpeed(AlgalonEncounterState const& state, float measured, uint32 measuredTeam)
+{
+    if (measured <= ULDUAR_ALGALON_STAR_DRAIN_PCT_PER_SEC || !measuredTeam || state.starTeam.empty())
+        return measured;
+
+    return ULDUAR_ALGALON_STAR_DRAIN_PCT_PER_SEC + (measured - ULDUAR_ALGALON_STAR_DRAIN_PCT_PER_SEC) *
+                                                       static_cast<float>(state.starTeam.size()) /
+                                                       static_cast<float>(measuredTeam);
 }
 
 bool StarClearOfTanks(AlgalonEncounterState const& state, Group* group, Unit* boss, AlgalonScanUnit const& star,
@@ -1471,7 +1503,8 @@ StarSpan FinishBand(AlgalonEncounterState const& state, Group* group, AlgalonSca
     }
 
     int32 const start = walk + (hit ? 0 : static_cast<int32>(ULDUAR_ALGALON_STAR_KILL_START_MS));
-    float const fast = std::max(ULDUAR_ALGALON_STAR_KILL_FAST_PCT_PER_SEC, state.teamKillPctPerSec);
+    float const fast = std::max(ULDUAR_ALGALON_STAR_KILL_FAST_PCT_PER_SEC,
+                                TeamSpeed(state, state.teamKillPctPerSec, state.teamKillTeam));
     return {start + StarDeathAt(star, fast), start + StarDeathAt(star, ULDUAR_ALGALON_STAR_KILL_SLOW_PCT_PER_SEC)};
 }
 
@@ -2577,7 +2610,8 @@ int32 BulkWorkMs(AlgalonEncounterState const& state, AlgalonScanUnit const& star
     if (!left)
         return 0;
 
-    float const measured = state.bulkPctPerSec > 0.0f ? state.bulkPctPerSec : state.teamKillPctPerSec;
+    float const measured = state.bulkPctPerSec > 0.0f ? TeamSpeed(state, state.bulkPctPerSec, state.bulkTeam)
+                                                      : TeamSpeed(state, state.teamKillPctPerSec, state.teamKillTeam);
     float const pctPerSec = measured > 0.0f ? std::min(measured, ULDUAR_ALGALON_UNDER_TEAM_PCT_PER_SEC)
                                             : ULDUAR_ALGALON_UNDER_TEAM_PCT_PER_SEC;
     float const closing = std::max(1.0f, pctPerSec - ULDUAR_ALGALON_STAR_DRAIN_PCT_PER_SEC);
@@ -2928,6 +2962,7 @@ void CommitBulkSpeed(AlgalonEncounterState& state, uint32 now)
     {
         float const speed = (state.bulkFromPct - star->healthPct) * IN_MILLISECONDS / span;
         state.bulkPctPerSec = std::min(speed, ULDUAR_ALGALON_STAR_KILL_PEAK_PCT_PER_SEC);
+        state.bulkTeam = state.bulkFromTeam;
         state.bulkMeasuredCycle = state.bigBangCount;
     }
 
@@ -3263,12 +3298,15 @@ void AlgalonTickEncounterState(PlayerbotAI* botAI)
     Player* auraPaladin = ElectShadowAuraPaladin(group, state->shadowAuraPaladin.Get());
     state->shadowAuraPaladin = auraPaladin ? auraPaladin->GetGUID() : ObjectGuid::Empty;
 
-    ElectStarTeam(bot, *state);
-    PlanUnderStars(group, *state, now);
-
     if (AlgalonScanUnit const* focus = FindScanned(state->stars, state->focusStar.Get()))
         if (focus->lossMeasured && focus->lossPctPerSec >= ULDUAR_ALGALON_STAR_KILL_MEASURED_PCT_PER_SEC)
+        {
             state->teamKillPctPerSec = std::min(focus->lossPctPerSec, ULDUAR_ALGALON_STAR_KILL_PEAK_PCT_PER_SEC);
+            state->teamKillTeam = static_cast<uint32>(state->starTeam.size());
+        }
+
+    ElectStarTeam(bot, *state);
+    PlanUnderStars(group, *state, now);
 
     AlgalonScanUnit const* star = nullptr;
     char const* window = StarWindow(bot, boss, *state, now, star);
@@ -3314,6 +3352,7 @@ void AlgalonTickEncounterState(PlayerbotAI* botAI)
         state->bulkFrom = star->guid;
         state->bulkFromMs = now;
         state->bulkFromPct = star->healthPct;
+        state->bulkFromTeam = static_cast<uint32>(state->starTeam.size());
     }
 
     if (RaidObs::Active())
