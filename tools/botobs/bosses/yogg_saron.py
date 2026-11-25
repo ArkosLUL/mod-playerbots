@@ -5852,12 +5852,10 @@ def show_phase3_leftovers(trace: Trace, start: int, stop: int) -> None:
 
 
 def burn_crossing(series: list[tuple[int, float]], pct: float = BURN_PCT) -> int | None:
-    """When a (t, hp) series first reads under `pct`, or None."""
     return next((when for when, hp in series if hp < pct), None)
 
 
 def fall_rate(series: list[tuple[int, float]], start: int, stop: int) -> float | None:
-    """Health points lost per second between the last (t, hp) samples at or before `start` and `stop`."""
     stamps = [when for when, _ in series]
     first = bisect.bisect_right(stamps, start)
     last = bisect.bisect_right(stamps, stop)
@@ -5868,8 +5866,6 @@ def fall_rate(series: list[tuple[int, float]], start: int, stop: int) -> float |
 
 
 def show_burn(trace: Trace) -> None:
-    """Phase 3's end against the burn under 12%: when Yogg crossed it, how fast he fell before and after, the
-    tank deaths and the raid's last life from there, and where the ranged bots aimed and the Guardians' power after."""
     print(f"BURN (ranged leave the Guardians once Yogg is under {BURN_PCT:.0f}%)")
     span = next(((start, stop) for phase, start, stop in phase_spans(trace) if phase == 3), None)
     yogg = next(iter(guids_of_entry(trace, NPC_YOGG_SARON)), None)

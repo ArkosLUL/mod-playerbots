@@ -1711,9 +1711,9 @@ more into Guardians than Yogg, since the pile always has one.
 on Guardians and Yogg barely moved. Under the floor a Guardian is allowed only while Lunatic Gaze (64163)
 is up and it sits 65° or more off Yogg, the arc the gaze node angles for; with Thorim the 10% rule stays.
 **Under 12% of Yogg the ranged drop the Guardians for him, by the user's choice**
-(`ULDUAR_YOGG_SARON_PHASE_3_BURN_PCT`, `YoggSaronPhase3Burn`, `yogg.burn`): with 84-86% of their damage on
-Guardians he fell ~0.12%/s, and five wipes ended at 3.6-9.7% with the tanks dead 11-93 s after he crossed 12%.
-Any Keepers; the gaze exception and the tentacle tiers above him stay.
+(`ULDUAR_YOGG_SARON_PHASE_3_BURN_PCT`, `YoggSaronPhase3Burn`, `yogg.burn`): with 79-86% of their damage on
+Guardians over 30% he fell ~0.12%/s, and four wipes ended at 3.6-9.7% with the tanks dead 11-93 s after he
+crossed 12%. Any Keepers; the gaze exception and the tentacle tiers above him stay.
 **A beacon-healed one (64486 / 64468) is fair game, by the user's choice**, though most of the damage heals
 back: skipped, three full ones sat on the tanks for the 20 s heal and killed a tank. Pets on the Guardian
 left are stopped so they follow the owner.
