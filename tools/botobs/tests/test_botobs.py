@@ -1219,6 +1219,20 @@ class YoggPhases(unittest.TestCase):
         self.assertEqual(yogg_saron.damage_band(guardian, None, False), "guardian ?")
         self.assertEqual(yogg_saron.damage_band(None, None, False), "other")
 
+    def test_burn_crossing_is_the_first_sample_under_the_line(self):
+        series = [(0, 30.0), (10000, 12.0), (20000, 11.9), (30000, 8.0)]
+        self.assertEqual(yogg_saron.burn_crossing(series), 20000)
+        self.assertIsNone(yogg_saron.burn_crossing([(0, 30.0), (10000, 12.31)]))
+        self.assertIsNone(yogg_saron.burn_crossing([]))
+
+    def test_fall_rate_reads_the_samples_at_or_before_each_end(self):
+        series = [(0, 20.0), (10000, 18.0), (20000, 15.0), (40000, 11.0)]
+        self.assertAlmostEqual(yogg_saron.fall_rate(series, 10000, 40000), 7.0 / 30.0)
+        self.assertAlmostEqual(yogg_saron.fall_rate(series, 5000, 25000), 5.0 / 20.0)
+        self.assertIsNone(yogg_saron.fall_rate(series, 12000, 15000))
+        self.assertIsNone(yogg_saron.fall_rate(series, -1000, 40000))
+        self.assertIsNone(yogg_saron.fall_rate([], 0, 1000))
+
     def test_dot_uptime_counts_overlaps_once_and_clips_to_the_window(self):
         casts = [(0, 18000), (10000, 18000), (40000, 15000), (95000, 18000)]
         self.assertEqual(yogg_saron.dot_uptime(casts, 5000, 100000), 23000 + 15000 + 5000)

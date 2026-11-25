@@ -435,6 +435,8 @@ PHASE_3_TAUNT_HOLD = "yogg-saron phase 3 taunt hold"
 # never once Weakened. Melee stay on Yogg except for a gaze or a beacon-healed Guardian over the floor on a tank.
 GUARDIAN_FLOOR_PCT = 30.0
 GUARDIAN_WEAKENED_PCT = 10.0
+BURN_PCT = 12.0
+BURN_LOOK_MS = 60000
 # Deafening Roar: 2.3 s cast, then 4 s of silence within 50 yd. Aura Mastery with the caster's own
 # Concentration Aura up puts 64364, silence immunity, on the raiders carrying that aura.
 SPELL_DEAFENING_ROAR = 64189
@@ -780,10 +782,16 @@ def show_phases(trace: Trace) -> None:
             down = first_seen(trace, guids_of_entry(trace, NPC_YOGG_SARON))
             show_free_low(trace, dead, pairs, min(down, p1_end) if down is not None else p1_end, guardians)
 
-    if p1_end is not None:
-        show_room_gate(trace, p1_end)
-
     show_handover(trace)
+
+
+def show_room(trace: Trace) -> None:
+    print("ROOM GATE")
+    p1_end = phase1_end(phase_spans(trace))
+    if p1_end is None:
+        print("  no phase 1 in this trace")
+        return
+    show_room_gate(trace, p1_end)
 
 
 def station_catches(spots: list[tuple[float, float]], station: tuple[float, float], reach: float) -> int:
@@ -5843,6 +5851,89 @@ def show_phase3_leftovers(trace: Trace, start: int, stop: int) -> None:
         print(f"    Diminish Power on the average raider: {share * 100:.0f}% of phase 3")
 
 
+def burn_crossing(series: list[tuple[int, float]], pct: float = BURN_PCT) -> int | None:
+    return next((when for when, hp in series if hp < pct), None)
+
+
+def fall_rate(series: list[tuple[int, float]], start: int, stop: int) -> float | None:
+    stamps = [when for when, _ in series]
+    first = bisect.bisect_right(stamps, start)
+    last = bisect.bisect_right(stamps, stop)
+    if not first or last <= first:
+        return None
+    (began, high), (ended, low) = series[first - 1], series[last - 1]
+    return (high - low) / ((ended - began) / 1000) if ended > began else None
+
+
+def show_burn(trace: Trace) -> None:
+    print(f"BURN (ranged leave the Guardians once Yogg is under {BURN_PCT:.0f}%)")
+    span = next(((start, stop) for phase, start, stop in phase_spans(trace) if phase == 3), None)
+    yogg = next(iter(guids_of_entry(trace, NPC_YOGG_SARON)), None)
+    if not span or not yogg:
+        print("  phase 3 never reached")
+        return
+    start, stop = span
+
+    roster = roster_guids(trace)
+    guardians = {guid for guid in guids_of_entry(trace, NPC_IMMORTAL_GUARDIAN)
+                 if (first_seen(trace, [guid]) or 0) >= start - 1000}
+    rows = snapshot_rows(trace, roster | guardians | {yogg})
+    series = [(row[0], row[6]) for row in rows.get(yogg, []) if start <= row[0] <= stop]
+    alive_end = max((row[0] for guid in roster for row in rows.get(guid, [])
+                     if start <= row[0] <= stop and row[6] > 0), default=stop)
+    ends = trace.of("end")
+    outcome = ends[-1].get("out", "?") if ends else "cut short"
+    lowest = min((hp for _, hp in series if hp > 0), default=None)
+    crossed = burn_crossing(series)
+    tail = f", Yogg lowest {lowest:.2f}%" if lowest is not None and outcome != "kill" else ""
+    end_text = f"{outcome} at {clock(ends[-1]['t'])}" if ends else outcome
+    if crossed is None:
+        print(f"  Yogg never under {BURN_PCT:.0f}%; end: {end_text}{tail}")
+        return
+    print(f"  Yogg under {BURN_PCT:.0f}% at {clock(crossed)} (+{(crossed - start) / 1000:.1f} s into phase 3);"
+          f" end: {end_text}{tail}")
+
+    tanks = sorted((guid for guid in roster if trace.role(guid) == "tank"), key=trace.name)
+    deaths = death_records(trace)
+    fell = []
+    first_fall = None
+    for guid in tanks:
+        own = [rec["t"] for rec in deaths if rec.get("g") == guid and start <= rec["t"] <= stop]
+        died = next((when for when in own if when >= crossed), None)
+        if died is not None:
+            first_fall = died if first_fall is None else min(first_fall, died)
+        else:
+            died = max(own, default=None)
+        fell.append(f"{trace.name(guid)} {(died - crossed) / 1000:+.1f} s" if died is not None
+                    else f"{trace.name(guid)} alive")
+
+    before = fall_rate(series, max(start, crossed - BURN_LOOK_MS), crossed)
+    after = fall_rate(series, crossed, min(stop, alive_end, first_fall or alive_end))
+    rates = [f"{rate:.2f}%/s" if rate is not None else "-" for rate in (before, after)]
+    print(f"  Yogg's fall        : {rates[0]} in the {BURN_LOOK_MS // 1000} s before,"
+          f" {rates[1]} after until the first tank death")
+    print(f"  from {BURN_PCT:.0f}%           : tank deaths {', '.join(fell) or 'no tanks'};"
+          f" roster alive until {(alive_end - crossed) / 1000:+.1f} s")
+
+    aims: collections.Counter = collections.Counter()
+    for guid in roster:
+        if trace.role(guid) != "ranged" or guid in trace.humans:
+            continue
+        for row in rows.get(guid, []):
+            if crossed <= row[0] <= alive_end and row[6] > 0 and len(row) > 8:
+                aims[target_kind(row[8], trace.entries.get(row[8]))] += 1
+    total = sum(aims.values()) or 1
+    late = [row[6] for guid in guardians for row in rows.get(guid, []) if crossed <= row[0] <= alive_end and row[6] > 0]
+    early = [row[6] for guid in guardians for row in rows.get(guid, [])
+             if crossed - BURN_LOOK_MS <= row[0] < crossed and row[6] > 0]
+    print(f"  ranged bots after  : guardian {aims['guardian'] / total:.2f} tentacle {aims['tentacle'] / total:.2f}"
+          f" yogg {aims['yogg'] / total:.2f} none {aims['none'] / total:.2f};"
+          f" Guardians at 90%+ {guardian_power_shares(early)[0]:.0%} before, {guardian_power_shares(late)[0]:.0%} after")
+    burning = [rec for rec in notes(trace, "yogg.burn") if rec.get("txt") == "burn" and rec["t"] >= start]
+    if burning:
+        print(f"    yogg.burn on {len({rec.get('g') for rec in burning})} bots, first {clock(burning[0]['t'])}")
+
+
 def nova_warning(series: list[tuple[int, float]], gate: float, when: int) -> float | None:
     """Seconds from the first sample at or under `gate` to `when`, or None when it never got there."""
     first = next((t for t, hp in series if 0 < hp <= gate and t <= when), None)
@@ -6171,6 +6262,7 @@ def show_novas(trace: Trace) -> None:
 SECTIONS = (
     ("phases", "phase timeline, the Keepers freed, the pre-pull window, Guardian deaths in the back line's"
      " reach and tank pulls, leftover Guardian deaths after the handover", show_phases),
+    ("room", "phase 1 moves begun outside the room, and when each role got inside after the pull", show_room),
     ("clouds", "cloud-orbit exposure per role", show_clouds),
     ("fervor", "Sara's Fervor runs, novas on holders, Guardians runners summoned", show_fervor),
     ("novas", "every Shadow Nova: the warning it gave, who it would have killed, what covered them, ladder rows"
@@ -6187,10 +6279,12 @@ SECTIONS = (
      " beacon heals, stacked heals, who else they reached, the tanks under them, drags and what the healed"
      " Guardian did to its holder, Deafening Roar and Aura Mastery, Lunatic Gaze, the damage split, area"
      " casts, healer mana, phase 2 leftovers and the pets on them", show_phase3),
+    ("burn", "phase 3's end against the burn under 12 percent: the crossing, Yogg's fall before and after, tank deaths"
+     " and the raid's last life from there, the ranged bots' targets and the Guardians' power after", show_burn),
     ("crush", "Crush and who took it, knockback, Death Rays and the last walk before each", show_crush),
     ("sanity", "Sanity minima, trips below, the bench, Rebirths into Insane", show_sanity),
 )
-SUMMARY = ("phases",)
+SUMMARY = ("phases", "burn")
 
 
 def main() -> int:

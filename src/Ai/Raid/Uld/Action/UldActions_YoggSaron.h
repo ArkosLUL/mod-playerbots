@@ -199,6 +199,7 @@ private:
     {
         bool brainLevel = false;
         bool phaseThreeRanged = false;
+        bool burn = false;
         std::optional<bool> approachable;
         std::optional<bool> phaseThreeMelee;
         std::optional<bool> thorim;
