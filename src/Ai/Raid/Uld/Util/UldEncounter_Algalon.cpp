@@ -4851,6 +4851,7 @@ Unit* GetAlgalonHandlerConstellation(Player* bot)
     bool const kiteFirst = loose && heldLow && !gathering && spare && HeldKitePossible(*state, bot, now);
     char const* branch = "none";
     Unit* chosen = nullptr;
+    bool keeping = false;
     Position spot;
     if (loose && !kiteFirst)
     {
@@ -4872,7 +4873,10 @@ Unit* GetAlgalonHandlerConstellation(Player* bot)
             }
     }
     else if (held && (gathering || !heldLow || !spare) && KeepSpot(*state, bot, now, spot))
+    {
         chosen = held;
+        keeping = true;
+    }
     else if (held && gathering)
         branch = "gather";
     else if (heldLow && spare)
@@ -4883,7 +4887,7 @@ Unit* GetAlgalonHandlerConstellation(Player* bot)
     auto const kite = state->kiteHoleAssignments.find(bot->GetGUID());
     bool const keepKite = held && gathering &&
                           !(kite != state->kiteHoleAssignments.end() && IsRaidShelterHole(*state, kite->second, now));
-    if (!chosen && !keepKite)
+    if ((!chosen || keeping) && !keepKite)
         state->kiteHoleAssignments.erase(bot->GetGUID());
 
     if (RaidObs::Active() && (!chosen || chosen->GetVictim() != bot))

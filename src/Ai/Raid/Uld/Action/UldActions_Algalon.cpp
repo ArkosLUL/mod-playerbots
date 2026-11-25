@@ -393,7 +393,7 @@ bool AlgalonConstellationTauntAction::Execute(Event /*event*/)
     if (line != AlgalonTauntLine::Clear)
     {
         Position next;
-        if (line == AlgalonTauntLine::Blocked || bot->GetExactDist2d(side) <= ULDUAR_ALGALON_SLOT_TOLERANCE ||
+        if (line == AlgalonTauntLine::Blocked || bot->GetExactDist2d(side) <= ULDUAR_ALGALON_TAUNT_LINE_SLACK ||
             !AlgalonWalkAround(bot, side, next))
             return false;
 
