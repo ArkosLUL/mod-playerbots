@@ -124,16 +124,14 @@ LAND_WINDOW_MS = 3000
 JUMP_NOTE_MS = 1000
 FIRST_AID_KIT = 64660
 
-TURRET_ENTRY = 33142            # Leviathan Defense Turret, one per seat
+TURRET_ENTRY = 33142
 HUNTER_CLASS = 3
-# His seats' turrets in his frame (ahead, left), VehicleSeat 3043, 3065, 3071, 3072 for seats 0-3. A
-# rider sits 1.2 yd behind its own turret, and every seat faces his heading.
 TURRET_SPOTS = {"rear-left": (0.6, 3.0), "rear-right": (0.6, -3.0),
                 "front-left": (4.0, 1.6), "front-right": (4.0, -1.6)}
 RIDER_BEHIND_TURRET = 1.2
-SET_FACING_DEG = 45.0           # IsFacingValue, HasInArc(M_PI_2): past it `set facing` fires
-RIDER_ARC_DEG = 90.0            # ULDUAR_FL_RIDER_ARC / 2, and the core's own facing check
-RIDER_CAP = {True: 2, False: 1}  # ULDUAR_FL_RIDER_CAP_25 / _10, keyed by 25-man
+SET_FACING_DEG = 45.0
+RIDER_ARC_DEG = 90.0            # keep at half of ULDUAR_FL_RIDER_ARC
+RIDER_CAP = {True: 2, False: 1}  # keep in step with ULDUAR_FL_RIDER_CAP_25 and _10
 
 
 def pick(seq, quantile):
@@ -1819,26 +1817,22 @@ def seat_stays(track, value: str) -> list[tuple[int, int, str]]:
 
 
 def his_frame(boss: tuple[float, float, float], point: tuple[float, float]) -> tuple[float, float]:
-    """`point` as (ahead, left) of him: `boss` is (x, y, orientation)."""
     dx, dy = point[0] - boss[0], point[1] - boss[1]
     return (dx * math.cos(boss[2]) + dy * math.sin(boss[2]), -dx * math.sin(boss[2]) + dy * math.cos(boss[2]))
 
 
 def seat_label(local: tuple[float, float], rider: bool) -> str:
-    """The seat whose turret (or, for a rider, whose rider spot) is nearest a point in his frame."""
     shift = RIDER_BEHIND_TURRET if rider else 0.0
     return min(TURRET_SPOTS, key=lambda seat: math.hypot(local[0] - TURRET_SPOTS[seat][0] + shift,
                                                          local[1] - TURRET_SPOTS[seat][1]))
 
 
 def bearing_deg(origin: tuple[float, float], facing: float, point: tuple[float, float]) -> float:
-    """How far off `facing` the point sits, 0-180 degrees."""
     off = math.atan2(point[1] - origin[1], point[0] - origin[0]) - facing
     return abs(math.degrees((off + math.pi) % (2 * math.pi) - math.pi))
 
 
 def seat_bearing(rider_seat: str, turret_seat: str) -> float:
-    """How far off his heading a rider on one seat sees another seat's turret."""
     ahead, left = TURRET_SPOTS[rider_seat]
     return bearing_deg((ahead - RIDER_BEHIND_TURRET, left), 0.0, TURRET_SPOTS[turret_seat])
 
@@ -1859,8 +1853,6 @@ def concurrent_max(stays: list[tuple[int, int]]) -> int:
 
 
 def rider_stays(trace: Trace, fl: Fight) -> list[dict]:
-    """One row per stay on his seats: who, class, seat, how it ended, and damage dealt by where the
-    targeted turret sat against his heading (the seat's own facing)."""
     tracks = holder_spans(trace, "fl.seat", fl.end)
     classes = {member["g"]: member.get("c", 0) for member in trace.header.get("roster", [])}
     jumps = collections.defaultdict(list)
