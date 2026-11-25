@@ -208,10 +208,12 @@ ranged join the star team for it (below).
   (31 in 28 pulls, 55 dead). The whole team's last hits are the worst of it: the one crossing the line plus those
   already cast or flying (Shadow Bolt 2-6%, Arcane Blast 2-4.5%, hunter shots 1-3%) landed 4-7%, and 9 of 35
   under-stars reached the cast below their band (window 34, 22 dead). So with 2.5 ticks or less above its line per
-  team member (5 for two, 7.5 for three, 12.5 for five), a star goes to one **finisher** (`algalon.finishstar`,
-  `algalon.finisher`), the team bot with the smallest hits (hunter, priest, shaman, druid, warlock, mage, then the
-  rest), and the others' casts on it are cut as they move to the next under-star. Cutting stops no shot already
-  flying, and a volley can cross the hand-off inside one 250 ms tick: at 5 ticks for every team, 5 of window 46's
+  team member (5 for two, 7.5 for three, 12.5 for five) and at most what the finisher alone does by 3 s before
+  the cast (the bulk's speed beyond the drain over the team's size; none with less left: one handed over at 12.5,
+  7.9 s before Big Bang 2, reached the cast above its band and went off after the hit, 6 dead), a star goes to one
+  **finisher** (`algalon.finishstar`, `algalon.finisher`), the team bot with the smallest hits (hunter, priest,
+  shaman, druid, warlock, mage, then the rest), and the others' casts on it are cut as they move to the next
+  under-star. Cutting stops no shot already flying, and a volley can cross the hand-off inside one 250 ms tick: at 5 ticks for every team, 5 of window 46's
   6 `early` under-stars (6 pulls) came of it, the leavers' shots in flight landing 7.4-8.1% after a hand-off
   (Arcane Missiles, Lightning Bolt, Shadow Bolt) or three casts 13.4% with none; one drained into Big Bang 2's
   cast (4 dead), two became wave-4 deadline kills 16 s apart, the second on a drained raid (4 dead). One finish
@@ -368,6 +370,12 @@ Intercept, Feral Charge) when the stop point (melee range of the target, 28 yd f
 set-behind spots, 108° either side of his facing at the bot's own distance from him) is within 7.5 yd of a hole or the walk passes within 6.3 yd of one; for a phased bot within
 8 yd, the hole it left included, since reach walked melee back in before the strip. A held bot waits; holes
 live until a constellation eats one or phase 2.
+
+So a held melee bot on him, out of his reach (no tank, not phased), takes the **melee spot** (`algalon.spot`
+`melee`), walked like a slot: of 16 points 3 yd inside his melee range, the nearest in the room and 8 yd clear
+of holes, a straight walk first. Left waiting, melee lost up to 526 s a pull in phase 1 (three stood 30-38 yd
+off him for 90 s past a hole 11 yd from him) and 351 s in phase 2 past a Worm Hole; phase 1 took 324-331 s in
+pulls losing over 220 s, against 301-309 s in the kills, and Berserk ended them.
 
 **A far hole is approached before the cast.** Within 15 s of it or during it, a bot whose hole is over
 35 yd from its own spot (a melee bot's is him) waits 30 yd from that hole (`nearhole`; with a star under, over 22 yd and at 22, `…_UNDER_HOLE_REACH`, since from 28-34 yd the walk alone took up to 5 s), with the generic movers
@@ -714,7 +722,7 @@ Pulls file under `algalon-the-observer`, aliased to `algalon` in `BOSS_ALIASES`.
   (`none`/`wait`/`run`/`in`/`exit`/`soak`/`backup`/`hold`/`noshelter`; `hold` is a chased bot waiting
   to go last), `algalon.kite` (`taunt`/`behind`/`stage`/`wait`/`cross`/`parked`/`kept`/`gather`/`nohole`/`stuck`/`none`;
   older traces `hole`), `algalon.spot`
-  (`pickup`/`tank`/`offtank`/`stage`/`slot`/`star`/`starhold`/`nearhole`/`buried`/`blocked`/`smash`/`none`),
+  (`pickup`/`tank`/`offtank`/`stage`/`slot`/`star`/`starhold`/`nearhole`/`melee`/`buried`/`blocked`/`smash`/`none`),
   `algalon.hazard` (`smash`/`star`/`none`), `algalon.dodge` (`idle`/`clear`/`min`/`field`/`cross`/`none`,
   `cross` meaning only a path over a hole was clear; written on change only, so it resets to `idle` while
   nothing threatens, or two waves dodged the same way read as one), `algalon.defensive` (the pick, on change
@@ -780,6 +788,9 @@ with a swap tank out on `noshelter` aside, per cast the hiders that used a gap c
   `--stars`. `--constellations`: a kite blocked 5 s or more, kite stats from the elected handler alone.
 - `--phasing`: a stray phase within 1.5 s of a gap closer reads `charged in (<spell>)`, `jumped in` for
   Blink, Disengage, Shadowstep and Killing Spree; a hole spawning on the bot still reads `new hole`.
+- `--melee`: per melee bot, per phase outside each Big Bang's cast and 4 s after it, seconds on him in his
+  reach, held off by a hole (the walk guard's test, re-run on the rows) or out otherwise, and on the melee spot.
+  Verdict: 10 s or more held off in a phase.
 
 Traces from before these probes fall back to what the records alone say: intro end from his first
 swing, the pair from the roster tanks, meteors from the 33105 markers. Its banner names declared keys
