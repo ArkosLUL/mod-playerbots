@@ -429,12 +429,15 @@ bool AnubarakAssistTankHoldBurrowerAction::Execute(Event /*event*/)
         return false;
 
     Position const& hold = pick.hold;
-    if (bot->GetExactDist2d(hold.GetPositionX(), hold.GetPositionY()) <= ANUBARAK_TANK_PATCH_ARRIVE ||
-        AnubarakSpikeReachesFirst(bot, hold))
+    if (bot->GetExactDist2d(hold.GetPositionX(), hold.GetPositionY()) <= ANUBARAK_TANK_PATCH_ARRIVE)
+        return false;
+
+    bool const backwards = AnubarakSideTankBacksUp(bot, hold);
+    if (AnubarakSpikeReachesFirst(bot, hold, backwards))
         return false;
 
     return MoveTo(bot->GetMapId(), hold.GetPositionX(), hold.GetPositionY(), hold.GetPositionZ(), false, false,
-                  false, false, MovementPriority::MOVEMENT_COMBAT, true);
+                  false, false, MovementPriority::MOVEMENT_COMBAT, true, backwards);
 }
 
 bool AnubarakSideTankAreaThreatAction::Execute(Event /*event*/)

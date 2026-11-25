@@ -550,6 +550,25 @@ were within 12 yd in 99 of 200 samples and the side tank died twice. **Heroic ph
 tank with no burrower of its side to hold or take gathers with the raid and walks back at the emerge,
 since one standing on its patch walks a spike that marks it into the patch.
 
+**It backs up to its hold** (`AnubarakSideTankBacksUp`, `anub.backup`) while every burrower on it
+carries Permafrost and more of those within 8 yd lie behind the walk than ahead (`BackUpKeepsFront`,
+pure, nativetest): `MoveTo` `backwards = true` keeps them in its front 180°, the only arc a player
+dodges, parries or blocks from (`Unit::RollMeleeOutcomeAgainst`; none while it casts either). A walk
+to the centre (one off Permafrost) runs forward: frost first. Before it, in 12 pulls of the 2026-11-25
+test pools a burrower stood behind a side tank 29% of their contact, 95% of that on a hold walk and
+about half on the 7 yd crawl to the rim under the patch's 80% slow, landing 0.61 hits a second against
+0.34 walking and 0.29 standing with it in front (CT, CU, CV: 21%, 0.51, 0.36, 0.23). Backing up runs at
+`MOVE_RUN_BACK` (4.5 against 7), so a walk takes 1.56 times as long and saves about an eighth of its
+hits; `AnubarakSpikeReachesFirst` times it at that speed.
+
+**The test pools' side tanks avoid as well as the user's.** Standing with a burrower in front, 0.55 of
+its swings landed in those pulls and in CT, CU and CV alike (read off the gaps between one burrower's
+landed hits, 1.22 s a swing): pool paladins 0.51-0.54 against Bulwark's 0.57, blood DKs 0.45-0.56
+against Felesta's 0.50, bears 0.51-0.63, warriors 0.59-0.62. A hit at equal Expose Weakness is within
+13% of theirs, and no tank's hits cluster at twice the median, which a tank under the defense cap
+would show: burrowers are level 83. The pools' extra landed hits are time with a burrower behind
+(above) and more swings a second in front (0.29 landed a second against 0.24 at the same 0.55).
+
 **Side tanks spend their area threat** (`anubarak side tank area threat`, `anub.saoe`). Taunts took
 burrowers back in a median 0.4-0.9 s of 24-33 pull-offs a pull (2026-10-30 BA-BE); "medium aoe" needs
 3 enemies within 8 yd and a side tank holds 2, so it cast Blood Boil never and Death and Decay 4-8
@@ -1531,6 +1550,7 @@ personal burst is unrestricted.
 | `gripstep` | The DK's grip: `walk`, `hold`, `cast`, `wait` (sphere in the air, or a relay link still to grip it), `kill`, `post` (a relay link to or on its post), `none` |
 | `relay` | A relay link DK: `wait` (posted), `cast` (gripped), `miss` (its grip pulled nothing), `drop` (relay dropped), `none` (no grip duty) |
 | `sidetank` | `hold`, `pickup`, `ready`, `gather` (heroic phase 2, nothing to hold), `far` (a taunt waits for reach) |
+| `backup` | A side tank's hold walk: `back` (backing up), `fore`, `none` (no burrower on it within 8 yd), `frost` (one on it off Permafrost) |
 | `saoe` | A side tank's area threat: the spell, else `cap` (it would hit him over the cap), `other` (the other side's burrowers), `none` |
 | `leave` | `walk` while a non-tank steps out of Permafrost, `none` |
 | `mstand` | `walk` while a melee bot walks to its burrower stand, `none` |
@@ -1765,7 +1785,11 @@ he was up with burrowers out. Per flag:
     each. A cast's health is after the last `dmg` or `heal` row on it when that is newer than its
     snapshot (max health from back-to-back melee hits): a 300 ms snapshot read 55% for a 38% Last Stand.
   - per side tank before phase 3 and its first death, the seconds a burrower on it stood within 6 yd and
-    its landed burrower hits a second of that.
+    its landed burrower hits a second of that; both split by the tank standing or walking (`snap` column
+    8) and the burrower in its front 180° by its `snap` facing or behind, a hit from beyond 6 yd at its
+    snapshot counted apart, as its time is not contact; standing with it in front, the
+    hits landed a swing off the gaps up to 6 s between one burrower's landed hits at 1.22 s a swing; the
+    `backup` rows.
   - each run of the main tank's Expose Weakness: its peak, the burrowers on him at a stack (the shared
     aura's row names only the first caster), his area casts from 5 s before.
   - a tank form or stance (Dire Bear, Bear, Defensive Stance, Righteous Fury, Frost Presence) lost while

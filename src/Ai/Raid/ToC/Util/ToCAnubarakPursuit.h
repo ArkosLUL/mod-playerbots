@@ -693,6 +693,23 @@ inline std::vector<Point> RingPoints(Point centre, float radius, Point from, std
     std::sort(out.begin(), out.end(), [from](Point const& a, Point const& b) { return Dist(from, a) < Dist(from, b); });
     return out;
 }
+
+inline bool BackUpKeepsFront(Point from, Point to, std::vector<Point> const& units)
+{
+    Point const walk = {to.x - from.x, to.y - from.y};
+    int ahead = 0;
+    int behind = 0;
+    for (Point const& unit : units)
+    {
+        float const along = (unit.x - from.x) * walk.x + (unit.y - from.y) * walk.y;
+        if (along > 0.0f)
+            ++ahead;
+        else if (along < 0.0f)
+            ++behind;
+    }
+
+    return behind > ahead;
+}
 }
 
 #endif

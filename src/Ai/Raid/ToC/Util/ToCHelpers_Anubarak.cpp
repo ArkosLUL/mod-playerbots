@@ -4711,11 +4711,11 @@ bool AnubarakSpikeLaneCrosses(Player* bot, Position const& spot)
            SegmentDistance2d(spike->GetPosition(), target->GetPosition(), spot) < ANUBARAK_SPIKE_LANE_CLEARANCE;
 }
 
-bool AnubarakSpikeReachesFirst(Player* bot, Position const& spot)
+bool AnubarakSpikeReachesFirst(Player* bot, Position const& spot, bool backwards)
 {
     Creature* spike = bot ? GetPursuingSpike(bot) : nullptr;
     float const spikeSpeed = spike ? spike->GetSpeed(MOVE_RUN) : 0.0f;
-    float const botSpeed = bot ? bot->GetSpeed(MOVE_RUN) : 0.0f;
+    float const botSpeed = bot ? bot->GetSpeed(backwards ? MOVE_RUN_BACK : MOVE_RUN) : 0.0f;
     if (spikeSpeed <= 0.0f || botSpeed <= 0.0f)
         return false;
 
@@ -4821,6 +4821,29 @@ Position GetAnubarakSideTankHold(Player* bot, uint8 side)
 
     Position valid;
     return OnFloor(bot, Offset(centre, {dirs.a.x, dirs.a.y}, ANUBARAK_SIDE_TANK_RIM), valid) ? valid : centre;
+}
+
+bool AnubarakSideTankBacksUp(Player* bot, Position const& hold)
+{
+    std::vector<AnubarakPursuit::Point> onTank;
+    for (Creature* burrower : GetAnubarakBurrowers(bot))
+    {
+        if (burrower->GetVictim() != bot || burrower->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE))
+            continue;
+
+        if (!UnitOnPermafrost(burrower))
+        {
+            RaidObs::NoteDerived(bot, "anub.backup", "frost");
+            return false;
+        }
+
+        if (bot->GetExactDist2d(burrower) <= ANUBARAK_SIDE_BACKUP_REACH)
+            onTank.push_back(ToPoint(burrower->GetPosition()));
+    }
+
+    bool const backs = AnubarakPursuit::BackUpKeepsFront(ToPoint(bot->GetPosition()), ToPoint(hold), onTank);
+    RaidObs::NoteDerived(bot, "anub.backup", backs ? "back" : onTank.empty() ? "none" : "fore");
+    return backs;
 }
 
 Position GetAnubarakBossAnchor(Player* bot)

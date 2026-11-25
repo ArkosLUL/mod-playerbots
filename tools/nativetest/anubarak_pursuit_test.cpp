@@ -631,6 +631,21 @@ void LaneStepWalksStraightFirst()
     PathMember const cut = {45.0f, -1.0f, 5.0f};
     CHECK(Near(MakeKiterPath(ROOM_CENTER, Heading(0.0f), 7.0f, ROOM_CENTER, cut, 10.0f).straight, 10.0f, 0.01f));
 }
+
+void SideTankBacksAwayFromItsBurrowers()
+{
+    using AnubarakPursuit::BackUpKeepsFront;
+
+    Point const tank = {0.0f, 0.0f};
+    Point const rim = {7.0f, 0.0f};
+    std::vector<Point> const trailing = {{-3.0f, 1.0f}, {-2.5f, -1.5f}};
+    CHECK(BackUpKeepsFront(tank, rim, trailing));
+    CHECK(!BackUpKeepsFront(tank, {-7.0f, 0.0f}, trailing));
+    CHECK(!BackUpKeepsFront(tank, rim, {}));
+    CHECK(!BackUpKeepsFront(tank, rim, {{-3.0f, 0.0f}, {3.0f, 0.0f}}));
+    CHECK(BackUpKeepsFront(tank, rim, {{-3.0f, 0.0f}, {-1.0f, 3.0f}, {2.0f, 2.5f}}));
+    CHECK(!BackUpKeepsFront(tank, rim, {{0.0f, 3.0f}, {0.0f, -3.0f}}));
+}
 }  // namespace
 
 int main()
@@ -659,6 +674,7 @@ int main()
     DashOutrunsTheBaseSpike();
     DashMakesThePatch();
     LaneStepWalksStraightFirst();
+    SideTankBacksAwayFromItsBurrowers();
     std::printf("anubarak_pursuit_test: ok\n");
     return 0;
 }

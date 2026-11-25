@@ -70,3 +70,95 @@ wave. Judge per composition; A's warriors and B's paladin, whose only long
 buttons these are, should gain most.
 
 **Previous fix.** None (first round).
+
+## Round 2 (build 37cc72a94, window 46)
+
+**Data.** `window46-anub-arak.md` (job 2: r1 plus the ritual walk fix
+21376d9f9), 12 valid pulls, first then second per pool: toc1
+`649_7_…1795603120`, `…1795603732`; toc4 `649_10_…1795603232`, `…1795603841`;
+toc2 `649_8_…1795603140`, `…1795603740`; toc5 `649_11_…1795603242`,
+`…1795603659`; toc3 `649_9_…1795603202`, `…1795603473`; toc6
+`649_12_…1795603253`, `…1795603727`. Kill references CT, CU. Sections:
+`--tanks`, `--phases`, `--burrowers`, `--dps`, `--healers`, `--pull`; scratch
+reads of death auras, mana, cooldown reuse, heal split.
+
+**Deaths.** Burrower melee 337 of 388, Anub'arak melee 18, Penetrating Cold 12.
+First side tank death per pull:
+
+| Pull | Wipe | First side tank death |
+|---|---|---|
+| toc1 …3120 | P3 9:12, 9.2% | Tocxaz (warrior) 5:52, wave 6 |
+| toc1 …3732 | P2b 4:04, 63.6% | Tocxaz 0:26, wave 1 |
+| toc4 …3232 | P3 9:22, 11.1% | Tocuaz (warrior) 6:01, wave 6 |
+| toc4 …3841 | P3 8:21, 30.0% | Tocuaz 1:18, wave 2 |
+| toc2 …3140 | P3 8:56, 9.6% | Tocyab (bear) 8:09, wave 8 |
+| toc2 …3740 | P2b 4:32, 48.2% | Tocyab 3:02, wave 3 |
+| toc5 …3242 | P1c 6:10, 47.1% | Tocvab (bear) 1:07, wave 2 (battle res, lived to 5:14) |
+| toc5 …3659 | P2b 4:01, 51.7% | Tocvab 2:54, wave 3 |
+| toc3 …3202 | P1b 3:43, 62.6% | Toczab (bear) 2:45, wave 3 |
+| toc3 …3473 | P1c 6:08, 30.6% | Toczab 5:07, wave 5 |
+| toc6 …3253 | P3 7:01, 20.6% | Tocwab (bear) 5:54, wave 6 |
+| toc6 …3727 | P2b 4:32, 55.6% | Tocwaz (DK) 2:48, wave 3 |
+
+**Re-pull.** Second pulls ran 4:01-8:21 against 3:43-9:22. Death auras: same
+raid buffs and Well Fed on all 25 per pull. Cooldowns reset (toc1 Tocxaz Shield
+Wall at 7:44 and again 2:55 later at 0:27). Healer mana at the engage: toc1
+100/85/85/85, toc3 100/80/81/88, toc4 96/86/82/82, toc5 90/81/84/73, toc6
+100/90/97/85, toc2 100/100/100/93; at 2:30-2:50 mean 58-80% in both pulls, no
+consistent gap. Engage positions match (`--pull`). Answer: a DC refresh matter
+(mana), not the cause; the short second pulls are the side tank failure on wave
+3, which toc3's first pull shows too.
+
+**Failure picked: side tanks die at 9 stacks with no long defensive ready.**
+
+- No keep at a death: the last `anub.defensive` before each of 36 side tank
+  deaths outside phase 3 is a cast or `covered`, never `kept`; their highest
+  health in the 6 s before was 80-100% (one 79.6%). By cast times and death
+  auras a long defensive was ready at 3 of them, each blocked by a running one:
+  toc1 …3732 Tocxaz 0:26 (Last Stand up, Shield Wall ready), toc3 …3473 Toczab
+  5:07 (Barkskin, Frenzied Regeneration), Toczaz 5:09 (Vampiric Blood, Icebound
+  Fortitude).
+- One tick kills: toc5 …3242 Tocvab 1:07.5 at 55% took 23.3k and 24.8k at
+  1:07.827 (postmortem death 0).
+- Per hit at 9 stacks test equals CT/CU per class (paladin 9.0-13.3k vs Bulwark
+  9.6-12.5k, DK 12.6-15.2k vs Felesta 13.8-15.5k); landed burrower hits a second
+  of contact 0.34-0.69 vs 0.29-0.37; side tank burrower damage in phase 1
+  6.9-11.6k/s vs 4.5-6.2k/s (CT 1.48M on both side tanks to 5:43, toc1 …3120
+  2.5M to 5:52).
+- Healing: in the 12 s before each first side tank death the dying tank got
+  about a third of the four healers' output, the rest the main tank, the other
+  side tank and DPS (toc3 …3202 Toczaf 0 on Toczab, 54k on DPS). Over phase 1
+  the side tanks already get 38-59% of it (median 45%) against CT/CU's 39%.
+- Rotations match the kills (casts a minute: Felesta Rune Strike 8.8-9.7, Blood
+  Boil 5.5-5.9; test DKs 7.3-11.5, 4.8-8.1; Bulwark and test paladins Holy
+  Shield 4.8-5.8); burrower lives 30-46 s against 32-43 s.
+- Review, scratch reads over the same contact and landed hits as `--tanks`:
+  - Gaps between one burrower's consecutive landed hits on a side tank: the
+    commonest is 1.2 s in 13 of 14 pulls, 1.3 s in CU, so swings come as fast; one-swing
+    gaps over one- to three-swing gaps (0.95-1.5, 2.15-2.75, 3.35-4.0 s) 0.40-0.84
+    (median 0.71) against CT/CU 0.51-0.66.
+  - Split by the burrower inside or outside the tank's front 180° at the
+    snapshot (no dodge, parry or block from behind): front 0.18-0.57 landed a
+    second of contact (median 0.33), back 0.53-0.91, back share 15-86% (median
+    28%); CT/CU front 0.19-0.28, back 0.53-0.70, back share 13-34%.
+
+**Classification: plan change** (Q1). Nothing the strategy intends fails: the
+keep holds, defensives go under 50%, rotations match.
+
+**Change.** Reader only. `--tanks`: a defensive's health is now after the last
+logged hit or heal when that is newer than the snapshot (the snapshot overstated
+it by up to 30 points: Tocxaz Last Stand 0:20.0 read 55%, was 38%); burrower
+contact seconds and landed hits a second per side tank before phase 3; each tank
+death's last `anub.defensive` and highest health in the 6 s before. `--pull`:
+healer mana at the engage. Tests added.
+
+**Next window should show.** Same code, so the same failure. With Q1 answered (a
+fifth healer): side tank burrower damage healed per second up, the first side
+tank death later than wave 3 in most pulls, and phase 1 loss per phase still
+near 20%.
+
+**Previous fix (r1) verdict.** Works as built: long defensives at 50%+ 4 of 79
+(A 2, B 1, C 1). By composition the first side tank death came on a phase 1's
+second wave in A 3 of 4 (r1 4 of 4), B 2 of 4 (r1 4 of 4), C 1 of 4 (r1 3 of 4);
+on the first wave after a submerge in A 0, B 2, C 3 (r1: C 1). A gained (3 of 4
+to phase 3), C lost (1 of 4); one build, so no call.
