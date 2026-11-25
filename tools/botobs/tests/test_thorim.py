@@ -521,6 +521,29 @@ class RingWait(unittest.TestCase):
                       printed(thorim.show_ringwait, load(chain_wait_pull())))
 
 
+def spree_pull() -> list[dict]:
+    records = chain_pull()
+    records += [
+        {"t": 27000, "e": "note", "g": RANGED, "k": "thorim.lightningorb", "txt": str(ORB)},
+        {"t": 28500, "e": "aura", "d": MELEE_B, "s": MELEE_B, "sp": 51690, "r": 0, "st": 1, "dur": 2000, "p": 1},
+        {"t": 35000, "e": "aura", "d": MELEE_B, "s": MELEE_B, "sp": 51690, "r": 0, "st": 1, "dur": 2000, "p": 1},
+    ]
+    return sorted(records, key=lambda rec: rec.get("t", -1))
+
+
+class Spree(unittest.TestCase):
+    def test_a_spree_on_the_chain_and_one_in_the_window(self):
+        text = printed(thorim.show_spree, load(spree_pull()))
+        self.assertIn("+27.5 s Edge: 1.5 s after the lit; chain hop 2 of 3, at a crossing, 1 dead past it; cone no",
+                      text)
+        self.assertIn("+34.0 s Edge: 8.0 s after the lit; no chain; cone no", text)
+        self.assertIn("all: sprees 2 (before the first lit orb 0, 5.5-9.0 s after the lit 1); in a chain 1 (at a "
+                      "crossing 1, 1 dead past it, 1 before the first tank death); in the cone 0", text)
+
+    def test_no_spree(self):
+        self.assertIn("no Killing Spree from a ring bot in phase 2", printed(thorim.show_spree, load(chain_pull())))
+
+
 class Deaths(unittest.TestCase):
     def test_by_phase_and_mechanic(self):
         self.assertEqual(printed(thorim.show_deaths, load(pull())), (

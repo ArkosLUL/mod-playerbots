@@ -411,6 +411,18 @@ wait, p50 0.86 s, max 1.6, ~10 bot-s a pull, 71 starting out of reach; hits at h
 go (9 of 29 before the first tank death); 2 held walks newly end in the cone, 8 leave it, and the cone
 test lets 16 walk.
 
+**Killing Spree waits for the dark orb.** `51690` blinks a rogue to his back, ~3.3 yd from him, for 2.5 s,
+inside the jump of the holder and of every slot point within ~65° of his back. A combat rogue spends it on
+burst release, at the first chain (+12 s), and again every 75 s (glyphed: five orb cycles), so it keeps
+landing on the chain: over 64 hard-mode pulls 53 of the 120 casts after a lit began within 2 s of it, 15
+chains hit a spree rogue, 13 crossing groups through it (8 dead past it, 6 before the first tank death),
+all 9 opening-chain deaths came in such casts, and the cone hit 10. `thorim killing spree hold` blocks
+`killing spree` for a ring bot on the floor except 5.5-9.0 s after the last lit stamp
+(`ULDUAR_THORIM_KILLING_SPREE_OPEN_MS` / `_CLOSE_MS` on `lightningOrbLastLitMs`, which the dark orb leaves
+set): past the cone even on a stamp one scan late, back on its point before the next lit 14.25 s on. The 18
+casts that fell in that window met no chain and no cone. With no lit yet in phase 2 it holds, so the
+opening spree comes after the first chain.
+
 Every melee DPS carries the `behind` strategy from `AiFactory`, so `SetBehindTargetAction` would walk all
 three stacks into one arc behind the boss the moment the ring node yields. The `thorim movement guard` rule
 holds the generic movers, scoped to a **settled**, [stepped-out](#a-covered-slot-steps-out) or
@@ -615,6 +627,14 @@ within 32 of the boss, 9+ from every other body. `ThorimThunderOrbIndex` refuses
 cone, staying home doesn't. An orb that does not place is left unlatched, so the next tick tries again
 instead of holding a bad index for the 15 s. While the orb is lit and the bot still home, the cover test reruns every
 tick, so a boss drifting onto the slot mid-warning still sends it; it only ever flips to sheltered.
+
+**The table's apex is the tank spot; the cone's is Thorim.** He stands 4.5-4.8 yd off the tank spot, and
+on the west seat (x ~2107, by the off-tank spot; 17% of cones before the first tank death) orb 2's rows for
+slots 0 and 2 sit 37.2° and 35.8° off the live axis: 7 of the 25 bots on them at the cast were hit, 4
+died, against none of 38 on rows 39.2° or more off. So a row the camp's live test covers
+(`ThorimCampSpotInLitCone`, 40°) takes the cone step as a slow walk does, a bot already on it too, and the
+chain wait counts it as out of reach. Slot 2's home lies ~23 yd from any point 45° off that cone, past the
+step's 20, so it still walks its row.
 
 `ULDUAR_THORIM_SHELTER_SPOTS` has no rows for orb indices 4 and 5 ((2092.95, −263.00) and
 (2104.94, −233.44)), whose cones point away from the camp. Its longest run, 25.6 yd, is ~3.7 s at full speed
@@ -1504,6 +1524,10 @@ or step held for Chain Lightning):
   landing or the cap, waiters the chain hit standing or walking, cone hits and deaths on them; then
   totals with wait p50 and max, deaths also before the first tank death. Traces without
   `thorim.ringchainwait` say so.
+- `--spree`: each Killing Spree (aura 51690) a ring bot started in phase 2: seconds after the last lit
+  orb, the Chain Lightning that hit the rogue from 0.3 s before it to 5.1 s after (its hop, whether that
+  hop crossed groups, deaths in other groups past it), a cone hit in that span; then totals, with those
+  started in the hold's 5.5-9.0 s window.
 
 Per snapshot the holder is the tank he hits and every other living tank on the floor waits; spacing
 counts from 15 s after the drop. Damage rows come in hop order (each hop does 1.5 times the last), every
