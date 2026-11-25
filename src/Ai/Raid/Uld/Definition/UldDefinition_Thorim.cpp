@@ -41,6 +41,8 @@ bool ThorimRingMelee(PlayerbotAI* botAI) { return ThorimRingMeleeOnFloor(botAI, 
 
 bool ThorimRingStepped(PlayerbotAI* botAI) { return ThorimRingSteppedOut(botAI, botAI->GetBot()); }
 
+bool ThorimRingChainHeld(PlayerbotAI* botAI) { return ThorimRingWaitingOnChain(botAI, botAI->GetBot()); }
+
 bool ThorimPickingFor(PlayerbotAI* botAI)
 {
     return botAI->GetState() == BOT_STATE_COMBAT && !PlayerbotAI::IsHeal(botAI->GetBot());
@@ -162,6 +164,7 @@ void DefineThorim(EncounterBuilder& e)
                    ThorimSifBlizzardAction::Name, ThorimUnreachableStepAction::Name});
     e.Block("thorim ring aoe hold", Role::Any, ThorimRingMelee, Family::AvoidAoe);
     e.Block("thorim ring blizzard step", Role::Any, ThorimRingStepped, Family::Reach | Family::Charge);
+    e.Block("thorim ring chain wait", Role::Any, ThorimRingChainHeld, Family::Reach | Family::Charge);
 
     e.OwnMovement("thorim tank anchor guard", Role::Tank, ThorimTankAnchored,
                   Family::Attack | Family::Reach | Family::ReachHeal,

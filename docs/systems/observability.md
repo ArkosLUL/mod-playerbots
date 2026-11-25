@@ -617,9 +617,8 @@ statics. Timestamps, thresholds and caches are left bare on purpose.
   Shadow Nova for exactly this reason.
 - **Pet damage is not recorded.** `dmg` rows are written only for raid members and their vehicles, so
   nothing involving a pet as a damage source or a chain-lightning link can be confirmed from a trace.
-  Thorim's phase 2 carries a median of 6 and a p90 of 25 live pets and guardians, which is the
-  likeliest reason observed chains reach 7-8 hops where an idealised formation caps at 3 — and it
-  stays a hypothesis until `Bot/Obs` logs pet damage.
+  Check the chain spell's `AttributesEx3` first: `SPELL_ATTR3_ONLY_ON_PLAYER` (Thorim's Chain
+  Lightning) keeps pets off the chain, so its trace chains are complete.
 - **A traced container restates itself only on its first write in a trace**, so one the pull never
   writes is absent even while it holds a value. Older builds restate nothing, and there absence can
   still be state leaking in from a previous pull rather than nothing happening.

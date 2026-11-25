@@ -283,6 +283,15 @@ struct ThorimEncounterState
     std::unordered_map<ObjectGuid, RangedShelter> rangedShelters;
     uint32 chainLightningEndMs = 0;
 
+    struct RingChainHold
+    {
+        uint32 litMs = 0;
+        bool waiting = false;
+        bool released = false;
+    };
+
+    std::unordered_map<ObjectGuid, RingChainHold> ringChainHolds;
+
     RaidObs::ObsValue<uint32> runicSmashSide{"thorim.smashside"};
     uint32 runicSmashSeenMs = 0;
     uint32 smashScanMs = 0;
@@ -563,6 +572,8 @@ bool ThorimCampBlizzardEscape(PlayerbotAI* botAI, Player* bot, Position& out);
 
 void ThorimTickChainLightning(PlayerbotAI* botAI);
 bool ThorimCampWaitingOnChain(PlayerbotAI* botAI, Player* bot);
+bool ThorimRingChainWait(PlayerbotAI* botAI, Player* bot, Position const& destination, bool step);
+bool ThorimRingWaitingOnChain(PlayerbotAI* botAI, Player* bot);
 
 Unit* ThorimChargedThunderOrb(PlayerbotAI* botAI, uint32 markerSpell);
 
