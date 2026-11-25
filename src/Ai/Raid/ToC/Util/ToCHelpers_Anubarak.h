@@ -65,7 +65,6 @@ inline constexpr uint32 ANUBARAK_BURROWER_FREE_MS = 25000;
 
 inline constexpr uint32 ANUBARAK_SIDE_DEFENSIVE_STACKS = 5;
 inline constexpr float ANUBARAK_SIDE_DEFENSIVE_PCT = 50.0f;
-inline constexpr float ANUBARAK_SIDE_DEFENSIVE_KEEP_PCT = 50.0f;
 inline constexpr uint32 ANUBARAK_SIDE_DEFENSIVE_KEEP_COOLDOWN_MS = 120000;
 inline constexpr float ANUBARAK_BATTLE_RES_REACH = 28.0f;
 inline constexpr float ANUBARAK_LEAD_REACH = 25.0f;

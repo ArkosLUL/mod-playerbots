@@ -5572,10 +5572,8 @@ bool AnubarakSideTankNeedsDefensive(Player* bot)
 bool AnubarakSideTankDefensiveKept(PlayerbotAI* botAI, uint32 spellId)
 {
     Player* bot = botAI ? botAI->GetBot() : nullptr;
-    Creature* boss = bot ? GetAnubarak(bot) : nullptr;
     SpellInfo const* info = sSpellMgr->GetSpellInfo(spellId);
-    if (!boss || !info || !AnubarakHeroic(bot) || bot->GetHealthPct() < ANUBARAK_SIDE_DEFENSIVE_PCT ||
-        boss->GetHealthPct() > ANUBARAK_SIDE_DEFENSIVE_KEEP_PCT ||
+    if (!bot || !info || !AnubarakHeroic(bot) || bot->GetHealthPct() < ANUBARAK_SIDE_DEFENSIVE_PCT ||
         std::max(info->RecoveryTime, info->CategoryRecoveryTime) < ANUBARAK_SIDE_DEFENSIVE_KEEP_COOLDOWN_MS)
         return false;
 

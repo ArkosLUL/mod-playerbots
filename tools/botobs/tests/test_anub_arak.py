@@ -1898,6 +1898,15 @@ class RefillPull(unittest.TestCase):
                           (13000, SIDE0, "divine protection", 6, 0, "P1")])
         self.assertEqual([ab.magic_on_side_tank(row) for row in rows], [False, True, False])
 
+    def test_long_defensives_outside_phase_3_and_the_last_before_a_death(self):
+        rows = ab.defensive_rows(self.trace)
+        self.assertEqual([(row["t"], row["spell"]) for row in ab.long_defensive_rows(rows)],
+                         [(9500, "divine protection"), (13000, "divine protection")])
+        self.assertEqual(ab.long_defensive_rows([dict(rows[0], phase="P3"), dict(rows[2], side=None)]), [])
+        self.assertEqual(ab.long_defensives_before(rows, SIDE0, 13000), [("divine protection", 9500)])
+        self.assertEqual(ab.long_defensives_before(rows, SIDE0, 20000), [("divine protection", 13000)])
+        self.assertEqual(ab.long_defensives_before(rows, SIDE1, 20000), [])
+
     def test_a_tank_death_reads_the_12_s_before_it(self):
         rows = ab.tank_deaths(self.trace)
         self.assertEqual(len(rows), 1)
@@ -1949,9 +1958,12 @@ class RefillPull(unittest.TestCase):
         self.assertRegex(text, r"anti magic shell +stack  3  hp 100%  magic only on a side tank\n")
         self.assertIn("from 5 stacks: 2 of 3 side tank cast(s); magic only on a side tank outside phase 3: 1\n", text)
         self.assertIn("casts per tank: Bulwark divine protection 2; Felesta anti magic shell 1\n", text)
+        self.assertIn(" a side tank cast outside phase 3 at 50%+ health: 2 of 2\n"
+                      "     0:09.500 Bulwark        divine protection 100%\n"
+                      "     0:13.000 Bulwark        divine protection 100%\n", text)
         self.assertRegex(text, r"0:15\.000 Felesta +side 1 P1 +taken 75,000 \(burrower 60,000, Anub'arak 10,000,"
                                r" scarab 5,000\); healed 13,000 by 3 heal\(s\), 5,000 over; absorbed 3,000;"
-                               r" Expose peak 3\n")
+                               r" Expose peak 3; long defensives: none\n")
 
 
 RANGER, STALKER, TRAPPER, CASTER = range(7001, 7005)
