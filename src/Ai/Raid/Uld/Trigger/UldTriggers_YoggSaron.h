@@ -506,6 +506,15 @@ public:
     bool IsActive() override;
 };
 
+class YoggSaronTankPileFacingTrigger : public YoggSaronTrigger
+{
+public:
+    static constexpr char const* Name = "yogg-saron tank pile facing trigger";
+
+    YoggSaronTankPileFacingTrigger(PlayerbotAI* botAI) : YoggSaronTrigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
 class YoggSaronHealerCombatEngineTrigger : public YoggSaronTrigger
 {
 public:

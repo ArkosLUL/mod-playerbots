@@ -1599,7 +1599,13 @@ quarter of one phase 3, cast starts falling from ~34 per 4 s to under 2. `yogg.g
 - **`healer`**: keeps its back to Yogg all of phase 3 and never claims the tick: a healer facing away
   heals anyone in range and sight ([facing](../../engine/pitfalls.md#arc-and-geometry-defaults)), and
   claiming it cost over a third of the raid's healing for every 4 s gaze.
-- **`angled`**: a still bot whose target is at least 65° from Yogg as seen from the bot
+- **`pile`**: a still bot tank, not dragging, takes the heading with Yogg at least 100° off that puts the
+  most of [its pile](#the-tanks-in-phase-3) in front with its target inside ±40°, and keeps attacking.
+  It turns again whenever its target sits past ±40°: the 0.1 rad tolerance alone lets it drift past
+  `set facing`'s ±45°, whose turn to the target (60° or more from Yogg) brings Yogg inside ±90°.
+  With no such heading, `tankfree` and `away` turn it to the best one for the pile alone instead of
+  straight away.
+- **`angled`**: any other still bot whose target is at least 65° from Yogg as seen from the bot
   (`ULDUAR_YOGG_SARON_GAZE_SAFE_SEPARATION`) turns `(135° − separation) / 2` off its target, away from
   Yogg, and keeps attacking. Inside `set facing`'s ±45° nothing turns it back, and the gaze needs Yogg
   inside ±90°, so both margins are `(separation − 45°) / 2`. Facing the target outright needs
@@ -1943,12 +1949,22 @@ nothing behind it. So in phase 3 `yogg-saron guardian control` (`ACTION_RAID + 3
 2. Walks the 5 yd leash home, round the body.
 3. `Attack`s the Guardian its lead (`YoggSaronTankThreatLead`, over the highest non-tank, pets included) is
    thinnest on, in melee reach before merely near the spot, leaving its current one only past
-   `ULDUAR_YOGG_SARON_TANK_THREAT_SWITCH_LEAD` (1.5).
+   `ULDUAR_YOGG_SARON_TANK_THREAT_SWITCH_LEAD` (1.5). While every one in reach and its current one lead
+   past 1.5, it takes the one letting it face most of its pile (below, `pile attack`).
+
+**A bot tank faces its pile**: a player hit from outside its front 180° gets no dodge, parry or block
+(`Unit::RollMeleeOutcomeAgainst`). Facing only its target, a bot tank had its live (not Weakened) Guardians
+behind it 38% of their time on it (45% in gazes), where each landed 0.32-0.35 hits a second against
+0.17-0.19 from the front, 3.9-4.5k damage a second against 2.0-2.1k (six pulls, to the first tank death). So
+`yogg-saron tank pile facing` (`ACTION_RAID + 2.75`) turns a still tank, outside a gaze, to the heading
+that puts more of the live Guardians swinging at it inside ±80°, its target kept inside ±40° (`set
+facing` turns at ±45°): `YoggSaronPile`, native test; `yogg.pileface` (covered before, after). Replayed
+on those pulls, that target limit covers 73% out of gazes, any target 87%, any heading 89%.
 
 `yogg-saron dps target guard multiplier` zeroes `TankAssist` for tanks in phase 3 while a Guardian that can
 still be held lives within 70 yd, or the picker hands Yogg straight back; 70 yd covers the Guardian spawn
 ring, 38-48 yd from Yogg, from the melee spot. `yogg.tankhold`: `taunt` /
-`defense` / `leash` / `attack`.
+`defense` / `leash` / `attack` / `pile attack`.
 
 `yogg-saron guardian control` is **not** gated on Thorim, or on hard mode. Hard mode means *fewer* Keepers,
 so demanding both asked for exactly the case where Thorim is least likely to be there — and Guardians parked
@@ -2132,7 +2148,7 @@ that the thing never happened. Two hazards go to the timeline only because nothi
 the body's knockback circle, and each Crusher's wedge carrying facing, arc and range so it can be tested by
 hand.
 
-**77 `yogg.` probe keys**, by topic:
+**78 `yogg.` probe keys**, by topic:
 
 | Topic | Keys (values) |
 |---|---|
@@ -2141,7 +2157,7 @@ hand.
 | Platform hazards | `knockback` (`inside` / `clear`), `crush` (incl. `reach`), `deathray`, `castcut` (spell), `detour` (`around` / `spot`), `stunned` (`engage` / `clear`), `petguard` (`pulled` / `held` / `clear` / `leftover`), `judgement`, `powerbreak` (`none` / `walk` / `hit` / `out`, then the Crusher), `walk` (node and branch), `walkstep` |
 | Portals and Sanity | `wave`, `portal` (`notteam` / `waiting` / `spreading` / `holding` / `late` / `clicking`), `portalslot`, `brainteam`, `benched`, `portalcancel`, `brainlink` (`none` / `closing` / `clear`), `sanity` (`low` / `topping` / `refill` / `idle`: the walk's reason, not a level), `squeeze` |
 | Brain level | `room`, `roomstate` (`walkingin` / `fighting` / `doorshut` / `tobrain` / `atbrain` / `reprisal` / `staged`), `tentacle`, `spread` (`free` / `shared` / `kept`), `share` (group name / `orphan` / `first` / `helper` / `done` / `joined` / `staged` / `lifted`), `reprisal`, `reprisalheal` (spell), `regroup` (`range` / `sight`), `skull`, `skullturn` (`angled` / `free`), `brainspot`, `brainhold` (`open` / `dots` / `hold` / `finish` / `clear`), `charge`, `dash` (`used` / `cooldown`), `nitro` (`used` / `cooldown` / `station`), `exit`, `exitcancel` |
-| Phase 3 | `station` (`walking` / `shifted` / `parked` / `released` / `unreachable`), `gaze` (above), `tankhold` (`taunt` / `chain taunt` / `defense` / `leash` / `attack` / `return taunt` / `return defense` / `swap taunt` / `swap defense`), `tankswap`, `swapdefer` (holder and health), `tankshed`, `tankloh`, `vigilance` (tank), `beacondrag` (`claim` / `taunt` / `missed` / `hold` / `shot` / `feign` / `release` / `return`), `beaconspot`, `beaconstage` (`pick` / `walk` / `ready` / `stuck` / `timeout`), `beaconbear`, `dragdef`, `dragext`, `roar` (`preswitch` / `noconc` / `claimed` / `press`), `p3area` (`few` / `fresh` / `allowed`), `p3dot` (spell), `burn` (`guardians` / `burn`), `kicknudge`, `markkick`, `mortalstrike`, `healcut`, `warlockpet`, `lust`, `lustready`, `healerengine` |
+| Phase 3 | `station` (`walking` / `shifted` / `parked` / `released` / `unreachable`), `gaze` (above), `tankhold` (`taunt` / `chain taunt` / `defense` / `leash` / `attack` / `pile attack` / `return taunt` / `return defense` / `swap taunt` / `swap defense`), `pileface` (covered before, after), `tankswap`, `swapdefer` (holder and health), `tankshed`, `tankloh`, `vigilance` (tank), `beacondrag` (`claim` / `taunt` / `missed` / `hold` / `shot` / `feign` / `release` / `return`), `beaconspot`, `beaconstage` (`pick` / `walk` / `ready` / `stuck` / `timeout`), `beaconbear`, `dragdef`, `dragext`, `roar` (`preswitch` / `noconc` / `claimed` / `press`), `p3area` (`few` / `fresh` / `allowed`), `p3dot` (spell), `burn` (`guardians` / `burn`), `kicknudge`, `markkick`, `mortalstrike`, `healcut`, `warlockpet`, `lust`, `lustready`, `healerengine` |
 
 **Do not add a Sanity level probe.** 63050 is already in the aura stream, with 63752 low-sanity and 63120
 Insane beside it, as are Grim Reprisal 64039 and Lunatic Gaze 64168 in `dmg`. A removal row carries no stack
@@ -2179,7 +2195,9 @@ count, so skip `r:1` rows when taking a minimum or every bot reads as Insane.
 - A Guardian's spawn is a Simple Teleport (64195) within 3 s of its first sample, else that sample; every
   Guardian casts it again at the wipe.
 - A Weakened Guardian's 1 HP reads 0%, so presence is a fresh row, not health; Thorim's casts never reach
-  the recorder, so a Guardian leaving at 10% or less counts as the Storm's kill.
+  the recorder, so a Guardian leaving at 10% or less counts as the Storm's kill. `--facing` counts as
+  live, as the tank code does, only those sampled at 10% or more (not Weakened), on a tank within 12 yd,
+  and sides each landed hit by the snapshot before it.
 - A removal row counts as evidence of a buff's holder, since a buff put up before the pull shows only when
   it comes off.
 - A failed taunt never reaches a cast row, so taunts are read as attempts off the action rows — the failures

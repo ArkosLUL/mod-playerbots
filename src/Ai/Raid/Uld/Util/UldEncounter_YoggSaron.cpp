@@ -50,6 +50,7 @@
 #include "ThreatManager.h"
 #include "UldEncounterGate.h"
 #include "UldHardMode.h"
+#include "UldYoggSaronPile.h"
 #include "Unit.h"
 #include "Vehicle.h"
 #include "WorldSession.h"
@@ -2653,6 +2654,64 @@ float YoggSaronTankThreatLead(Player* tank, Unit* guardian)
         return own > 0.0f ? std::numeric_limits<float>::max() : 0.0f;
 
     return own / highest;
+}
+
+std::vector<float> YoggSaronPileBearings(Player* bot)
+{
+    std::vector<float> bearings;
+    for (Unit* attacker : bot->getAttackers())
+        if (attacker->GetVictim() == bot && IsYoggSaronHoldableGuardian(attacker) &&
+            attacker->IsWithinMeleeRange(bot))
+            bearings.push_back(bot->GetAngle(attacker));
+
+    return bearings;
+}
+
+std::optional<YoggSaronPileTurnPlan> YoggSaronPileTurn(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    if (!PlayerbotAI::IsTank(bot) || !YoggSaronInPhase3(botAI) || bot->isMoving() || YoggSaronBeaconDragging(bot) ||
+        YoggSaronGazeActive(botAI))
+        return std::nullopt;
+
+    std::vector<float> const pile = YoggSaronPileBearings(bot);
+    if (pile.empty())
+        return std::nullopt;
+
+    Unit* target = botAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get();
+    std::optional<float> targetBearing;
+    if (target && target != bot && target->IsAlive())
+        targetBearing = bot->GetAngle(target);
+
+    float const facing = bot->GetOrientation();
+    std::optional<YoggSaronPile::Facing> const best = YoggSaronPile::Best(pile, targetBearing, std::nullopt, facing);
+    int const before = YoggSaronPile::Covered(pile, facing);
+    if (!best || best->covered <= before)
+        return std::nullopt;
+
+    return YoggSaronPileTurnPlan{Position::NormalizeOrientation(best->heading), before, best->covered};
+}
+
+Unit* YoggSaronPileTarget(Player* bot, std::vector<Unit*> const& candidates, Unit* current)
+{
+    std::vector<float> const pile = YoggSaronPileBearings(bot);
+    float const facing = bot->GetOrientation();
+
+    Unit* pick = nullptr;
+    int pickCovered = -1;
+    for (Unit* candidate : candidates)
+    {
+        std::optional<YoggSaronPile::Facing> const best =
+            YoggSaronPile::Best(pile, bot->GetAngle(candidate), std::nullopt, facing);
+        int const covered = best ? best->covered : 0;
+        if (covered > pickCovered || (covered == pickCovered && candidate == current))
+        {
+            pick = candidate;
+            pickCovered = covered;
+        }
+    }
+
+    return pick;
 }
 
 bool YoggSaronConstrictorHolding(Unit* unit)

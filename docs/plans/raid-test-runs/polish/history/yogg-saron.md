@@ -2433,3 +2433,68 @@ Guardians under 15 s old):
 
 **Seen, not picked.** Hunters all stand east, so reach caps r27; stationing them apart is a position change, after
 this window. The control still spends a taunt on a Guardian a hunter has claimed.
+
+## Round 28 (2026-11-25, window 48 on build d9964f052: rounds 26 and 27)
+
+**Data.** Reports `scratchpad/window48/window48/window48-yogg-saron.md` (six pulls, r26 and r27 together) and
+`scratchpad/filler45/filler45-yogg-saron.md` (r25's twelve). Traces `603_1…1795607074`, `603_4…1795607080`,
+`603_2…1795607074`, `603_5…1795607066`, `603_3…1795607080`, `603_6…1795607067` (uld1, uld4, uld2, uld5, uld3, uld6),
+all eighteen with `--phase3`; scratch reads of each heal's marks, holders and lanes, and of Army of the Dead casts
+with the Guardians on ghouls per 5 s.
+
+Deaths by mechanic (phase 1 / 2 / 3):
+
+- uld1 (A): nova 1 / Squeeze 1 / Immortal Guardian 31; Yogg 9.72%.
+- uld4 (A): nova 1 / Squeeze 1 / Immortal Guardian 31; Yogg 10.00%.
+- uld2 (B): nova 1 / — / Immortal Guardian 30; Yogg 8.32%.
+- uld5 (B): nova 2 / — / Immortal Guardian 29; Yogg 15.30% (tank dead at +106 s, 3 leftovers).
+- uld3 (C): nova 2, Sara's Blessing 1 / Psychosis 1 / Immortal Guardian 25, Drain Life 1, script 1; Yogg 14.28%.
+- uld6 (C): — / — / Immortal Guardian 32; Yogg 7.25%.
+
+**Verdicts, each judged on its own measures.**
+
+- r26 (at most living tanks − 1 bot tanks drag): fixed. `every tank dragging` 0 of 19 marks (r25 4 of 38); raiders
+  dead inside a drag 0-1 a mark while both tanks stood (uld2's 18 and uld5's 4 came after a tank death). Kept.
+- r27 (hunters Misdirect fresh Guardians, Q4 for one window): missed every measure it named. Shots 43 of 105 spawns,
+  10 inside the stasis, median +8.3 s after the spawn; first victim a tank 20 of 43 (33 shots came after the
+  stasis). On a raider before a tank held them, misdirected against the rest: A 4/8 1.6 s, 3/7 2.4 s against 4/9 1.4 s,
+  4/10 1.4 s; B 4/6 1.0 s, 3/6 1.7 s against 7/11 2.0 s, 2/3 3.1 s; C 3/6 1.0 s, 4/8 1.6 s against 6/10 0.9 s, 3/8
+  0.3 s. Raiders killed by a misdirected one 4 (target 0). `first off a tank` to ranged 14 of 104, not rising (r25
+  29 of 202). Fresh-Guardian medians rose for A (1.6, 2.4 s; r25 0.7-1.6) and C (1.0, 0.3 s; r25 0.3-0.4), raiders
+  killed by a fresh Guardian 8 in 6 pulls (r25 8 in 11 besides its both-tank drag). Backed out: Q4's window is spent
+  and it bought nothing.
+
+**Stop rules.** Not polished: no kill. Not stuck: r28 picks a new mechanism.
+
+**Picked: the beacon after Army of the Dead heals the ghouls' pile.** In window 48 that mark spread its heal to 12,
+10, 6, 0 and 10 other Guardians (uld1, uld4, uld2, uld3, uld6; uld5's came after a tank death), with 9-14 Guardians
+on the ghouls at the mark. The tanks died 12-23 s after the heal in uld1, uld4 and uld6 (uld1 10:43 → 11:04, 11:06;
+uld6 10:46 → 10:58, 11:00), near Yogg's 12% crossing.
+
+Root cause. A DK casts its second Army of the Dead +111-127 s into phase 3 (all six pulls; r25 9 of 12, one at
++170 s) and the ghouls take the pile off the tanks (the tanks held 0-5 at the heal). That DK is a backup dragger
+and a stager: in 11 of the 12 marks with 9+ Guardians on ghouls it staged and dragged (r25 too: 603_22, 603_27,
+603_25, 603_23, 603_24, 603_10; only 603_8's DK did not, heal reach 0). Its ghouls reached its lane and took the
+mark back 4-9 s after its taunt (uld1 Uldxal: taunt +0.2 s, ghoul holds the mark at the north-east lane +4.1 s, `missed`), the pile
+with them; heal reach a median 6 (0-12) over those 11. `YoggSaronBeaconDraggerOrder`
+(`UldEncounter_YoggSaron.cpp:1594`) excludes a bot an unmarked Guardian is hitting, but read the ghoul as the
+victim, never its owner.
+
+**Fix.** The dragger order also skips a bot whose pet or summon an unmarked Guardian is hitting (the victim's
+`GetCharmerOrOwnerGUID`), for claims and stage picks alike; hunter pets and an unholy ghoul are covered the same way.
+10 and 25, normal and hard mode, humans as victims or owners alike. r27's code is reverted in full (action, trigger,
+node, `misdirection on main tank` hold, ids and constants, reader section and tests); `…_HUNTER_SHOT_RANGE` is
+`…_DISTRACTING_SHOT_RANGE` again. No shared code. Reader: `--phase3`'s `dragged by` adds `on their pets at the mark`
+and the beacon block `a dragger's pets held Guardians` (`pet_piles`, tested); on window 48 it reads uld1 Uldxal 9,
+uld6 Uldwam 11.
+
+**Next window must show:**
+
+- r28: `on their pets at the mark` none on every mark, `a dragger's pets held Guardians` 0; the beacon after a phase 3
+  Army of the Dead reaching 0-2 other Guardians (was a median 6 over 11 drags); the tanks living past +20 s from the
+  12% crossing (window 48 +10-23 s; r25's best +28-58 s). Back out if a mark goes undragged for want of draggers.
+- r27's back-out: `fresh on a raider` medians back near r25's (A 0.7-1.6, B 1.2-2.2, C 0.3-0.4 s) and raiders
+  killed by a fresh Guardian at most 1 a pull.
+
+**Seen, not picked.** The ghouls still hold 9-14 Guardians for 40 s and drop them at once near the 12% crossing
+(lead). uld5 lost a tank at the second heal with Diminish Power on 23% of phase 3 (open failure 2).
