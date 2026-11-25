@@ -499,6 +499,7 @@ def ring_wait_pull() -> list[dict]:
     records += [
         {"t": 5100, "e": "note", "g": MELEE, "k": "thorim.ringchainwait", "txt": "wait walk"},
         {"t": 6100, "e": "note", "g": MELEE, "k": "thorim.ringchainwait", "txt": "none"},
+        {"t": 10500, "e": "note", "g": RANGED, "k": "thorim.lightningorb", "txt": "0"},
         {"t": 20000, "e": "note", "g": RANGED, "k": "thorim.lightningorb", "txt": str(THUNDER_ORB)},
         {"t": 20200, "e": "note", "g": MELEE, "k": "thorim.ringchainwait", "txt": "wait step"},
         {"t": 21000, "e": "note", "g": MELEE, "k": "thorim.ringchainwait", "txt": "none"},
@@ -526,13 +527,14 @@ def spree_pull() -> list[dict]:
     records += [
         {"t": 27000, "e": "note", "g": RANGED, "k": "thorim.lightningorb", "txt": str(ORB)},
         {"t": 28500, "e": "aura", "d": MELEE_B, "s": MELEE_B, "sp": 51690, "r": 0, "st": 1, "dur": 2000, "p": 1},
+        {"t": 31000, "e": "note", "g": RANGED, "k": "thorim.lightningorb", "txt": str(ORB)},
         {"t": 35000, "e": "aura", "d": MELEE_B, "s": MELEE_B, "sp": 51690, "r": 0, "st": 1, "dur": 2000, "p": 1},
     ]
     return sorted(records, key=lambda rec: rec.get("t", -1))
 
 
 class Spree(unittest.TestCase):
-    def test_a_spree_on_the_chain_and_one_in_the_window(self):
+    def test_a_spree_on_the_chain_and_one_in_the_window_past_a_re_emitted_orb_note(self):
         text = printed(thorim.show_spree, load(spree_pull()))
         self.assertIn("+27.5 s Edge: 1.5 s after the lit; chain hop 2 of 3, at a crossing, 1 dead past it; cone no",
                       text)

@@ -105,7 +105,6 @@ CHAIN_POSITION_MS = 1000
 CHAIN_STEP_BACK_MS = 3000
 SLOWS = {62580: "Volley", 62604: "Volley", 62583: "Frostbolt", 62601: "Frostbolt", 62576: "Blizzard",
          62602: "Blizzard", 62597: "Frost Nova", 62605: "Frost Nova"}
-LIT_GAP_MS = 3000
 CONE_LEAD_MS = (3000, 7000)
 SHELTER_LEAD_MS = 200
 SHELTER_ARRIVED = 2.0
@@ -1067,8 +1066,10 @@ def cone_casts(trace: Trace, start: int) -> list[int]:
 
 def lit_orbs(trace: Trace, start: int) -> list[int]:
     lit: list[int] = []
+    dark = True
     for note in notes(trace, "thorim.lightningorb"):
-        if note["t"] >= start and str(note.get("txt")) not in ("", "0") and (not lit or note["t"] - lit[-1] > LIT_GAP_MS):
+        was_dark, dark = dark, str(note.get("txt")) in ("", "0")
+        if note["t"] >= start and was_dark and not dark:
             lit.append(note["t"])
     return lit
 

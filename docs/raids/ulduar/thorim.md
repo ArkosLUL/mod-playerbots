@@ -1476,8 +1476,9 @@ navprobes, not a nudge, and each new point needs the hazard check navprobe does 
 
 `tools/botobs/bosses/thorim.py <trace>`, reading `thorim.p2start`, `thorim.sifjoined` (hard mode),
 `thorim.ringspot` (each ring bot's slot), `thorim.ringstep` (a ring bot stepped out of Blizzard),
-`thorim.unreach` (whom his cannot-reach flag names), `thorim.lightningorb` (the lit orb),
-`thorim.rangedslot` (the camp), `thorim.shelter` (a camp bot's home, row, cone step or chain wait),
+`thorim.unreach` (whom his cannot-reach flag names), `thorim.lightningorb` (the lit orb, counted where it
+turns from 0: any instance's trace opening or closing re-emits it unchanged), `thorim.rangedslot` (the
+camp), `thorim.shelter` (a camp bot's home, row, cone step or chain wait),
 `thorim.ringconehold` (a ring walk held for crossing the lit cone) and `thorim.ringchainwait` (a ring walk
 or step held for Chain Lightning):
 
