@@ -34,9 +34,14 @@
     thorim.py <file> --spree     each Killing Spree from a ring bot in phase 2: how long after the lit orb it
                                  started, whether a Chain Lightning hit the rogue while it blinked or walked back,
                                  crossed groups through it and killed past it, and whether the cone hit it
+    thorim.py <file> --stalled   each phase 2 walk left standing over 2 yd short of where its mover keeps sending
+                                 the bot, the booking refusing the repeat (`dup`) or a repeat that moved nothing,
+                                 how long and after what; cone hits and deaths while stalled, chains through a
+                                 stalled bot, and charges from a tank while the other tank held him
 """
 from __future__ import annotations
 
+import bisect
 import collections
 import math
 import pathlib
@@ -47,7 +52,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
 from raidobs.cli import run_sections  # noqa: E402
 from raidobs.encounter import encounter_of  # noqa: E402
-from raidobs.geometry import NEAREST, anchor, at, dist2, frames, radius  # noqa: E402
+from raidobs.geometry import NEAREST, anchor, at, dist2, frames, radius, track  # noqa: E402
 from raidobs.trace import Trace, clock, combat_deaths, notes  # noqa: E402
 
 ENCOUNTER = "thorim"
@@ -130,6 +135,14 @@ RING_CHAIN_WAIT = "thorim.ringchainwait"
 KILLING_SPREE = 51690
 SPREE_LOOK_MS = (-300, 5100)
 SPREE_WINDOW_MS = (5500, 9000)
+STALL_MOVERS = (RING_MOVER, BLIZZARD_MOVER)
+STALL_GAP = 2.0
+STALL_GRACE_MS = 500
+STALL_JOIN_MS = 1200
+STALL_TAIL_MS = 2000
+STALL_SHOWN_MS = 1000
+STALL_SLACK_MS = 300
+TANK_CHARGES = ("feral charge - bear", "intercept", "charge")
 
 
 def mine(trace: Trace) -> bool:
@@ -1525,6 +1538,135 @@ def show_spree(trace: Trace) -> None:
           f"{total['early dead past']} before the first tank death); in the cone {total['cone']}")
 
 
+class StalledWalks:
+    def __init__(self, trace: Trace, start: int):
+        self.samples = track(trace, set(trace.roles), cols=("t", "x", "y", "z", "hp", "moving"))
+        self.stamps = {guid: [row[0] for row in rows] for guid, rows in self.samples.items()}
+        acts = collections.defaultdict(list)
+        for rec in trace.of("act"):
+            if rec["t"] >= start and rec.get("vd") == "OK" and rec.get("a") not in STALL_MOVERS:
+                acts[rec.get("g")].append((rec["t"], rec.get("a")))
+        self.spans: dict = collections.defaultdict(list)
+        issued: dict = {}
+        for rec in trace.of("move"):
+            guid = rec.get("g")
+            if rec["t"] < start or rec.get("by") not in STALL_MOVERS or "x" not in rec:
+                continue
+            target = (rec["x"], rec["y"])
+            fresh = guid not in issued or dist2(issued[guid][1], target) > STALL_GAP
+            if rec.get("ok") and fresh:
+                issued[guid] = (rec["t"], target)
+                continue
+            kind = "refused" if rec.get("r") == "dup" else ("re-issued" if rec.get("ok") else None)
+            row = self.sample(guid, rec["t"])
+            if (kind is None or fresh or rec["t"] - issued[guid][0] <= STALL_GRACE_MS or row is None or row[4] <= 0
+                    or row[3] > FLOOR_Z or row[5] or dist2(row[1:3], target) <= STALL_GAP):
+                continue
+            spans = self.spans[guid]
+            if spans and (rec["t"] - spans[-1]["end"] <= STALL_JOIN_MS or
+                          self.resumed(guid, spans[-1]["end"]) + STALL_SLACK_MS >= rec["t"]):
+                span = spans[-1]
+            else:
+                span = {"begin": rec["t"], "refused": 0, "re-issued": 0,
+                        "after": [name for when, name in acts.get(guid, []) if issued[guid][0] <= when <= rec["t"]]}
+                spans.append(span)
+            span["end"] = rec["t"]
+            span["gap"] = dist2(row[1:3], target)
+            span[kind] += 1
+        for guid, spans in self.spans.items():
+            for span in spans:
+                span["end"] = self.resumed(guid, span["end"])
+
+    def sample(self, guid, when: int):
+        stamps = self.stamps.get(guid)
+        if not stamps:
+            return None
+        index = bisect.bisect_right(stamps, when)
+        options = [i for i in (index - 1, index) if 0 <= i < len(stamps)]
+        pick = min(options, key=lambda i: abs(stamps[i] - when))
+        return self.samples[guid][pick] if abs(stamps[pick] - when) <= CHAIN_POSITION_MS else None
+
+    def resumed(self, guid, last: int) -> int:
+        end = last
+        stamps = self.stamps[guid]
+        for index in range(bisect.bisect_right(stamps, last), len(stamps)):
+            row = self.samples[guid][index]
+            if row[0] > last + STALL_TAIL_MS or row[4] <= 0 or row[5]:
+                break
+            end = row[0]
+        return end
+
+    def during(self, guid, when: int) -> bool:
+        return any(span["begin"] - STALL_SLACK_MS <= when <= span["end"] + STALL_SLACK_MS
+                   for span in self.spans.get(guid, []))
+
+
+def tank_charges(trace: Trace, start: int) -> int:
+    tanks = tanks_of(trace)
+    boss = thorim_guid(trace)
+    charges = 0
+    for rec in trace.of("act"):
+        if rec["t"] < start or rec.get("vd") != "OK" or rec.get("a") not in TANK_CHARGES or rec.get("g") not in tanks:
+            continue
+        rows = rows_before(trace, rec["t"])
+        own, held = rows.get(rec.get("g")), rows.get(boss)
+        victim = held[7] if held and len(held) > 7 else 0
+        charges += bool(own and own[3] <= FLOOR_Z and victim in tanks and victim != rec.get("g"))
+    return charges
+
+
+def show_stalled(trace: Trace) -> None:
+    print("STALLED WALKS")
+    if not mine(trace):
+        return
+    start = phase2_start(trace)
+    if start is None:
+        print("  phase 2 never started")
+        return
+    walks = StalledWalks(trace, start)
+    first_tank = first_tank_death(trace, start)
+    total = collections.Counter()
+    roles = collections.Counter()
+    seconds = 0.0
+    every = sorted(((span["begin"], guid, span) for guid, spans in walks.spans.items() for span in spans),
+                   key=lambda item: item[0])
+    for _, guid, span in every:
+        length = span["end"] - span["begin"]
+        total["stalls"] += 1
+        total["refused"] += span["refused"]
+        total["re-issued"] += span["re-issued"]
+        seconds += length / 1000.0
+        if length < STALL_SHOWN_MS:
+            continue
+        total["long"] += 1
+        total["early long"] += first_tank is None or span["begin"] < first_tank
+        roles[trace.role(guid)] += 1
+        after = f" after {', '.join(span['after'][-3:])}" if span["after"] else ""
+        print(f"  +{(span['begin'] - start) / 1000.0:.1f} s {trace.name(guid)} ({trace.role(guid)}): "
+              f"{length / 1000.0:.1f} s {yd(span['gap'])} yd short (refused {span['refused']}, re-issued "
+              f"{span['re-issued']}){after}")
+    for rec in trace.of("dmg"):
+        if rec.get("sp") == LIGHTNING_CHARGE and rec["t"] >= start and walks.during(rec.get("d"), rec["t"]):
+            total["cone"] += 1
+    for death in combat_deaths(trace):
+        if death["t"] >= start and walks.during(death["g"], death["t"]):
+            total["dead"] += 1
+    bridges = ChainBridges(trace, start)
+    for cast in bridges.casts:
+        stalled = [index for index, rec in enumerate(cast) if walks.during(rec["d"], rec["t"])]
+        if not stalled:
+            continue
+        total["chains"] += 1
+        total["dead past"] += sum(1 for rec in cast[stalled[0] + 1:]
+                                  if any(rec["t"] <= t <= rec["t"] + CHAIN_DEATH_MS for t in bridges.died.get(rec["d"], [])))
+    by_role = ", ".join(f"{role} {n}" for role, n in sorted(roles.items())) or "none"
+    print(f"  all: stalls {total['stalls']} ({seconds:.1f} bot-s; refused {total['refused']}, re-issued "
+          f"{total['re-issued']}), {STALL_SHOWN_MS / 1000.0:.1f} s or longer {total['long']} ({by_role}; "
+          f"{total['early long']} before the first tank death); cone hits on a stalled bot {total['cone']}, deaths "
+          f"while stalled {total['dead']}; chains through a stalled bot {total['chains']}, {total['dead past']} dead "
+          f"past it; charges from a tank while the other held him {tank_charges(trace, start)}")
+
+
 def rows_before(trace: Trace, when: int) -> dict:
     last = None
     for snap in frames(trace):
@@ -1606,6 +1748,8 @@ SECTIONS = (
      "released, how long, and what the chain and the cone did to the waiters", show_ringwait),
     ("spree", "each Killing Spree from a ring bot: how long after the lit orb, whether a Chain Lightning crossed "
      "groups through the rogue, and the cone", show_spree),
+    ("stalled", "each phase 2 walk left standing short: the booking refusing the repeat or a repeat that moved "
+     "nothing, how long, what the cone and the chain did to it, and charges off the off-tank spot", show_stalled),
 )
 SUMMARY = ("deaths", "phase2")
 

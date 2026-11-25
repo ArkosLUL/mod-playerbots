@@ -459,6 +459,7 @@ bool ThorimPhase2PositioningAction::Execute(Event /*event*/)
     bool const backward = tank && boss && boss->GetVictim() == bot &&
                           std::cos(bot->GetAbsoluteAngle(&targetPosition) - bot->GetAbsoluteAngle(boss)) < 0.0f;
 
+    ThorimReleaseStalledWalk(botAI, bot);
     MoveTo(bot->GetMapId(), targetPosition.GetPositionX(), targetPosition.GetPositionY(), targetPosition.GetPositionZ(),
            false, false, false, true, MovementPriority::MOVEMENT_COMBAT, true, backward);
 
@@ -510,6 +511,7 @@ bool ThorimSifBlizzardAction::Execute(Event event)
     else if (!ThorimCampBlizzardEscape(botAI, bot, escape))
         return false;
 
+    ThorimReleaseStalledWalk(botAI, bot);
     return MoveTo(bot->GetMapId(), escape.GetPositionX(), escape.GetPositionY(), escape.GetPositionZ(), false, false,
                   false, true, MovementPriority::MOVEMENT_FORCED, true);
 }

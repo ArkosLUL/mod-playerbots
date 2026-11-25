@@ -3807,6 +3807,27 @@ bool ThorimTankOnAnchor(PlayerbotAI* botAI, Player* bot)
            bot->GetDistance(spot) <= ULDUAR_THORIM_RING_ARRIVE_TOLERANCE;
 }
 
+bool ThorimTankBoundForOffTankSpot(PlayerbotAI* botAI, Player* bot)
+{
+    if (!bot || !ThorimPhase2Active(botAI) || bot->GetPositionZ() > ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD)
+        return false;
+
+    ThorimPhase2Role const role = GetThorimPhase2Role(botAI, bot);
+    if (role != ThorimPhase2Role::MainTank && role != ThorimPhase2Role::OffTank)
+        return false;
+
+    Position spot;
+    return TryGetThorimPhase2Spot(botAI, bot, role, spot) &&
+           spot.GetExactDist2d(&ULDUAR_THORIM_PHASE2_OFFTANK_SPOT) < ULDUAR_THORIM_PHASE2_SPOT_TOLERANCE;
+}
+
+void ThorimReleaseStalledWalk(PlayerbotAI* botAI, Player* bot)
+{
+    LastMovement& last = botAI->GetAiObjectContext()->GetValue<LastMovement&>("last movement")->Get();
+    if (!bot->isMoving() && last.msTime && getMSTimeDiff(last.msTime, getMSTime()) > ULDUAR_THORIM_WALK_STALL_MS)
+        last.clear();
+}
+
 Unit* ThorimUnreachableBy(PlayerbotAI* botAI, Player* bot)
 {
     if (!bot || !ThorimPhase2Active(botAI))

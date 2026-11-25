@@ -140,6 +140,7 @@ inline constexpr float ULDUAR_THORIM_OPENING_SETTLED_RADIUS = 8.0f;
 inline constexpr float ULDUAR_THORIM_PHASE2_SPOT_TOLERANCE = 1.0f;
 inline constexpr float ULDUAR_THORIM_PHASE2_HOLDER_TOLERANCE = 1.0f;
 inline constexpr float ULDUAR_THORIM_SWAP_TANK_SPOT_RADIUS = 8.0f;
+inline constexpr uint32 ULDUAR_THORIM_WALK_STALL_MS = 500;
 
 inline constexpr float ULDUAR_THORIM_RING_ARRIVE_TOLERANCE = 3.0f;
 inline constexpr float ULDUAR_THORIM_RING_REPOSITION_TOLERANCE = 5.0f;
@@ -561,6 +562,8 @@ bool ThorimRingBlizzardStep(PlayerbotAI* botAI, Player* bot, Position& out);
 bool ThorimRingSteppedOut(PlayerbotAI* botAI, Player* bot);
 
 bool ThorimTankOnAnchor(PlayerbotAI* botAI, Player* bot);
+bool ThorimTankBoundForOffTankSpot(PlayerbotAI* botAI, Player* bot);
+void ThorimReleaseStalledWalk(PlayerbotAI* botAI, Player* bot);
 
 Unit* ThorimUnreachableBy(PlayerbotAI* botAI, Player* bot);
 
