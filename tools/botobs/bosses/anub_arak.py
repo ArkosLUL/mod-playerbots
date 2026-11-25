@@ -696,6 +696,10 @@ THIN_COVER_WALK_MS = 6000
 # NOMINAL_MELEE_RANGE: a burrower this close to a healer can hit it
 MELEE_YD = 5.0
 TANK_DEATH_LOOKBACK_MS = 12000
+TANK_DEATH_TOP_MS = 6000
+HEALTH_PAIR_MS = 400
+HEALTH_PAIR_MIN = 3
+BURROWER_CONTACT_YD = 6.0
 # Challenging Roar and Challenging Shout: taunts that reach every enemy around the tank
 AREA_TAUNTS = (5209, 1161)
 # the main tank's area casts this far before a burrower's first Expose Weakness on him
@@ -1284,6 +1288,10 @@ def show_pull(trace: Trace) -> None:
               f" ({'human' if nearest in trace.humans else 'bot'} {trace.role(nearest)}) {spread['yards']:.1f} yd;"
               f" bot tanks {tanks} yd"
               + (f"; inside his {AGGRO_YD:.0f} yd aggro: {', '.join(inside)}" if inside else ""))
+
+    mana = engage_mana(trace)
+    if mana:
+        print("  healer mana at the engage: " + ", ".join(f"{trace.name(guid)} {pct:.0f}%" for guid, pct in mana))
 
     walk = opening_walk(trace)
     if walk:
@@ -7860,6 +7868,7 @@ def defensive_rows(trace: Trace, samples: Samples | None = None) -> list[dict]:
     change, so a second cast of the same button never shows there."""
     samples = samples or Samples(trace)
     tracks = expose_tracks(trace)
+    health = health_tracks(trace)
     sides = side_spans(trace)
     spans = phase_spans(trace)
     out = []
@@ -7867,12 +7876,94 @@ def defensive_rows(trace: Trace, samples: Samples | None = None) -> list[dict]:
         guid, when = rec.get("s"), rec["t"]
         if rec.get("tr") or rec.get("sp") not in TANK_DEFENSIVES or trace.role(guid) != "tank":
             continue
-        row = samples.recent(guid, when)
         out.append({"t": when, "guid": guid, "spell": TANK_DEFENSIVES[rec["sp"]],
                     "stacks": stack_at(tracks.get(guid, []), when),
-                    "hp": row[5] if row else None, "phase": phase_at(spans, when),
+                    "hp": health_at(samples, health, guid, when), "phase": phase_at(spans, when),
                     "side": held_side(sides, guid, when)})
     return out
+
+
+def melee_hit(rec: dict) -> bool:
+    return rec.get("e") == "dmg" and not rec.get("sp") and rec.get("a", 0) > 0
+
+
+def max_health(rows: list[dict]) -> float | None:
+    sizes = [rec["a"] * 100.0 / (rec["hp"] - after["hp"]) for rec, after in zip(rows, rows[1:])
+             if melee_hit(rec) and melee_hit(after) and after["t"] - rec["t"] <= HEALTH_PAIR_MS
+             and 0 < after["hp"] < rec["hp"] - 1]
+    return statistics.median(sizes) if len(sizes) >= HEALTH_PAIR_MIN else None
+
+
+def health_tracks(trace: Trace) -> dict[int, tuple[list[int], list[dict], float | None]]:
+    events: dict[int, list[dict]] = collections.defaultdict(list)
+    for rec in trace.of("dmg", "heal"):
+        if rec.get("hp") is not None and rec.get("d") in trace.roles:
+            events[rec["d"]].append(rec)
+    out = {}
+    for guid, rows in events.items():
+        rows.sort(key=lambda rec: rec["t"])
+        out[guid] = ([rec["t"] for rec in rows], rows, max_health(rows))
+    return out
+
+
+def health_after(rec: dict, top: float) -> float:
+    if rec.get("e") != "dmg":
+        return rec["hp"]
+    return max(0.0, rec["hp"] - rec.get("a", 0) * 100.0 / top)
+
+
+def health_at(samples: Samples, health, guid: int, when: int) -> float | None:
+    stamps, rows = samples.track(guid)
+    index = bisect.bisect_right(stamps, when)
+    snap = (stamps[index - 1], rows[index - 1][5]) if index and when - stamps[index - 1] <= MAX_STEP_MS else None
+    times, events, top = health.get(guid, ([], [], None))
+    last = bisect.bisect_right(times, when)
+    if top and last and (snap is None or times[last - 1] >= snap[0]):
+        return health_after(events[last - 1], top)
+    return snap[1] if snap else None
+
+
+def health_peak(samples: Samples, health, guid: int, low: int, high: int) -> float | None:
+    times, events, _ = health.get(guid, ([], [], None))
+    readings = [row[5] for row in samples.between(guid, low, high)]
+    readings += [rec["hp"] for rec in events[bisect.bisect_left(times, low):bisect.bisect_right(times, high)]]
+    return max(readings, default=None)
+
+
+def side_tank_contact(trace: Trace, samples: Samples) -> dict[int, dict]:
+    tanks = side_tank_list(trace)
+    end = pull_end(trace)
+    swarm = next((start for start, _, phase, _ in phase_spans(trace) if phase == 3), end)
+    stop = {guid: swarm for guid in tanks}
+    for rec in combat_deaths(trace):
+        if rec.get("g") in stop:
+            stop[rec["g"]] = min(stop[rec["g"]], rec["t"])
+    out = {guid: {"ms": 0, "landed": 0} for guid in tanks}
+    burrowers = guids_of_entry(trace, NPC_BURROWER)
+    for burrower in burrowers:
+        stamps, rows = samples.track(burrower)
+        for index, row in enumerate(rows):
+            tank = row[7] if len(row) > 7 else 0
+            if tank not in out or row[5] <= 0 or stamps[index] >= stop[tank] or index + 1 >= len(stamps):
+                continue
+            mine = samples.recent(tank, stamps[index])
+            if mine is not None and dist2((row[1], row[2]), (mine[1], mine[2])) <= BURROWER_CONTACT_YD:
+                out[tank]["ms"] += min(stamps[index + 1] - stamps[index], MAX_STEP_MS)
+    for rec in trace.of("dmg"):
+        tank = rec.get("d")
+        if (tank in out and rec.get("s") in burrowers and not rec.get("sp") and rec["t"] < stop[tank]
+                and (rec.get("a", 0) > 0 or rec.get("ab", 0) > 0)):
+            out[tank]["landed"] += 1
+    return out
+
+
+def engage_mana(trace: Trace, samples: Samples | None = None) -> list[tuple[int, float]]:
+    pulls = trace.of("pull")
+    if not pulls:
+        return []
+    samples = samples or Samples(trace)
+    rows = ((guid, samples.row(guid, pulls[0]["t"])) for guid in healer_guids(trace))
+    return [(guid, row[6]) for guid, row in rows if row is not None and len(row) > 6]
 
 
 def long_defensive_rows(rows: list[dict]) -> list[dict]:
@@ -7951,11 +8042,14 @@ def tank_deaths(trace: Trace, samples: Samples | None = None) -> list[dict]:
     sides = side_spans(trace)
     spans = phase_spans(trace)
     hits, heals, shields = trace.of("dmg"), trace.of("heal"), trace.of("abs")
+    health = health_tracks(trace)
+    verdicts = notes(trace, "anub.defensive")
     out = []
     for rec in combat_deaths(trace):
         guid, when = rec.get("g"), rec["t"]
         if trace.role(guid) != "tank":
             continue
+        said = [row["txt"] for row in verdicts if row.get("g") == guid and row["t"] <= when]
         low = when - TANK_DEATH_LOOKBACK_MS
 
         def inside(row) -> bool:
@@ -7970,7 +8064,9 @@ def tank_deaths(trace: Trace, samples: Samples | None = None) -> list[dict]:
                     "gross": sum(row.get("a", 0) for row in landed),
                     "overheal": sum(row.get("oh", 0) for row in landed),
                     "absorbed": sum(row.get("a", 0) for row in filter(inside, shields)),
-                    "expose": stack_window(tracks.get(guid, []), low, when + 1)[0]})
+                    "expose": stack_window(tracks.get(guid, []), low, when + 1)[0],
+                    "verdict": said[-1] if said else None,
+                    "top": health_peak(samples, health, guid, when - TANK_DEATH_TOP_MS, when)})
     return out
 
 
@@ -8170,6 +8266,13 @@ def show_tanks(trace: Trace) -> None:
     print("  Expose Weakness on anyone else, peak over the pull: "
           + (", ".join(f"{trace.name(guid)} {peak}" for guid, peak in sorted(others.items(), key=lambda item: -item[1]))
              or "none"))
+    contact = side_tank_contact(trace, samples)
+    if contact:
+        print(f"  burrower melee on each side tank before phase 3 and its first death: seconds a burrower on it stood"
+              f" within {BURROWER_CONTACT_YD:.0f} yd,\n  landed hits and landed hits a second of that: " + "; ".join(
+                  f"{trace.name(guid)} {row['ms'] / 1000:.1f} s, {row['landed']}, "
+                  + (f"{row['landed'] * 1000 / row['ms']:.2f}/s" if row["ms"] else "-")
+                  for guid, row in contact.items()))
     show_main_exposes(trace, samples)
     show_side_tank_aoe(trace, samples)
 
@@ -8177,7 +8280,8 @@ def show_tanks(trace: Trace) -> None:
     if not rows:
         print("  no tank defensive cast")
     else:
-        print("\n  each tank defensive cast, from its cast row, with the Expose Weakness stack and health then:")
+        print("\n  each tank defensive cast, from its cast row, with the Expose Weakness stack and health then (after"
+              " the last\n  logged hit or heal on it when that is newer than its snapshot):")
         for row in rows:
             side = "-" if row["side"] is None else f"side {row['side']}"
             hp = "-" if row["hp"] is None else f"{row['hp']:3.0f}%"
@@ -8212,8 +8316,9 @@ def show_tanks(trace: Trace) -> None:
     if not deaths:
         print("  no tank died")
         return
-    print(f"\n  each tank death, the {TANK_DEATH_LOOKBACK_MS / 1000:.0f} s before it, and a side tank's last cast of each"
-          " long defensive before it:")
+    print(f"\n  each tank death, the {TANK_DEATH_LOOKBACK_MS / 1000:.0f} s before it, its last anub.defensive, its"
+          f" highest health in the {TANK_DEATH_TOP_MS / 1000:.0f} s before\n  and a side tank's last cast of each long"
+          " defensive before it:")
     for row in deaths:
         side = f"side {row['side']}" if row["side"] is not None else "main" if row["main"] else "-"
         taken = sum(row["taken"].values())
@@ -8224,7 +8329,8 @@ def show_tanks(trace: Trace) -> None:
         print(f"    {clock(row['t']):>9} {trace.name(row['guid'])[:14]:14} {side:6} {row['phase']:5}"
               f" taken {taken:,}" + (f" ({sources})" if sources else "")
               + f"; healed {row['gross'] - row['overheal']:,} by {row['heals']} heal(s), {row['overheal']:,} over;"
-                f" absorbed {row['absorbed']:,}; Expose peak {row['expose']}" + before)
+                f" absorbed {row['absorbed']:,}; Expose peak {row['expose']}; anub.defensive {row['verdict'] or '-'};"
+                f" top {'-' if row['top'] is None else format(row['top'], '.0f') + '%'}" + before)
 
 
 # -------------------------------------------------------------------------------------------- scarabs
@@ -9635,8 +9741,8 @@ def show_swings(trace: Trace) -> None:
 SECTIONS = (
     ("phases", "anub.phase spans, his health at each edge, deaths per phase", show_phases),
     ("pull", "locked out past the Web Door or never landed, stage 9 to the pull, the nearest player to his wait"
-     " point and each bot tank at the engage, per role the bots' yards from him then and seconds to a target in"
-     " reach", show_pull),
+     " point and each bot tank at the engage, the healers' mana then, per role the bots' yards from him then and"
+     " seconds to a target in reach", show_pull),
     ("spike", "every Pursued by Anub'arak window, kite branches, outcome, protection, kite stages, boosts,"
      " a kiter marked in a patch, the tank patch spent and one spent in the run stage, the spike's approach to"
      " each tank patch, the spike against the gather and unlatched patches at each mark's end, the speeds at"
@@ -9708,12 +9814,13 @@ SECTIONS = (
      " folded into their owner: effective healing plus absorbs, overheal share, HPS and share of the raid's; each"
      " healer's mana at phase 3's start and 30 s in, Divine Plea, Innervate and Hymn of Hope casts per phase",
      show_healers),
-    ("tanks", "Expose Weakness per wave per side tank, the main tank's with the burrowers and his area casts"
+    ("tanks", "Expose Weakness per wave per side tank, burrower contact seconds and landed hits a second per"
+     " side tank before phase 3, the main tank's Expose Weakness with the burrowers and his area casts"
      " before it, side tank area casts per surfaced phase and anub.saoe rows, its picks against its casts and"
-     " the FAILED ones, each tank defensive cast with its"
-     " stack, a side tank's long defensives outside phase 3 at half health or more, a tank form or stance lost"
-     " while he was up with the act row that dropped it, each tank death with the damage and heals before it and"
-     " a side tank's last long defensives",
+     " the FAILED ones, each tank defensive cast with its stack and health after the last logged hit, a side"
+     " tank's long defensives outside phase 3 at half health or more, a tank form or stance lost"
+     " while he was up with the act row that dropped it, each tank death with the damage and heals before it,"
+     " its last anub.defensive, its highest health in the 6 s before and a side tank's last long defensives",
      show_tanks),
     ("scarabs", "scarabs alive after each emerge and their targets, the main tank's Mandibles stack then, scarab"
      " lives per phase, Mandibles peak stack and damage per player per phase", show_scarabs),

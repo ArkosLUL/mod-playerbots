@@ -205,7 +205,7 @@ No ties, since a tie falls to insertion order:
 | EMERGENCY+1 | `anubarak lust due` → `anubarak lust` | phase 3, `AnubarakLustOpen`, a living unmarked shaman bot, not Sated or Exhausted | `heroism` or `bloodlust` on itself, whatever it has selected, over the stand walks and swarm heals since it is instant and castable on the move: the class trigger wants the boss selected (BY +33 s, 18 s after the burst opened, the DPS shamans on burrowers and Elemena with nothing) |
 | RAID+7.5 | `anubarak kite cat drop` → `anubarak kite cat drop` | a tank (by strategy: a cat DPS with Thick Hide reads as a tank by spec), healer or ranged DPS druid bot in Cat Form, not [held there](#the-kite-planner) | drops the form, past caster form's mana gate; off the GCD, so ahead of the battle res and every heal that won't cast from Cat Form |
 | RAID+7 | `anubarak side tank dead` → `anubarak battle res side tank` | the lowest-guid bot druid with Rebirth known and off cooldown (`CanCastSpell` says no in cat or bear form, which the action leaves first), a tank only when no other can, never the pickup tank while he is up; a dead side tank's corpse with no self-res pending, else the lowest-guid dead healer bot's (BS: Tree died at 2:14 and stayed dead), so one spent on a healer isn't there for a later side tank | caster form, walks to 26 yd, Rebirth |
-| RAID+6.5 | `anubarak side tank needs defensive` → `anubarak side tank defensive` | a side tank at Expose Weakness 5+ (67721 remapped: 25-man carries 67847) or under 50%, a physical defensive ready (any in `Swarm`), not one kept | `NextTankDefensive` on self, physical only outside `Swarm`: burrowers melee, so no Anti-Magic Shell (Felesta cast it 5× against them, 2026-10-26), but the swarm was 99k of Felesta's last 117k (CK). **Kept** (`anub.defensive` `kept`): heroic, until `Swarm`, a pick with a 120 s+ cooldown while the tank is at 50%+ (Icebound Fortitude, Divine Protection, Survival Instincts, Frenzied Regeneration, Last Stand, Shield Wall; not Vampiric Blood, Barkskin). From his 50% (user call, 2026-11-04): CJ and CK Felesta spent Icebound Fortitude at his 42.9% and 36.0% at 86-100% and died in phase 3 with it down. From the pull (2026-11-25 test pools): 67 of 85 went at 50%+, mostly on a phase 1's first wave, and all 12 first side tank deaths came with every one still cooling, 11 on a phase 1's second wave |
+| RAID+6.5 | `anubarak side tank needs defensive` → `anubarak side tank defensive` | a side tank at Expose Weakness 5+ (67721 remapped: 25-man carries 67847) or under 50%, a physical defensive ready (any in `Swarm`), not one kept | `NextTankDefensive` on self, physical only outside `Swarm`: burrowers melee, so no Anti-Magic Shell (Felesta cast it 5× against them, 2026-10-26), but the swarm was 99k of Felesta's last 117k (CK). **Kept** (`anub.defensive` `kept`): heroic, until `Swarm`, a pick with a 120 s+ cooldown while the tank is at 50%+ (Icebound Fortitude, Divine Protection, Survival Instincts, Frenzied Regeneration, Last Stand, Shield Wall; not Vampiric Blood, Barkskin). From his 50% (user call, 2026-11-04): CJ and CK Felesta spent Icebound Fortitude at his 42.9% and 36.0% at 86-100% and died in phase 3 with it down. From the pull (2026-11-25 test pools): 67 of 85 went at 50%+, mostly on a phase 1's first wave, and all 12 first side tank deaths came with every one still cooling, 11 on a phase 1's second wave. With the keep 4 of 79 went at 50%+, no side tank died with one kept, and the first deaths moved to the first wave after a submerge, the ones spent under 50% on the wave before still cooling |
 | RAID+6 | `anubarak leeching swarm on tank` → `anubarak tank defensive` | his victim in `Swarm`, a defensive ready | `NextTankDefensive` on self |
 | RAID+5.5 | `anubarak grip frost sphere` → `anubarak grip frost sphere` | a DK with a grip duty | `walk` to its stand, stops and `cast`s Death Grip on the duty sphere, `kill`s it once landed |
 | RAID+5 | `anubarak ranged should seed permafrost` → `anubarak destroy frost sphere` | a sphere duty | attacks the sphere, out of reach walks in first |
@@ -1271,6 +1271,9 @@ resists and absorbs, so every heal on a healthy non-tank goes back to him: in 20
 - **The druid main tank keeps bear form for the emerge**: `anubarak emerge bear hold` blocks its
   `caster form` from 10 s before it, so its Rejuvenation waits: in BR and BS it came up in caster
   form at all 4 emerges, bear back 1.8-3.5 s later, one 25.5k hit landing meanwhile.
+- **A bear side tank leaves form between waves, by design**: once its burrowers die it casts Rejuvenation or
+  Mark of the Wild from caster form and shifts back 0.2-1.5 s after the next wave spawns, its rage refilling
+  from the first hit (2026-11-25, 8 test pulls: 100 Rejuvenations, one burrower hit out of form).
 - **Mana before phase 3** (user call, 2026-11-01): Holylight came in at 46-62% and was at 6-23% 45 s
   later, Elemena 55% to 3-11%, the class Divine Plea firing twice in 7 min. At `ACTION_MEDIUM_HEAL + 6`,
   heroic, unmarked: `anubarak divine plea` for a healer paladin bot under 80% mana, not in `Swarm`, no
@@ -1466,7 +1469,12 @@ personal burst is unrestricted.
 - A rogue's Tricks waits until it hits a loose burrower, which its DPS pick rarely is.
 - Side tanks die to two frenzied burrowers at 9 Expose Weakness stacks (+225%, 5+ stacks 17-34 s of
   each 2026-10-26 wave), and most burrower submerges followed a side tank's death; no healer is
-  assigned to a side tank.
+  assigned to a side tank. The 2026-11-25 test-pool side tanks took the CT/CU kills' hit size per stack but
+  0.34-0.69 landed hits a second of burrower contact against Bulwark's and Felesta's 0.29-0.37, so took
+  6.9-11.6k/s of burrower damage in phase 1 against 4.5-6.2k/s, and died from 80-100% in under 6 s.
+- A running defensive holds back the next (`NextTankDefensive`, shared): a Last Stand, Barkskin or Vampiric
+  Blood up kept a ready Shield Wall, Frenzied Regeneration or Icebound Fortitude in hand at 3 of 36 test-pool
+  side tank deaths.
 - The kite ring (40 yd round the centre) runs past the west refill pair at 36-43 yd.
 - A human's Army of the Dead ghouls still taunt burrowers off the patches (one submerged at 0:39 in a
   2026-10-26 wipe); only bots are blocked.
@@ -1576,8 +1584,9 @@ he was up with burrowers out. Per flag:
 - `--phases`: spans, his health at each edge, deaths per phase.
 - `--pull`: who stood west of the Web Door or above z 200 at the pull and when each got in, stage 9 to
   the pull, the player nearest his wait point and each bot tank's yards at the engage, one inside 23 yd
-  flagged; per role the bots' median yards from him at the engage and seconds to a target in reach, and
-  per warlock bot its Demonic Circle: Summon casts in the first 10 s with yards off the centre.
+  flagged, and the healers' mana; per role the bots' median yards from him at the engage and seconds to a
+  target in reach, and per warlock bot its Demonic Circle: Summon casts in the first 10 s with yards off the
+  centre.
 - `--spike`:
   - each 67574 window: kiter, `kite` branches, seconds, outcome, when the spike first came within 12 yd,
     Hand of Protection on the kiter, its own Divine Shield, Ice Block, Feign Death or Vanish, `protect`
@@ -1750,9 +1759,13 @@ he was up with burrowers out. Per flag:
 - `--tanks`:
   - per wave and side tank the Expose Weakness peak and seconds at 5+, each `defensive` with its stack
     and health (a magic-only one on a side tank flagged), each tank death with damage by source, heals
-    and absorbs in the 12 s before, each tank's defensives from its cast rows (`anub.defensive` writes
-    only on a change); the long ones (120 s+) a side tank cast outside phase 3 at 50%+ health, and per
-    side tank death its last cast of each.
+    and absorbs in the 12 s before, its last `defensive` and highest health in the 6 s before, each
+    tank's defensives from its cast rows (`anub.defensive` writes only on a change); the long ones
+    (120 s+) a side tank cast outside phase 3 at 50%+ health, and per side tank death its last cast of
+    each. A cast's health is after the last `dmg` or `heal` row on it when that is newer than its
+    snapshot (max health from back-to-back melee hits): a 300 ms snapshot read 55% for a 38% Last Stand.
+  - per side tank before phase 3 and its first death, the seconds a burrower on it stood within 6 yd and
+    its landed burrower hits a second of that.
   - each run of the main tank's Expose Weakness: its peak, the burrowers on him at a stack (the shared
     aura's row names only the first caster), his area casts from 5 s before.
   - a tank form or stance (Dire Bear, Bear, Defensive Stance, Righteous Fury, Frost Presence) lost while
