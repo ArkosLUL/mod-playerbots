@@ -2999,6 +2999,35 @@ class MeleeWayIn(unittest.TestCase):
         self.assertFalse(al.way_in_blocked((0.0, 30.0), (0.0, 0.0), [(3.0, 31.0)]))
 
 
+def bulk_break_pull() -> list[dict]:
+    windows = ((10000, "under"), (12000, "raidhp"), (12300, "under"), (15000, "gap"), (18000, "under"),
+               (20000, "none"))
+    return [
+        {"e": "hdr", "v": 13, "ts": 1789500000000, "map": 603, "inst": 4, "diff": 1, "boss": "algalon-the-observer",
+         "roster": [{"g": UD_TRACKER, "n": "Tracker", "r": "tank", "c": "warrior", "h": 0},
+                    {"g": UD_LOCK, "n": "Lock", "r": "ranged", "c": "warlock", "h": 0}]},
+        {"t": 0, "e": "pull", "boss": "algalon-the-observer", "src": "engage"},
+        {"t": 1, "e": "unit", "g": ALGALON, "en": al.NPC_ALGALON, "n": "Algalon the Observer", "b": 1},
+        {"t": 1, "e": "unit", "g": UD_STAR_A, "en": al.NPC_COLLAPSING_STAR, "n": "Collapsing Star", "mhp": 200000},
+        {"t": 1, "e": "spell", "sp": 47855, "n": "Drain Soul"},
+        note(10000, UD_TRACKER, "algalon.focusstar", UD_STAR_A),
+        *(note(when, UD_TRACKER, "algalon.starwindow", window) for when, window in windows),
+        cast(11000, UD_LOCK, 686, UD_STAR_A), cast(11800, UD_LOCK, 47855, UD_STAR_A),
+        {"t": 11800, "e": "cast", "s": UD_LOCK, "sp": 47422, "tgt": UD_STAR_A, "ct": 0, "tr": 1},
+        cast(14900, UD_LOCK, 47855, UD_STAR_A),
+        {"t": 25000, "e": "end", "out": "wipe"},
+    ]
+
+
+class BulkBreaks(unittest.TestCase):
+    def test_a_short_break_off_the_bulk_names_the_cast_on_its_star_and_a_long_one_is_not_read(self):
+        with tempfile.TemporaryDirectory() as folder:
+            trace = load(folder, bulk_break_pull())
+            self.assertEqual(al.bulk_breaks(trace), [
+                {"t": 12000, "window": "raidhp", "ms": 300, "star": UD_STAR_A, "cast": (UD_LOCK, 47855)}])
+            self.assertIn("     0:12.000  raidhp    0.3 s  501              Lock Drain Soul\n", render(trace, "stars"))
+
+
 class EveryView(unittest.TestCase):
     def test_every_section_reads_empty_on_another_boss(self):
         trace = Trace(FULL)

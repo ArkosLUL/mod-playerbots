@@ -2654,23 +2654,18 @@ uint32 BulkLeftHp(AlgalonScanUnit const& star)
     return due > stop ? due - stop : 0;
 }
 
-float BulkClosingPctPerSec(AlgalonEncounterState const& state)
-{
-    float const measured = state.bulkPctPerSec > 0.0f ? TeamSpeed(state, state.bulkPctPerSec, state.bulkTeam)
-                                                      : TeamSpeed(state, state.teamKillPctPerSec, state.teamKillTeam);
-    float const pctPerSec = measured > 0.0f ? std::min(measured, ULDUAR_ALGALON_UNDER_TEAM_PCT_PER_SEC)
-                                            : ULDUAR_ALGALON_UNDER_TEAM_PCT_PER_SEC;
-    return std::max(1.0f, pctPerSec - ULDUAR_ALGALON_STAR_DRAIN_PCT_PER_SEC);
-}
-
 int32 BulkWorkMs(AlgalonEncounterState const& state, AlgalonScanUnit const& star)
 {
     uint32 const left = BulkLeftHp(star);
     if (!left)
         return 0;
 
-    return static_cast<int32>(left / (star.tickHp * BulkClosingPctPerSec(state)) * IN_MILLISECONDS) +
-           ULDUAR_ALGALON_UNDER_SWITCH_MS;
+    float const measured = state.bulkPctPerSec > 0.0f ? TeamSpeed(state, state.bulkPctPerSec, state.bulkTeam)
+                                                      : TeamSpeed(state, state.teamKillPctPerSec, state.teamKillTeam);
+    float const pctPerSec = measured > 0.0f ? std::min(measured, ULDUAR_ALGALON_UNDER_TEAM_PCT_PER_SEC)
+                                            : ULDUAR_ALGALON_UNDER_TEAM_PCT_PER_SEC;
+    float const closing = std::max(1.0f, pctPerSec - ULDUAR_ALGALON_STAR_DRAIN_PCT_PER_SEC);
+    return static_cast<int32>(left / (star.tickHp * closing) * IN_MILLISECONDS) + ULDUAR_ALGALON_UNDER_SWITCH_MS;
 }
 
 bool UnderFrozen(AlgalonEncounterState const& state, uint32 now)
@@ -2918,24 +2913,17 @@ void ValidateUnderFinish(Group* group, AlgalonEncounterState& state)
     state.finisherLatch = ObjectGuid::Empty;
 }
 
-uint32 FinishHandOverHp(AlgalonEncounterState const& state, AlgalonScanUnit const& star, uint32 now)
+uint32 FinishHandOverHp(AlgalonEncounterState const& state, AlgalonScanUnit const& star)
 {
     uint32 const pair = ULDUAR_ALGALON_STAR_TEAM_10;
     uint32 const members = std::max(static_cast<uint32>(state.starTeam.size()), pair);
-    uint32 const margin = star.tickHp * ULDUAR_ALGALON_UNDER_FINISH_TICKS * members / pair;
-    int32 const alone = MsUntil(state.nextBigBangMs, now) - ULDUAR_ALGALON_UNDER_SWITCH_MS;
-    if (alone <= 0)
-        return 0;
-
-    float const finisherPctPerSec = BulkClosingPctPerSec(state) / static_cast<float>(members);
-    float const reach = star.tickHp * finisherPctPerSec * static_cast<float>(alone) / IN_MILLISECONDS;
-    return std::min(margin, static_cast<uint32>(reach));
+    return star.tickHp * ULDUAR_ALGALON_UNDER_FINISH_TICKS * members / pair;
 }
 
-bool HandOverFinish(Group* group, AlgalonEncounterState& state, AlgalonScanUnit const& star, uint32 now)
+bool HandOverFinish(Group* group, AlgalonEncounterState& state, AlgalonScanUnit const& star)
 {
     uint32 const left = BulkLeftHp(star);
-    if (!state.finishLatch.IsEmpty() || !left || left > FinishHandOverHp(state, star, now))
+    if (!state.finishLatch.IsEmpty() || !left || left > FinishHandOverHp(state, star))
         return false;
 
     Player* finisher = ElectFinisher(group, state);
@@ -2974,7 +2962,7 @@ AlgalonScanUnit const* UnderBulkStar(Group* group, AlgalonEncounterState& state,
     if (state.bigBangCasting || !state.nextBigBangMs)
         return nullptr;
 
-    if (latched && !HandOverFinish(group, state, *latched, now))
+    if (latched && !HandOverFinish(group, state, *latched))
         return latched;
 
     int32 work = 0;
@@ -2986,7 +2974,7 @@ AlgalonScanUnit const* UnderBulkStar(Group* group, AlgalonEncounterState& state,
         return nullptr;
 
     AlgalonScanUnit const* next = PickBulkStar(state);
-    if (next && HandOverFinish(group, state, *next, now))
+    if (next && HandOverFinish(group, state, *next))
         next = PickBulkStar(state);
 
     if (!next)

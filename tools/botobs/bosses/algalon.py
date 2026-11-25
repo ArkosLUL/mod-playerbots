@@ -246,6 +246,8 @@ NEW_HOLE_MS = 1500
 NEW_HOLE_YD = 7.0
 STAR_NOTE_MS = 2000
 STAR_NEAR_YD = 9.0
+BULK_BREAK_MS = 2000
+BULK_BREAK_CAST_MS = 400
 DEATH_ROLES = ("tank", "heal", "melee", "ranged")
 # A tank death is read over this long before it, and its spike over the shorter span.
 TANKHEAL_WINDOW_MS = 6000
@@ -3367,6 +3369,37 @@ def show_focus_rates(trace: Trace) -> None:
               f" {counter_label(trace, row['star'] & 0xFFFFFFFF):16} {'u' if row['under'] else ' '}  {health}{team}")
 
 
+def bulk_breaks(trace: Trace) -> list[dict]:
+    def build(trace: Trace) -> list[dict]:
+        spans = window_spans(trace)
+        focus = latch_spans(trace, "algalon.focusstar", pull_end(trace))
+        casts = [rec for rec in trace.of("cast") if not rec.get("tr")]
+        out = []
+        for before, (window, start, stop), after in zip(spans, spans[1:], spans[2:]):
+            if before[0] != "under" or window == "under" or after[0] != "under" or stop - start > BULK_BREAK_MS:
+                continue
+            star = as_guid(value_at(focus, start - 1))
+            last = [rec for rec in casts if star and rec.get("tgt") == star
+                    and 0 <= start - rec["t"] <= BULK_BREAK_CAST_MS]
+            out.append({"t": start, "window": window, "ms": stop - start, "star": star,
+                        "cast": (last[-1]["s"], last[-1]["sp"]) if last else None})
+        return out
+    return cached(trace, "_algalon_bulk_breaks", build)
+
+
+def show_bulk_breaks(trace: Trace) -> None:
+    rows = bulk_breaks(trace)
+    if not rows:
+        return
+    print(f"  the bulk broken off for {BULK_BREAK_MS / 1000:.0f} s or less and back, the cast on its star just before:"
+          f" {len(rows)}")
+    for row in rows:
+        cast = (f"{trace.name(row['cast'][0])} {spell_name(trace, row['cast'][1], {}) or row['cast'][1]}"
+                if row["cast"] else "no cast")
+        print(f"    {clock(row['t']):>9}  {row['window']:9} {row['ms'] / 1000:.1f} s"
+              f"  {counter_label(trace, row['star'] & 0xFFFFFFFF) if row['star'] else '-':16} {cast}")
+
+
 def star_flags(row: dict) -> str:
     flags = " <8s" if row["gap"] is not None and row["gap"] < STAR_GAP_MS else ""
     flags += " lowhp" if row["below"] else ""
@@ -3438,6 +3471,7 @@ def show_stars(trace: Trace) -> None:
                 for row in rows))
     show_under_cycles(trace)
     show_focus_rates(trace)
+    show_bulk_breaks(trace)
     show_finishes(trace)
     for opened in window_opens(trace):
         print(f"  window {opened['kind']} {clock(opened['t'])}: focus star {opened['middle']:.1f} yd from the team's"
@@ -6021,7 +6055,8 @@ SECTIONS = (
     ("stars", "star deaths, health against the drain, the kill window, the star plan against the death and the Big"
               " Bang hit, wand trims and shots (older traces), under-star switches, releases and health at the cast,"
               " who hit an early release from over its band to the release, focus span loss and team size, the"
-              " bulk's median overall and per team size, bulk finishes and the team then, the star team",
+              " bulk's median overall and per team size, the bulk broken off 2 s or less and the cast on its star"
+              " before, bulk finishes and the team then, the star team",
      show_stars),
     ("collateral", "star health lost beyond the drain while unfocused, every cast on a star", show_collateral),
     ("holes", "hole stock, empty seconds before each Big Bang, holes lost, urgent spans", show_holes),

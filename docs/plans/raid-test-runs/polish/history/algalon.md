@@ -1363,3 +1363,74 @@ finisher can do before the cast (a bug fix).
 Lightning Bolts, Arcane Blasts and Shadow Bolt that crossed the line were still casting at the earlier hand-off
 (1843, 1844), where the cut takes them; 1925's Arcane Missiles were all flying by 4:21.2. The new reader and
 fixture docstrings went (comments rule); the last-star risk went into the cost line and the watch above.
+
+## Round 17 (2026-11-25, window 48 build d9964f052: round 16)
+
+**Data.** `window48-algalon.md`; `filler47-algalon.md` (six more pulls on r15's 37cc72a94); every w48 pull's
+`--verdict`, `--deaths`, `--stars`; the new `--melee` on all 12 traces. Scratch `alg17/` (P1 damage by role from
+`snap.u[11]`, melee distance to him with walk-guard vetoes), folded into `--melee`.
+
+| Pool | Trace `603_*_algalon-the-observer_*` | Out | Deaths (reader causes) |
+|---|---|---|---|
+| uld1 A | `603_9_…_1795607892` | kill 6:42, P1 309 s | 8: on tank 3, Barrage 2, loose, Smash, Big Bang (3 after Berserk) |
+| uld4 A | `603_10_…_1795607892` | wipe 7:03, P1 331 s | 33: loose 21, on tank 6, Barrage 2, star 2, Smash, Big Bang (28 in P2) |
+| uld2 B | `603_11_…_1795607912` | wipe 6:23 in P1 | 30: star 12, loose 9, on tank 5, Barrage 4 |
+| uld5 B | `603_7_…_1795607871` | wipe 7:12, P1 325 s | 32: loose 21, on tank 7, Dark Matter 2, star, Big Bang (31 in P2) |
+| uld3 C | `603_12_…_1795607913` | wipe 6:03 in P1 | 32: Barrage 11, star 8, loose 7, on tank 4, Black Hole DoT 2 |
+| uld6 C | `603_8_…_1795607872` | wipe 6:00 in P1 | 34: star 13, Barrage 7, loose 7, on tank 6, other |
+
+**Stop rules.** Not polished: A's kill had 8 dead, B and C no kill. Not stuck: melee held off by holes is a first
+pick; the finisher hand-off its second (r16, r17), each time a different margin.
+
+**Verdict on round 16: held for its target.** `early` releases 5 in 4 pulls (w46 6 in 4): uld1 1604, uld4 1605 and
+1932, uld2 1595 (team 3), uld5 1852 (team 5); `left` 0.8-6.0% each, inside the 7.5 / 12.5 margin, and the share
+over it came from the finisher, a hunter in every pull: Explosive Shot ticks after its finish ended (2.4-6.0%,
+read as `left`), Chimera 3.5%, Kill Shot 3.6%, Auto Shot 1.5-2.1%. A 3, B 2, C 0; 1 dead of them (uld4 1932's
+deadline kill). The watched risk came true once: uld6 1865 (C, team 5, Big Bang 2's last star) went to the finisher
+7.9 s before the cast at 28.5% after wave 2's deadline kill held the team 3:11-3:15; alone it did +1.2 %/s beyond
+the drain where it needed ~1.5: 11.3% at the cast over its 9.6% top, off 1.1 s after the hit, 23 hit, 6 dead.
+Wave 3 under Big Bang 2: 8 of 15 (w46 12 of 19); `late` 5 (uld1 1873, uld2 1847, uld3 1851 and 1852, uld5 1851),
+each after wave 2's deadline kill (lead).
+
+**Picked: melee held off him by a hole (the Berserk wipes).** Bug: the strategy keeps melee on him, but nothing
+brings a held one in.
+
+- P1 damage by role (`snap.u[11]`): melee 43.8 k/s (uld4), 48.8 (uld5) against 52.0-57.8 in the kills (w48 uld1,
+  f47 uld4, uld5); ranged 63-68 in all. Same roster on uld4: Ulduan (ret) 4.2 k/s against 7.0, Ulduah (DK) 4.5
+  against 5.9.
+- uld4: the star at 4:11.1 died 8.4 yd from Ulduaf, a hole 11 yd from him on the melee side. After the 4:18 meteor
+  dodge Ulduan, Ulduah and Ulduar stood 30 yd off him until Big Bang 3 (42 s), then 38-49 yd off from 5:07 to
+  phase 2 (50 s): `algalon walk guard` vetoed `reach melee` and `set behind`, the stop point 11.83 yd along their
+  bearing lying 7.0 yd from the hole (< 7.5). `AlgalonWalkGuardMultiplier` (`UldMultipliers_Algalon.cpp:348`)
+  only holds, and `RawSlot` (`UldEncounter_Algalon.cpp:1983`) gives a released melee bot no spot.
+- `--melee` P1 seconds blocked (outside Big Bang casts): w48 uld4 526, uld5 262, uld3 73, uld6 55, uld2 6.5, uld1 0;
+  f47 uld1 375, uld6 157, uld4 136, uld2 110, uld3 29, uld5 0. P2: f47 uld3 351 (Worm Hole across their way, P2
+  99.7 s into Berserk), w48 uld4 146. P1 324-331 s with over 220 s blocked; 301-309 s in the kills.
+
+**Second, small and independent: the hand-off cap** r16 named for one `above` on a cycle's last star (bug).
+
+**Fix** (Algalon files only):
+
+- `MeleeHoleSpot` (`UldEncounter_Algalon.cpp`), a `RawSlot` branch `melee` after `nearhole` and the star team's:
+  a melee bot (no tank, not phased) on him, out of his melee range, whose straight way in the walk guard holds,
+  gets the nearest of 16 points 3 yd inside his melee range (`ULDUAR_ALGALON_MELEE_SPOT_INSET`) in the room and
+  8 yd clear of holes, a straight walk first; the raid position action walks it (detour round holes as a slot).
+  Back in reach, or once its straight way in clears, the branch ends and the generic melee takes over.
+- `FinishHandOverHp`: the margin is at most the finisher alone's work by 3 s before the cast (the bulk's closing
+  speed, `BulkClosingPctPerSec` split out of `BulkWorkMs`, over the team's size); none under 3 s. uld6 1865 by hand:
+  at r16's hand-off, 3:18.8, it stood ~11.7% over its line with 7.9 s to the cast, where the finisher
+  alone closes at most ~4.9% (5 %/s capped closing over 5) by cast − 3 s, so the team keeps it; at the team's
+  +3.1 %/s on it (3:00-3:11) the hand-off comes ~3:22.3 with under 1% left. A team slower than that (+0.5 %/s
+  3:15-3:18, back from the deadline kill) still leaves it above its band at the cast.
+- Reader `--melee` (per melee bot and phase: in reach / blocked / out, melee-spot seconds) and a verdict at 10 s
+  blocked in a phase; tests `MeleeWayIn`. `docs/raids/ulduar/algalon.md`: walk guard, Bulk bullet, the trace.
+
+Bots only, so a human melee or tank changes nothing; 10-man runs the same geometry. Shared code: none.
+
+**Not picked:** finisher overshoot by its own shots (5, 1 dead); wave 2's deadline kill making wave 3 `late` (lead);
+Barrage; Q2.
+
+**Next window should show.** `--melee` P1 blocked under 20 s a pull (w48 up to 526) with `spot` seconds where a
+hole sat by him, P2 blocked near 0; P1 under ~310 s where P1 deaths stay ≤ 5, and A and B pulls reaching P2 killing
+before Berserk. `--stars`: no under-star `above` its band at the cast (w48 1) and `early` not above w48's 5.
+Regression watch: a stray phase from `algalon raid position action` in `--phasing` (the spot walk into a field).
