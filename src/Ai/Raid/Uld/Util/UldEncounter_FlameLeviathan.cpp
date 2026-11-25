@@ -285,6 +285,12 @@ void TickSeats(FlameLeviathanState& state, Player* bot)
             }
         }
 
+        if (kind == FlameLeviathanSeat::Catapult && !state.seatClaims.count(guid))
+        {
+            state.seatClaims.insert(guid);
+            state.claimMs[guid] = now;
+        }
+
         if (FlameLeviathanOnFootInArena(member) && !state.seatClaims.count(guid))
             onFoot.push_back(member);
         else if (state.pickup.count(guid))
