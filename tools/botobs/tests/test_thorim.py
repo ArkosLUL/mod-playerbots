@@ -9,7 +9,8 @@ camp bot dying short of its row and another on a cone step pins the shelters sec
 ring walk and a ring walker dying past reach pins the ring cone section; a Runic Colossus Smash over a healer on his
 target and one behind him pins the colossus section; orb 1 with two camp walks held until the chain lands pins the
 chain wait section; a ring walk held until that chain lands and a ring step released by the cap pin the ring wait
-section. The shared v14 fixture shows every section reads empty elsewhere.
+section; a camp walk refused for 3 s under the cone and a chain, a short ring stall and the waiting tank's charge
+pin the stalled section. The shared v14 fixture shows every section reads empty elsewhere.
 """
 from __future__ import annotations
 
@@ -544,6 +545,49 @@ class Spree(unittest.TestCase):
 
     def test_no_spree(self):
         self.assertIn("no Killing Spree from a ring bot in phase 2", printed(thorim.show_spree, load(chain_pull())))
+
+
+def stalled_pull() -> list[dict]:
+    records = pull()
+    for rec in records:
+        if rec.get("e") != "snap":
+            continue
+        for row in rec["u"]:
+            if row[0] == RANGED:
+                row.append(1 if rec["t"] >= 8000 else 0)
+            elif row[0] == MELEE:
+                row.append(1 if rec["t"] == 24000 else 0)
+    mover = "thorim phase 2 positioning action"
+    records += [
+        {"t": 3000, "e": "move", "g": RANGED, "k": "point", "ok": 1, "x": 2125.0, "y": -250.0, "by": mover},
+        {"t": 3300, "e": "move", "g": RANGED, "k": "point", "ok": 0, "r": "dup", "x": 2125.0, "y": -250.0, "by": mover},
+        {"t": 3500, "e": "act", "g": RANGED, "a": "healing potion", "rel": 21.0, "vd": "OK"},
+        {"t": 4000, "e": "move", "g": RANGED, "k": "point", "ok": 0, "r": "dup", "x": 2125.0, "y": -250.0, "by": mover},
+        {"t": 5000, "e": "move", "g": RANGED, "k": "point", "ok": 0, "r": "dup", "x": 2125.0, "y": -250.0, "by": mover},
+        {"t": 5500, "e": "dmg", "s": THORIM, "d": RANGED, "sp": 62466, "a": 20000, "ok": 0, "hp": 50.0},
+        {"t": 5600, "e": "dmg", "s": THORIM, "d": RANGED, "sp": 64390, "a": 4000, "ok": 0, "hp": 40.0},
+        {"t": 5601, "e": "dmg", "s": THORIM, "d": MELEE, "sp": 64390, "a": 6000, "ok": 0, "hp": 0.0},
+        {"t": 5700, "e": "death", "g": MELEE, "killer": THORIM, "x": 2121.0, "y": -249.0, "z": 419.6,
+         "blow": [THORIM, 6000], "rewind": [[5601, THORIM, 64390, 6000]]},
+        {"t": 6000, "e": "move", "g": RANGED, "k": "point", "ok": 0, "r": "dup", "x": 2125.0, "y": -250.0, "by": mover},
+        {"t": 12000, "e": "act", "g": TANK_B, "a": "feral charge - bear", "rel": 18.0, "vd": "OK"},
+        {"t": 22000, "e": "move", "g": MELEE, "k": "point", "ok": 1, "x": 2128.0, "y": -249.0, "by": mover},
+        {"t": 22700, "e": "move", "g": MELEE, "k": "point", "ok": 0, "r": "dup", "x": 2128.0, "y": -249.0, "by": mover},
+    ]
+    return sorted(records, key=lambda rec: rec.get("t", -1))
+
+
+class Stalled(unittest.TestCase):
+    def test_a_refused_walk_under_the_cone_and_the_chain_and_a_short_one(self):
+        text = printed(thorim.show_stalled, load(stalled_pull()))
+        self.assertIn("+3.0 s Darter (ranged): 3.0 s 18.0 yd short (refused 3, re-issued 0) after healing potion", text)
+        self.assertNotIn("Cleaver (melee)", text)
+        self.assertIn("all: stalls 2 (3.3 bot-s; refused 4, re-issued 0), 1.0 s or longer 1 (ranged 1; 1 before the "
+                      "first tank death); cone hits on a stalled bot 1, deaths while stalled 0; chains through a "
+                      "stalled bot 1, 1 dead past it; charges from a tank while the other held him 1", text)
+
+    def test_snapshots_without_the_moving_flag(self):
+        self.assertIn("all: stalls 0 (0.0 bot-s; refused 0, re-issued 0)", printed(thorim.show_stalled, load(pull())))
 
 
 class Deaths(unittest.TestCase):

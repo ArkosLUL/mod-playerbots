@@ -94,6 +94,8 @@ bool ThorimFrostAuraHeld(PlayerbotAI* botAI) { return IsThorimFrostAuraPaladin(b
 
 bool ThorimTankAnchored(PlayerbotAI* botAI) { return ThorimTankOnAnchor(botAI, botAI->GetBot()); }
 
+bool ThorimTankWaiting(PlayerbotAI* botAI) { return ThorimTankBoundForOffTankSpot(botAI, botAI->GetBot()); }
+
 bool ThorimLeverWait(PlayerbotAI* botAI)
 {
     ObjectGuid lever;
@@ -173,6 +175,7 @@ void DefineThorim(EncounterBuilder& e)
                   Family::Attack | Family::Reach | Family::ReachHeal,
                   {ThorimPhase2PositioningAction::Name, ThorimBalconyAdvanceAction::Name,
                    ThorimUnreachableStepAction::Name});
+    e.Block("thorim waiting tank charge hold", Role::Tank, ThorimTankWaiting, Family::Charge);
 
     e.Exclusive("thorim arena leash", Role::Any, ThorimLeashBreached, Family::AvoidAoe | PICKERS,
                 {ThorimArenaLeashAction::Name, ThorimArenaPositioningAction::Name, ThorimChargedOrbAction::Name,

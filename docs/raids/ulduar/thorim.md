@@ -423,6 +423,14 @@ set): past the cone even on a stamp one scan late, back on its point before the 
 casts that fell in that window met no chain and no cone. With no lit yet in phase 2 it holds, so the
 opening spree comes after the first chain.
 
+**A stalled walk re-issues after 0.5 s.** `IsDuplicateMove` refuses a repeat for 5 s whether or not the bot
+moves ([pitfalls](../../engine/pitfalls.md)), so whatever stopped a phase 2 walk left the bot standing: a
+spree, a cast pinning the feet, a broken root, a charge. Over 73 hard-mode pulls before the first tank death:
+373 stalls of 1 s or more (87 after a spree, the rogue up to 6.5 s ~6 yd off its point), 31 cone hits and 6
+deaths on stalled bots, 12 chains through one with 12 dead past it. `ThorimReleaseStalledWalk` clears
+`last movement` once the bot has stood still `ULDUAR_THORIM_WALK_STALL_MS` (500) past its booking, before
+the positioning and Blizzard step actions re-issue.
+
 Every melee DPS carries the `behind` strategy from `AiFactory`, so `SetBehindTargetAction` would walk all
 three stacks into one arc behind the boss the moment the ring node yields. The `thorim movement guard` rule
 holds the generic movers, scoped to a **settled**, [stepped-out](#a-covered-slot-steps-out) or
@@ -798,6 +806,12 @@ Ungated, the corridor tank answered the first Unbalancing Strike (+7-14 s) from 
 until walked back, against 0.46-0.92 over the next 30 s, and melee chasing him died to Lightning Charge and
 Chain Lightning. The struck holder now keeps him until the corridor tank comes in, inside the strike's 15 s.
 8 yd still covers the waiting tank's reach step and a tank taking him back toward the spots from 6-7 yd.
+
+**A tank bound for the off-tank spot holds its charges** (`thorim waiting tank charge hold`, the `Charge`
+family while `ThorimTankBoundForOffTankSpot`). The corridor bear Feral Charged him off the jump landing in
+nearly every pull with one (49 times in 73 hard-mode pulls, +6.5-15.5 s), landed 6-8 yd south-east of him
+between slots 0 and 1 and stood there ~3.7 s on a [stalled walk](#phase-2): 5 opening chains ran through it,
+8 dead past it.
 
 **Thorim's threat table is empty at the phase change**, because he sits at 100% untouched through
 phase 1, so the pickup taunt hands him straight back
@@ -1529,6 +1543,10 @@ or step held for Chain Lightning):
   orb, the Chain Lightning that hit the rogue from 0.3 s before it to 5.1 s after (its hop, whether that
   hop crossed groups, deaths in other groups past it), a cone hit in that span; then totals, with those
   started in the hold's 5.5-9.0 s window.
+- `--stalled`: each phase 2 walk the positioning or Blizzard step action left standing over 2 yd short for
+  1 s or more, counted from 0.5 s after its issue: how long, repeats the booking refused (`dup`) or issued
+  without moving, the bot's actions since the issue; then totals, cone hits and deaths while stalled, chains
+  through a stalled bot with deaths past it, and charges from a tank while the other held him.
 
 Per snapshot the holder is the tank he hits and every other living tank on the floor waits; spacing
 counts from 15 s after the drop. Damage rows come in hop order (each hop does 1.5 times the last), every
