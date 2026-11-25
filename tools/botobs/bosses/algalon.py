@@ -3194,6 +3194,64 @@ def splash_label(trace: Trace, row: dict) -> str:
     return f"{amount(row['pct'])} splash in {UNDER_SPLASH_MS // 1000} s" + (f" ({top})" if top else "")
 
 
+def under_overshoot(trace: Trace) -> list[dict]:
+    def build(trace: Trace) -> list[dict]:
+        samples = samples_of(trace)
+        end = pull_end(trace)
+        team = holder_spans(trace, "algalon.starteam", end)
+        focus = latch_spans(trace, "algalon.focusstar", end)
+        finishes = latch_spans(trace, "algalon.finishstar", end)
+        out = []
+        for cycle in under_cycles(trace):
+            band, cast = cycle["band"], cycle["cast"]
+            if not band or cast is None:
+                continue
+            for counter, drop in sorted(cycle["releases"].items()):
+                guid = star_by_counter(trace).get(counter)
+                timed = samples.timed(guid, -(1 << 62), drop["t"]) if guid and drop["why"] == "early" else []
+                if not timed:
+                    continue
+                over = [(when, row[5]) for when, row in timed if row[5] >= band[1] + (cast - when) / 1000.0]
+                low, high = over[-1] if over else (timed[0][0], timed[0][1][5])
+                taken: collections.Counter = collections.Counter()
+                for rec in victim_hits(trace).get(guid, []):
+                    if not low < rec["t"] <= drop["t"] or rec.get("s") == guid:
+                        continue
+                    owner = trace.owners.get(rec.get("s"), rec.get("s"))
+                    member = value_at(team.get(owner, []), rec["t"]) == "1"
+                    tag = ("finisher" if finishing(trace, guid, rec["t"], owner)
+                           else "team" if member and as_guid(value_at(focus, rec["t"])) == guid
+                           else "left" if member else "off")
+                    taken[(rec.get("s"), rec.get("sp"), tag)] += rec.get("a", 0)
+                full = trace.maxhp.get(guid)
+                share = (lambda amount: 100.0 * amount / full) if full else (lambda amount: None)
+                tags: collections.Counter = collections.Counter()
+                for (_, _, tag), amount in taken.items():
+                    tags[tag] += amount
+                handoff = [start for value, start, _ in finishes if as_guid(value) == guid and start <= drop["t"]]
+                out.append({"n": cycle["n"], "counter": counter, "from_t": low, "from_hp": high, "over": bool(over),
+                            "t": drop["t"], "hp": timed[-1][1][5], "pct": share(sum(taken.values())),
+                            "tags": {tag: share(amount) for tag, amount in tags.most_common()},
+                            "by": [(source, spell, share(amount), tag)
+                                   for (source, spell, tag), amount in taken.most_common()],
+                            "team": sum(value_at(spans, drop["t"]) == "1" for spans in team.values()),
+                            "handoff": handoff[-1] if handoff else None})
+        return out
+    return cached(trace, "_algalon_under_overshoot", build)
+
+
+def overshoot_label(trace: Trace, row: dict) -> str:
+    def amount(pct):
+        return "-" if pct is None else f"{pct:.1f}%"
+    tags = ", ".join(f"{tag} {amount(pct)}" for tag, pct in row["tags"].items())
+    top = ", ".join(f"{label_of(trace, source)} {trace.spells.get(spell) or ('melee' if not spell else spell)}"
+                    f" {amount(pct)} {tag}" for source, spell, pct, tag in row["by"][:UNDER_SPLASH_TOP])
+    start = f"{row['from_hp']:.1f}% at {clock(row['from_t'])}" + ("" if row["over"] else " (never over its band)")
+    handoff = f"hand-off {clock(row['handoff'])}" if row["handoff"] is not None else "no hand-off"
+    return (f"{start} to {row['hp']:.1f}% at the release: {amount(row['pct'])} hit it"
+            + (f", {tags} ({top})" if tags else "") + f"; team {row['team']}, {handoff}")
+
+
 def show_under_cycles(trace: Trace) -> None:
     cycles = under_cycles(trace)
     if not cycles:
@@ -3212,6 +3270,9 @@ def show_under_cycles(trace: Trace) -> None:
             for row in under_splash(trace):
                 if row["n"] == cycle["n"] and row["counter"] == counter:
                     print(f"        before the release: {splash_label(trace, row)}")
+            for row in under_overshoot(trace):
+                if row["n"] == cycle["n"] and row["counter"] == counter and row["by"]:
+                    print(f"        {overshoot_label(trace, row)}")
     if "algalon.underdrop" not in emitted(trace):
         print("    no algalon.underdrop row: nothing released, or a trace from before the probe")
     sides: collections.Counter = collections.Counter()
@@ -3249,6 +3310,7 @@ def bulk_finishes(trace: Trace) -> list[dict]:
             out.append({"star": star, "finisher": owner, "start": start, "stop": stop,
                         "first": first[5] if first else None, "last": last[5] if last else None,
                         "others": 100.0 * landed / full if full else None,
+                        "team": sum(value_at(spans, start) == "1" for spans in team.values()),
                         "at_cast": at_cast[5] if alive_then else None,
                         "band": ((cast["end"] - UNDER_LEAD_MS - cast["start"]) / 1000.0,
                                  (cast["end"] + UNDER_TAIL_MS - cast["start"]) / 1000.0 + 1.0) if cast else None})
@@ -3268,8 +3330,8 @@ def show_finishes(trace: Trace) -> None:
         cast = ("" if row["at_cast"] is None or not row["band"]
                 else f"; at the cast {row['at_cast']:.1f}%, band {row['band'][0]:.1f}..{row['band'][1]:.1f}%")
         print(f"    {clock(row['start']):>9} .. {clock(row['stop']):>9}  {counter_label(trace, row['star'] & 0xFFFFFFFF):16}"
-              f" {trace.name(row['finisher']) if row['finisher'] else '-'}: {health}, the rest of the team"
-              f" {others}{cast}")
+              f" {trace.name(row['finisher']) if row['finisher'] else '-'}, team {row['team']}: {health}, the rest of"
+              f" the team {others}{cast}")
 
 
 def show_focus_rates(trace: Trace) -> None:
@@ -5856,8 +5918,8 @@ SECTIONS = (
     ("phasing", "every hole phase: Big Bang or stray, its cause, Dark Matter, walk guard vetoes", show_phasing),
     ("stars", "star deaths, health against the drain, the kill window, the star plan against the death and the Big"
               " Bang hit, wand trims and shots (older traces), under-star switches, releases and health at the cast,"
-              " focus span loss and team size, the bulk's median overall and per team size, bulk finishes, the star"
-              " team",
+              " who hit an early release from over its band to the release, focus span loss and team size, the"
+              " bulk's median overall and per team size, bulk finishes and the team then, the star team",
      show_stars),
     ("collateral", "star health lost beyond the drain while unfocused, every cast on a star", show_collateral),
     ("holes", "hole stock, empty seconds before each Big Bang, holes lost, urgent spans", show_holes),

@@ -207,19 +207,23 @@ ranged join the star team for it (below).
   1.3-2.2%, p75 4-4.5%, up to 19%, 28 pulls) can overshoot its 4-5 tick band; one below it is released `early`
   (31 in 28 pulls, 55 dead). The whole team's last hits are the worst of it: the one crossing the line plus those
   already cast or flying (Shadow Bolt 2-6%, Arcane Blast 2-4.5%, hunter shots 1-3%) landed 4-7%, and 9 of 35
-  under-stars reached the cast below their band (window 34, 22 dead). So with 5 ticks or less above its line, a
-  star goes to one **finisher** (`algalon.finishstar`, `algalon.finisher`), the team bot with the smallest hits
-  (hunter, priest, shaman, druid, warlock, mage, then the rest), and the others' casts on it are cut as they
-  move to the next under-star. One finish at a time (a second star reaching its 5 ticks meanwhile stays the
-  team's), only with two members able; a paced kill takes the finisher along, and the finish resumes after
-  it. No wands: they took
-  0.2-0.3 %/s each, a damage dealer off him against the enrage, and a far star nobody could wand died after the
-  strip and killed 5. At the line the tick interrupts any bot cast, channel or wand on the star, a paced kill's
-  focus excepted, and on an under-star that isn't the focus at once (a paced kill took the team, or the cast
-  began; a skull excepted): an Arcane Blast landing 1.1 s after a switch put 6.6% on one (`early`, 10 dead). The
-  line and the work left net out `pendingHp`, which counts Explosive Shot's later ticks too (a periodic dummy
-  casting 53352 each second, ~2.3% of a 25-man star, valued with the caster's bonuses; the second-largest share
-  landing on under-stars after the team left).
+  under-stars reached the cast below their band (window 34, 22 dead). So with 2.5 ticks or less above its line per
+  team member (5 for two, 7.5 for three, 12.5 for five), a star goes to one **finisher** (`algalon.finishstar`,
+  `algalon.finisher`), the team bot with the smallest hits (hunter, priest, shaman, druid, warlock, mage, then the
+  rest), and the others' casts on it are cut as they move to the next under-star. Cutting stops no shot already
+  flying, and a volley can cross the hand-off inside one 250 ms tick: at 5 ticks for every team, 5 of window 46's
+  6 `early` under-stars (6 pulls) came of it, the leavers' shots in flight landing 7.4-8.1% after a hand-off
+  (Arcane Missiles, Lightning Bolt, Shadow Bolt) or three casts 13.4% with none; one drained into Big Bang 2's
+  cast (4 dead), two became wave-4 deadline kills 16 s apart, the second on a drained raid (4 dead). One finish
+  at a time (a second star reaching its hand-off meanwhile stays the team's), only with two members able; a paced
+  kill takes the finisher along, and the finish resumes after it. No wands: they took 0.2-0.3 %/s each, a damage
+  dealer off him against the enrage, and a far star nobody could wand died after the strip and killed 5. At the
+  line the tick interrupts any bot cast, channel or wand on the star, a paced kill's focus excepted, and on an
+  under-star that isn't the focus at once (a paced kill took the team, or the cast began; a skull excepted): an
+  Arcane Blast landing 1.1 s after a switch put 6.6% on one (`early`, 10 dead). The line and the work left net
+  out `pendingHp`, which counts Explosive Shot's later ticks too (a periodic dummy casting 53352 each second, ~2.3%
+  of a 25-man star, valued with the caster's bonuses; the second-largest share landing on under-stars after the
+  team left).
 - **No DoT on any star** (target guard): a non-channelled spell doing more by ticks than by its hit, at base values
   (Moonfire, Immolate, Flame Shock; Fireball, Pyroblast, Holy Fire are nukes). Allowed, they ticked 12-24 s after
   the team moved on, 16-24% beyond the drain and more than `pendingHp` counts (base ticks, no Haunt, Shadow
