@@ -91,8 +91,6 @@ enum UlduarYoggSaronIds
     SPELL_CONCENTRATION_AURA = 19746,
     SPELL_DEAFENING_ROAR = 64189,
     SPELL_DISTRACTING_SHOT = 20736,
-    SPELL_HUNTER_MISDIRECTION = 34477,
-    SPELL_RECENTLY_SPAWNED = 64497,
     SPELL_WARRIOR_TAUNT = 355,
     SPELL_WARRIOR_VIGILANCE = 50720,
     SPELL_PALADIN_HAND_OF_RECKONING = 62124,
@@ -403,9 +401,7 @@ inline constexpr uint32 ULDUAR_YOGG_SARON_KICK_NUDGE_MS = 2000;
 inline constexpr int32 ULDUAR_YOGG_SARON_KICK_MIN_LEFT_MS = 1000;
 inline constexpr uint32 ULDUAR_YOGG_SARON_BEACON_SHOT_LEFT_MS = 5000;
 inline constexpr uint32 ULDUAR_YOGG_SARON_BEACON_FEIGN_DELAY_MS = 1000;
-inline constexpr float ULDUAR_YOGG_SARON_HUNTER_SHOT_RANGE = 34.0f;
-inline constexpr uint32 ULDUAR_YOGG_SARON_MISDIRECT_CLAIM_MS = 8000;
-inline constexpr uint32 ULDUAR_YOGG_SARON_MISDIRECT_SHOT_MARGIN_MS = 500;
+inline constexpr float ULDUAR_YOGG_SARON_DISTRACTING_SHOT_RANGE = 34.0f;
 
 inline constexpr uint32 ULDUAR_YOGG_SARON_KEEPER_COUNT = 4;
 inline constexpr uint32 ULDUAR_YOGG_SARON_ROAR_FIRST_MS = 30000;
@@ -752,10 +748,6 @@ Player* YoggSaronTankLayOnHandsTarget(PlayerbotAI* botAI);
 bool ClaimYoggSaronTankLayOnHands(PlayerbotAI* botAI, Player* tank);
 
 Player* YoggSaronVigilanceTarget(PlayerbotAI* botAI);
-
-Unit* YoggSaronMisdirectGuardian(PlayerbotAI* botAI, bool claim);
-Player* YoggSaronMisdirectTank(PlayerbotAI* botAI);
-bool YoggSaronMisdirectShotLands(PlayerbotAI* botAI, char const* shot, Unit* guardian);
 
 bool YoggSaronHealerTargetless(PlayerbotAI* botAI);
 
