@@ -380,7 +380,6 @@ Aura* FlameLeviathanVehicleAction::TrackBarrels(Unit* target)
 
 bool FlameLeviathanVehicleAction::DemolisherAction(Unit* target)
 {
-    // Keep this above the thaw's early return, or a landing goes unread and times out as a lost barrel.
     Aura* own = target ? TrackBarrels(target) : nullptr;
 
     if (_vehicleBase->HasAura(SPELL_FL_PASSENGER_LOADED))

@@ -119,7 +119,8 @@ loses the whole stack, early only a second of it), each adding a stack on the wa
 is timed off our own aura: a stack gained, or the duration jumping back up by over 250 ms. Barrels
 lob for 1-3 s, so the first refresh leads by `ULDUAR_FL_PYRITE_FLIGHT_MS` (3 s) until a landing is
 timed (clamped to 0.5-5 s), and a barrel not seen landing within `ULDUAR_FL_PYRITE_FLIGHT_TIMEOUT_MS`
-(5 s) counts as lost. Barrels go on him only. Refreshing at a
+(5 s) counts as lost, so `DemolisherAction` reads landings (`TrackBarrels`) before any early return,
+the frozen-hull thaw and the passenger throw included. Barrels go on him only. Refreshing at a
 fixed time left, blind to barrels in flight, threw 2–3 per cycle at 10 stacks (~15–20 a minute
 against ~7).
 
