@@ -14,7 +14,8 @@ The polish loop runs on the user's standing go ("Polish loop" below), scheduled 
 
 **Next:**
 - On each window 51 report: Flame Leviathan r3 (25n and 10n reports), Yogg-Saron r30, Thorim r31, Algalon r19; Mimiron's reports go to r26 (or to r25 if it is still running and asks).
-- Running: Anub'arak r4, Mimiron r25 (both from window 50). Rebuild once enough has merged to fill a window.
+- Running: Mimiron r25 (from window 50). Rebuild once enough has merged to fill a window.
+- Asked the user 2026-11-25: Anub'arak Q2 (bots pick heroic side tanks paladin, DK, warrior, bear; the tank left over takes him) and Q3 (re-issue the hold walk when the back-up decision flips, only with Q2); r4 stuck, merged `83db89f93`. On the answers: Anub'arak r5 builds them.
 - DC lane AE (`ae-dc-mimiron-10n-spawn.PLAN.md`) stopped unneeded: Mimiron's 10n spawn was missing from the live world DB (see Mimiron's row). DC lane AC (`rt/dc-ac`, the boss kept passive until each start) stays unmerged: it would hide the ritual-walk bug the tests should catch.
 - Merges: `merge-lane.sh` refuses DC branches for argument-name and edited comments, DC's own style: merge DC lanes by hand (`git merge-tree`, then `git merge --no-ff -F`) after reading the added comment lines. During a window the server lock's owner is the window, which `merge-lane.sh` allows.
 - Next question batch: none open.
