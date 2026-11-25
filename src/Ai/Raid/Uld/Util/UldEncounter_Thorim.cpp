@@ -616,7 +616,14 @@ float RingSlotPointsApart(ThorimEncounterState const& state, uint8 first, uint8 
     return 2.0f * ULDUAR_THORIM_MELEE_RING_RADIUS * std::sin(delta / 2.0f);
 }
 
-bool RingBodyBridgesChain(Player* bot, Position const& spot)
+Position RingSlotPoint(ThorimEncounterState const& state, Unit* boss, uint8 slot)
+{
+    float const bearing = state.ringSlots[slot].composed;
+    return Position(boss->GetPositionX() + std::cos(bearing) * ULDUAR_THORIM_MELEE_RING_RADIUS,
+                    boss->GetPositionY() + std::sin(bearing) * ULDUAR_THORIM_MELEE_RING_RADIUS, boss->GetPositionZ());
+}
+
+bool RingBodyBridgesChain(Player* bot, Unit* boss, Position const& spot)
 {
     Group* group = bot->GetGroup();
     ThorimEncounterState const* state = FindState(bot);
@@ -639,11 +646,13 @@ bool RingBodyBridgesChain(Player* bot, Position const& spot)
         if (ringBody && slot == ownSlot)
             continue;
 
+        float const clearance = jump + bot->GetCombatReach() + member->GetCombatReach();
         float const apart = ringBody ? RingSlotPointsApart(*state, ownSlot, slot) : member->GetExactDist(spot);
-        if (apart <= jump + bot->GetCombatReach() + member->GetCombatReach())
+        if (apart <= clearance)
             return false;
 
-        if (bot->IsWithinDist(member, jump))
+        if (bot->IsWithinDist(member, jump) ||
+            (ringBody && bot->GetExactDist2d(RingSlotPoint(*state, boss, slot)) <= clearance))
             bridged = true;
     }
 
@@ -685,18 +694,15 @@ void RingStepChainBodies(Player* bot, Unit* boss, std::vector<HazardCircle>& slo
             continue;
 
         pointAdded[slot] = true;
-        float const bearing = state->ringSlots[slot].composed;
-        slots.emplace_back(Position(boss->GetPositionX() + std::cos(bearing) * ULDUAR_THORIM_MELEE_RING_RADIUS,
-                                    boss->GetPositionY() + std::sin(bearing) * ULDUAR_THORIM_MELEE_RING_RADIUS,
-                                    boss->GetPositionZ()),
-                           clearance);
+        slots.emplace_back(RingSlotPoint(*state, boss, slot), clearance);
     }
 }
 
 bool RingSpotBeatsTheDeadband(PlayerbotAI* botAI, Player* bot, Position const& spot)
 {
     bool spotInCone = false;
-    if (Unit* boss = GetThorim(botAI))
+    Unit* boss = GetThorim(botAI);
+    if (boss)
     {
         if (Unit* orb = ThorimChargedThunderOrb(botAI, SPELL_THORIM_LIGHTNING_ORB_VISUAL))
         {
@@ -718,7 +724,7 @@ bool RingSpotBeatsTheDeadband(PlayerbotAI* botAI, Player* bot, Position const& s
             standingInOne = true;
     }
 
-    return standingInOne || (!spotInCone && RingBodyBridgesChain(bot, spot));
+    return standingInOne || (!spotInCone && boss && RingBodyBridgesChain(bot, boss, spot));
 }
 
 bool RingPoint(Player* bot, Unit* boss, float bearing, Position& out)
@@ -3488,12 +3494,28 @@ bool ThorimRingBlizzardStep(PlayerbotAI* botAI, Player* bot, Position& out)
     auto const outOfCone = [boss, orb, coneBearing](float x, float y)
     { return !orb || !InLightningChargeCone(BearingFromBoss(boss, x, y), coneBearing); };
 
-    if (!ThorimSpotUnderBlizzard(bot, *bot) && !ThorimRingBlizzardAhead(bot, *bot) &&
-        outOfCone(bot->GetPositionX(), bot->GetPositionY()))
+    bool const clearHere = !ThorimSpotUnderBlizzard(bot, *bot) && !ThorimRingBlizzardAhead(bot, *bot) &&
+                           outOfCone(bot->GetPositionX(), bot->GetPositionY());
+    if (clearHere && !ThorimRingSteppedOut(botAI, bot))
         return false;
 
     Position ring;
     if (!TryGetThorimPhase2Spot(botAI, bot, ThorimPhase2Role::MeleeRing, ring) || !ThorimRingBlizzardCovered(bot, ring))
+        return false;
+
+    auto const clearOf = [](std::vector<HazardCircle> const& bodies, float x, float y)
+    {
+        for (HazardCircle const& body : bodies)
+            if (body.first.GetExactDist2d(x, y) <= body.second)
+                return false;
+
+        return true;
+    };
+
+    std::vector<HazardCircle> otherSlots;
+    std::vector<HazardCircle> camp;
+    RingStepChainBodies(bot, boss, otherSlots, camp);
+    if (clearHere && clearOf(otherSlots, bot->GetPositionX(), bot->GetPositionY()))
         return false;
 
     std::vector<Position> const zones = ThorimBlizzardSpots(bot);
@@ -3503,9 +3525,6 @@ bool ThorimRingBlizzardStep(PlayerbotAI* botAI, Player* bot, Position& out)
         circles.emplace_back(zone, ULDUAR_THORIM_RING_BLIZZARD_CLEARANCE);
 
     float const tankClearance = ULDUAR_THORIM_CHAIN_LIGHTNING_JUMP + 2.0f * DEFAULT_COMBAT_REACH;
-    std::vector<HazardCircle> otherSlots;
-    std::vector<HazardCircle> camp;
-    RingStepChainBodies(bot, boss, otherSlots, camp);
     std::vector<std::pair<Position, Position>> const pathAhead = ThorimBlizzardPathAhead(bot);
 
     struct StepPass
@@ -3516,15 +3535,6 @@ bool ThorimRingBlizzardStep(PlayerbotAI* botAI, Player* bot, Position& out)
         bool clearOfSlots;
         bool clearOfCamp;
         bool clearOfPath;
-    };
-
-    auto const clearOf = [](std::vector<HazardCircle> const& bodies, float x, float y)
-    {
-        for (HazardCircle const& body : bodies)
-            if (body.first.GetExactDist2d(x, y) <= body.second)
-                return false;
-
-        return true;
     };
 
     auto const clearOfPath = [&pathAhead](float x, float y)
@@ -3551,7 +3561,7 @@ bool ThorimRingBlizzardStep(PlayerbotAI* botAI, Player* bot, Position& out)
                                 StepPass{lastRadius, false, false, false, false, false}})
     {
         if ((pass.clearOfCamp && camp.empty()) || (pass.clearOfSlots && !pass.clearOfCamp && otherSlots.empty()) ||
-            (pass.clearOfPath && pathAhead.empty()))
+            (pass.clearOfPath && pathAhead.empty()) || (clearHere && !pass.clearOfSlots))
             continue;
 
         auto const accept = [bot, boss, pass, tankClearance, &outOfCone, &clearOf, &clearOfPath, &otherSlots,
@@ -3583,7 +3593,7 @@ bool ThorimRingBlizzardStep(PlayerbotAI* botAI, Player* bot, Position& out)
         }
     }
 
-    if (!orb)
+    if (!orb || clearHere)
         return false;
 
     float const halfWidth = ULDUAR_THORIM_LIGHTNING_CHARGE_CONE_ANGLE / 2.0f + ULDUAR_THORIM_CONE_STEP_MARGIN;

@@ -12,7 +12,8 @@
                                  stood in it and how long, ticks taken, step-outs (how many landed on
                                  the bunny's path ahead or under a zone soon after, how many walked
                                  across its path ahead and how far short of the crossing the bunny
-                                 was) and the walk back
+                                 was), stepped time in another slot's Chain Lightning jump, and the
+                                 walk back
     thorim.py <file> --chains    each Chain Lightning hop by hop: which groups (tank, camp, a ring slot, a
                                  slot stepped out of Blizzard or walking back from it) it crossed between
                                  and how far, who died after which crossing
@@ -88,6 +89,9 @@ STEP_OVERRUN_MS = 8000
 BUNNY_FRESH_MS = 1000
 RING_RADIUS = radius("ULDUAR_THORIM_MELEE_RING_RADIUS")
 RING_BLIZZARD_CLEARANCE = radius("ULDUAR_THORIM_RING_BLIZZARD_CLEARANCE")
+PLAYER_REACHES = 3.0
+RING_CHAIN_CLEARANCE = (radius("ULDUAR_THORIM_CHAIN_LIGHTNING_JUMP") + radius("ULDUAR_THORIM_RING_CHAIN_MARGIN")
+                        + PLAYER_REACHES)
 LUST = (2825, 32182)
 LUST_MS = 40000
 CHAIN_DEATH_MS = 1500
@@ -720,6 +724,7 @@ class RingBlizzard:
         inside_since: dict = {}
         stepped_ms = 0
         out_ms = 0
+        bridged_ms = 0
         previous = None
         snaps = [snap for snap in frames(self.trace) if begin <= snap["t"] < end]
         for snap in snaps:
@@ -735,9 +740,11 @@ class RingBlizzard:
             marks = zones + [(row[1], row[2]) for guid, row in rows.items()
                              if self.trace.entries.get(guid) == NPC_SIF_BLIZZARD]
             points = {}
+            slot_of = {}
             for guid, events in self.ring.items():
                 event = self._latest(events, when)
                 if event:
+                    slot_of[guid] = event[1]
                     points[event[1]] = (spot[0] + RING_RADIUS * math.cos(event[2]),
                                         spot[1] + RING_RADIUS * math.sin(event[2]))
             for slot, point in points.items():
@@ -755,6 +762,7 @@ class RingBlizzard:
                 if alive and self.stepped(guid, when):
                     stepped_ms += dt
                     out_ms += dt if dist2(row[1:3], spot) > MELEE_EDGE else 0
+                    bridged_ms += dt if self._in_other_slot_jump(guid, row, rows, slot_of, points) else 0
         for guid, stay in inside_since.items():
             stays[guid].append(stay)
 
@@ -794,8 +802,18 @@ class RingBlizzard:
         return {"covered": covered, "in_zone": in_zone, "stays": stays, "ticks": ticks, "damage": damage,
                 "steps": len(step_moves), "onto_path": sum(1 for rec in step_moves if self.onto_path(rec)),
                 "overrun": sum(1 for rec in step_moves if self.overrun(rec)), "deaths": deaths,
-                "stepped_ms": stepped_ms, "out_ms": out_ms, "walks": walks, "walk_ticks": walk_ticks,
-                "leads": leads, "crossing_ticks": crossing_ticks}
+                "stepped_ms": stepped_ms, "out_ms": out_ms, "bridged_ms": bridged_ms, "walks": walks,
+                "walk_ticks": walk_ticks, "leads": leads, "crossing_ticks": crossing_ticks}
+
+    @staticmethod
+    def _in_other_slot_jump(guid, row, rows: dict, slot_of: dict, points: dict) -> bool:
+        own = slot_of.get(guid)
+        spots = [point for slot, point in points.items() if slot != own]
+        for other, slot in slot_of.items():
+            body = rows.get(other)
+            if slot != own and body is not None and body[5] > 0 and body[3] <= FLOOR_Z:
+                spots.append(body[1:3])
+        return any(dist2(row[1:3], other) <= RING_CHAIN_CLEARANCE for other in spots)
 
     def crossing(self, move: dict) -> float | None:
         bunny = self._latest(self.bunny_track, move["t"])
@@ -853,7 +871,8 @@ def ring_blizzard_line(blizzard: RingBlizzard, label: str, read: dict) -> str:
     if blizzard.probed:
         walks = read["walks"]
         steps = (f"steps {read['steps']} ({step_points(read)}), stepped {read['stepped_ms'] / 1000.0:.1f} bot-s, "
-                 f"out of reach {read['out_ms'] / 1000.0:.1f} of them; walk back p50 {yd(quantile(walks, .5))} "
+                 f"out of reach {read['out_ms'] / 1000.0:.1f} of them, in another slot's jump "
+                 f"{read['bridged_ms'] / 1000.0:.1f}; walk back p50 {yd(quantile(walks, .5))} "
                  f"max {yd(max(walks) if walks else None)} s, {read['walk_ticks']} ticks on the way")
     else:
         steps = "no thorim.ringstep probe (a build before it)"
@@ -876,7 +895,8 @@ def show_blizzard(trace: Trace) -> None:
     total = {"covered": collections.Counter(), "in_zone": collections.Counter(),
              "stays": collections.defaultdict(list), "ticks": collections.Counter(),
              "damage": collections.Counter(), "steps": 0, "onto_path": 0, "overrun": 0, "deaths": 0,
-             "stepped_ms": 0, "out_ms": 0, "walks": [], "walk_ticks": 0, "leads": [], "crossing_ticks": 0}
+             "stepped_ms": 0, "out_ms": 0, "bridged_ms": 0, "walks": [], "walk_ticks": 0, "leads": [],
+             "crossing_ticks": 0}
     for index, cast in enumerate(blizzard.casts, 1):
         read = blizzard.read(cast)
         label = (f"blizzard {index} +{(cast['begin'] - start) / 1000.0:.1f}..+{(cast['end'] - start) / 1000.0:.1f} s")
@@ -885,7 +905,8 @@ def show_blizzard(trace: Trace) -> None:
             total[key].update(read[key])
         for guid, stays in read["stays"].items():
             total["stays"][guid] += stays
-        for key in ("steps", "onto_path", "overrun", "deaths", "stepped_ms", "out_ms", "walk_ticks", "crossing_ticks"):
+        for key in ("steps", "onto_path", "overrun", "deaths", "stepped_ms", "out_ms", "bridged_ms", "walk_ticks",
+                    "crossing_ticks"):
             total[key] += read[key]
         total["walks"] += read["walks"]
         total["leads"] += read["leads"]
@@ -894,8 +915,8 @@ def show_blizzard(trace: Trace) -> None:
           f"{yd(quantile(stays, .5))} max {yd(max(stays) if stays else None)} s, "
           f"{sum(total['ticks'].values())} ticks {sum(total['damage'].values()) // 1000}k, deaths {total['deaths']}"
           + (f"; steps {total['steps']} ({step_points(total)}), stepped {total['stepped_ms'] / 1000.0:.1f} bot-s, "
-             f"out of reach "
-             f"{total['out_ms'] / 1000.0:.1f}; walk back p50 {yd(quantile(total['walks'], .5))} max "
+             f"out of reach {total['out_ms'] / 1000.0:.1f}, in another slot's jump "
+             f"{total['bridged_ms'] / 1000.0:.1f}; walk back p50 {yd(quantile(total['walks'], .5))} max "
              f"{yd(max(total['walks']) if total['walks'] else None)} s, {total['walk_ticks']} ticks on the way"
              if blizzard.probed else ""))
 
