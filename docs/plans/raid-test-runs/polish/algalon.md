@@ -99,7 +99,8 @@ Leads, not picked:
   (`algalon.unblock`); class Deterrence held for unphased bots in P1 he is not hitting — held.
 - r15: on 25-man two more ranged join the star team from wave 3's spawn to Big Bang 2's cast (user Q6), measured
   speeds scaled by team size — held (wave-3 deaths after Big Bang 2's hit 22 → 3).
-- r16: the finisher hand-off at 2.5 ticks over the line per team member (`FinishHandOverHp`) — pending.
+- r16: the finisher hand-off at 2.5 ticks over the line per team member (`FinishHandOverHp`) — pending; risk: a
+  cycle's last star finished alone past the cast.
 
 **Tried and rejected:**
 
@@ -178,7 +179,10 @@ one 250 ms tick. `--stars` per early release (from its last sample over its band
   at 53.9% (2:52.927), before the Arcane Blast, Mind Blast, Shadow Bolt and Lightning Bolt that took it under; 1918
   at 3:54.755, cutting Arcane Blast and Lightning Bolt; 1919 at 82.2%, before its Arcane Blast; 1925 2.5% higher,
   so its Arcane Missiles end near the line.
-  Cost: the finisher alone does 2.5% (team 3) or 7.5% (team 5) more, ~1-4 s beside the team's next star.
+  Cost: the finisher alone does 2.5% (team 3) or 7.5% (team 5) more, ~1-4 s beside the team's next star. A
+  cycle's last star has none, so its finish runs against the cast: w46's lone finishers did 0.7-4 %/s beyond the
+  drain, and uld3's 1871 (team 5, last of Big Bang 2) reached the cast at 9.4%, its band's top, after a 4.4 s
+  finish at 0.7 %/s; at 12.5 ticks it hands over ~4 s earlier and meets the cast ~6 ticks over its line (review).
 - Reader: `--stars` prints under each `early` release who hit it from its last sample over its band to the
   release (`team`, `left`, `finisher`, `off`), the team's size and the hand-off; finish rows carry the team's size.
   Tests: `UnderOvershoot`, `UnderFinish` updated.
@@ -192,4 +196,11 @@ Shared code: none.
 
 **Next window should show.** `--stars`: `early` releases under w46's 6, none with `left` over 2.5% per team member;
 finish rows at team 5 and 3 with the rest of the team under 5%; wave-3 under Big Bang 2 at least w46's 12 of 19;
-under-stars `above` their band at the cast not over w46's 0 (the longer finish is the risk), no rise in `late`.
+under-stars `above` their band at the cast not over w46's 0 (the longer finish is the risk), no rise in `late`. One
+`above` on a cycle's last star (Big Bang 2 at team 5 first) means the hand-off margin needs a cap by what the lone
+finisher can do before the cast (a bug fix).
+
+**Review.** Trace rows bear out 1843, 1844 and 1925: the `cast` row is stamped at the cast's start, and the
+Lightning Bolts, Arcane Blasts and Shadow Bolt that crossed the line were still casting at the earlier hand-off
+(1843, 1844), where the cut takes them; 1925's Arcane Missiles were all flying by 4:21.2. The new reader and
+fixture docstrings went (comments rule); the last-star risk went into the cost line and the watch above.

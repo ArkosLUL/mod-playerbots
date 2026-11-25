@@ -3195,12 +3195,6 @@ def splash_label(trace: Trace, row: dict) -> str:
 
 
 def under_overshoot(trace: Trace) -> list[dict]:
-    """`{n, counter, from_t, from_hp, over, t, hp, pct, tags, by, team, handoff}` per under-star released `early`:
-    what hit it, its drain aside, from its last sample at or over its band's top (`over`; else its first sample)
-    to the release, as % of its max health (`pct`, None without it); `tags` that split by who: `team` a star team
-    member on it while it was the focus, `left` one whose focus had moved on, `finisher` its finisher, `off` anyone
-    else; `by` `(source, spell, pct, tag)` largest first, a pet under its own name; `hp` its last sample by the
-    release; `team` the star team's size at the release; `handoff` its last finish start before it, else None."""
     def build(trace: Trace) -> list[dict]:
         samples = samples_of(trace)
         end = pull_end(trace)

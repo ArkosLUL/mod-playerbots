@@ -2547,9 +2547,6 @@ def overshoot_hp(when: int) -> float:
 
 
 def overshoot_pull() -> list[dict]:
-    """Star A, under Big Bang 1 (cast 0:40, band 4.0..9.6% then), is handed to the warlock at 0:20 at 31%, over
-    its band; the mage, its focus moved on to B, lands 6%, the warlock 3% and the tank 1%, and A is released
-    early at 0:21.5. The mage's 5% at 0:19, before A left the top of its band, and A's own drain don't count."""
     roster = [
         {"g": UD_TRACKER, "n": "Tracker", "r": "tank", "c": "warrior", "h": 0},
         {"g": UD_LOCK, "n": "Lock", "r": "ranged", "c": "warlock", "h": 0},
