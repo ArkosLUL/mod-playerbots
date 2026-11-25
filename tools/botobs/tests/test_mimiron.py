@@ -1097,6 +1097,10 @@ def bombtank_pull() -> list[dict]:
         {"t": 0, "e": "note", "g": BULWARK, "k": "mimiron.slot", "txt": "p3tank 0,0,364"},
         {"t": 300, "e": "act", "g": GUARD, "a": mm.BOMB_TANK_HOLD, "rel": 99.0, "vd": "OK"},
         {"t": 400, "e": "act", "g": GUARD, "a": mm.BOMB_TANK_HOLD, "rel": 99.0, "vd": "USELESS"},
+        {"t": 0, "e": "aura", "d": GUARD, "s": GUARD, "sp": 9634, "r": 1, "st": 1, "dur": -1},
+        {"t": 900, "e": "act", "g": GUARD, "a": mm.BOMB_TANK_TAUNT, "rel": 65.0, "vd": "FAILED"},
+        {"t": 1000, "e": "aura", "d": GUARD, "s": GUARD, "sp": 9634, "r": 0, "st": 1, "dur": -1},
+        {"t": 1200, "e": "act", "g": GUARD, "a": mm.BOMB_TANK_TAUNT, "rel": 65.0, "vd": "OK"},
         {"t": 1200, "e": "cast", "s": GUARD, "sp": 6795, "tgt": TANKED_BOMB, "ct": 0},
         {"t": 1700, "e": "cast", "s": BULWARK, "sp": 355, "tgt": TANKED_BOMB, "ct": 0},
         {"t": 2600, "e": "dmg", "s": TANKED_BOMB, "d": GUARD, "sp": mm.SPELL_BOMB_BOT_BLAST, "a": 22000},
@@ -1140,6 +1144,14 @@ class BombTankPull(unittest.TestCase):
         self.assertIn("taunted 1 of 1 (1 by the bomb tank, median 200 ms after first seen); blew up on the bomb"
                       " tank 1 of 1", out.getvalue())
         self.assertIn("within 2 yd of 12 100% of phase 3", out.getvalue())
+        self.assertIn("bomb tank taunt action: FAILED 1, OK 1; Guard in a bear form 83% of phase 3", out.getvalue())
+
+    def test_bear_form_share_counts_the_form_from_its_apply_to_the_phase_end(self):
+        self.assertEqual(self.rows["verdicts"], {"FAILED": 1, "OK": 1})
+        self.assertAlmostEqual(self.rows["bear"][GUARD], 5000 / 6000)
+
+    def test_a_tank_with_no_bear_form_record_has_no_share(self):
+        self.assertIsNone(mm.bear_form_share(self.trace, BULWARK, (0, 6000)))
 
 
 ACU = 4294970700

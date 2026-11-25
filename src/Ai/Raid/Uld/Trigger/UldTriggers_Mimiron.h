@@ -159,6 +159,15 @@ public:
     bool IsActive() override;
 };
 
+class MimironBombTankFormTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "mimiron bomb tank form trigger";
+
+    MimironBombTankFormTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
 class MimironPetControlTrigger : public Trigger
 {
 public:

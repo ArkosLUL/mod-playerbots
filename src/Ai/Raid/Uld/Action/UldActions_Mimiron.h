@@ -280,6 +280,16 @@ public:
     bool Execute(Event event) override;
 };
 
+class MimironBombTankFormAction : public Action
+{
+public:
+    static constexpr char const* Name = "mimiron bomb tank form action";
+
+    MimironBombTankFormAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
+
+    bool Execute(Event event) override;
+};
+
 class MimironPetControlAction : public Action
 {
 public:

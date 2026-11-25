@@ -758,6 +758,12 @@ pickers, and the hold action drops any target but a bomb, so no ranged threat (F
 Shield) pulls an add and its melee onto him. The cost: he no longer picks up phase 3 adds, which had dealt
 him 10-30k of their 100-410k a phase.
 
+**A bear bomb tank stays in caster form unless made to shift.** VX-001's death drops every target into the
+non-combat engine, his party heals take `caster form` as prerequisite, and with his pickers zeroed nothing
+picks a target again: in eight pulls he healed through all of phase 3 and Growl failed on every bomb.
+`mimiron bomb tank form` (`ACTION_RAID` + 5.5, above the taunt) casts Dire Bear Form, else Bear Form, on
+a druid bomb tank, and the hold also zeroes `caster form`, so he never battle-resses in phase 3.
+
 **It is the one Mimiron add that takes a snare.** Its immunity set **−263** leaves `SNARE`, `ROOT`, `STUN`,
 `FREEZE`, `GRIP` and `KNOCKOUT` off, all of which the Assault Bot's **−285** carries; at 8.0 yd/s a
 second of extra approach is most of a cast. `mimiron slow bomb
@@ -1664,7 +1670,8 @@ bot's own spray step: an accepted fire bot leg whose last `mimiron.flee` note re
 `spray fallback`, since `NoteDerived` skips a note equal to the last); `--bombbots` calls a blast
 victim chased when the bomb targeted it in the snapshot 300 ms before, times each bomb's first roster
 taunt from its first snapshot, and takes whoever held a `p3bomb` slot as the bomb tank, measured off
-the unit through phase 3 and, at each blast on him, off the bomb's first snapshot; `--bomb` counts as a
+the unit through phase 3 and, at each blast on him, off the bomb's first snapshot, with his taunt action
+verdicts and, for a druid, his share of phase 3 in a bear form; `--bomb` counts as a
 walk-in any accepted leg but the bomb escape that ran deeper inside 32 yd of the bomb than the bot stood;
 `--wedge` counts every living Flames (Spread) under a footprint, where the `wedge` note counts burning
 ones, and anchors it on VX-001 unclamped; `--pulse` and `--wedge` count healing net of overheal, and
