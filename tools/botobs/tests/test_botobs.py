@@ -806,6 +806,31 @@ class FlameLeviathanReader(unittest.TestCase):
                          "riders turned onto a turret behind them (past 90 deg of his heading): "
                          "while he is moving 1/4 (25%), while he is still 2/2 (100%)")
 
+    def test_hooked_strandings_count_only_jumps_inside_the_hookshot(self):
+        auras = [{"t": 1000, "sp": 62336, "d": 7, "r": 0}, {"t": 6000, "sp": 62336, "d": 7, "r": 1},
+                 {"t": 9000, "sp": 62336, "d": 8, "r": 0}, {"t": 9500, "sp": 99, "d": 8, "r": 1}]
+        hooked = flame_leviathan.aura_windows(auras, 62336, end=20000)
+        self.assertEqual(hooked, {7: [(1000, 6000)], 8: [(9000, 20000)]})
+        jumps = [(7, 1200, "stranded"), (7, 7000, "stranded"), (7, 3000, "shutdown"), (8, 9100, "stranded")]
+        self.assertEqual(flame_leviathan.hooked_strandings(jumps, hooked), 2)
+
+    def test_kite_burn_gate_names_what_held_the_detour_back(self):
+        self.assertEqual(flame_leviathan.kite_burn_gate(15.0, None), "in his Ram range")
+        self.assertEqual(flame_leviathan.kite_burn_gate(40.0, 20000), "out of range, Ram debuff on")
+        self.assertEqual(flame_leviathan.kite_burn_gate(40.0, 20001), "out of range, no debuff")
+
+    def test_kite_ring_and_a_leg_aimed_past_him(self):
+        ring = flame_leviathan.kite_ring()
+        self.assertEqual(len(ring), 8)
+        self.assertAlmostEqual(ring[0][0], 170.1, places=1)
+        self.assertAlmostEqual(ring[6][1], -130.1, places=1)
+        degrees, passes = flame_leviathan.leg_against_him((0.0, 0.0), (100.0, 0.0), (40.0, 10.0))
+        self.assertAlmostEqual(degrees, 14.04, places=1)
+        self.assertAlmostEqual(passes, 10.0)
+        degrees, passes = flame_leviathan.leg_against_him((0.0, 0.0), (-100.0, 0.0), (40.0, 10.0))
+        self.assertAlmostEqual(degrees, 165.96, places=1)
+        self.assertAlmostEqual(passes, math.hypot(40.0, 10.0))
+
     def test_concurrent_max_counts_overlapping_stays(self):
         self.assertEqual(flame_leviathan.concurrent_max([(0, 10), (5, 20), (10, 30), (25, 40)]), 2)
         self.assertEqual(flame_leviathan.concurrent_max([]), 0)

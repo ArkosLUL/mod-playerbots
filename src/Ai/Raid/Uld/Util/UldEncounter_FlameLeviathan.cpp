@@ -1705,7 +1705,7 @@ bool FlameLeviathanRiderStranded(Player* bot)
 {
     Unit* boss = FlameLeviathanBossUnder(bot);
     Vehicle* kit = boss ? boss->GetVehicleKit() : nullptr;
-    if (!kit || FlameLeviathanRiderTurret(bot))
+    if (!kit || bot->HasAura(SPELL_FL_HOOKSHOT_AURA) || FlameLeviathanRiderTurret(bot))
         return false;
 
     bool turretLeft = false;

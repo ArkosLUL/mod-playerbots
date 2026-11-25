@@ -1109,7 +1109,8 @@ bool FlameLeviathanDriveAction::RushToVents(Unit* boss)
     return true;
 }
 
-std::optional<Position> FlameLeviathanDriveAction::DetourAroundFire(Unit* boss, Position const& goal, bool mayClose)
+std::optional<Position> FlameLeviathanDriveAction::DetourAroundFire(Unit* boss, Position const& goal, bool mayClose,
+                                                                    float margin)
 {
     std::vector<Unit*> fires;
     GetFlameLeviathanTowerHazards(botAI, _vehicleBase, FL_TOWER_FLAMES, ULDUAR_FL_TOWER_HAZARD_CLEAR_SCAN, fires);
@@ -1125,7 +1126,7 @@ std::optional<Position> FlameLeviathanDriveAction::DetourAroundFire(Unit* boss, 
     };
 
     float const lookahead = std::min(_vehicleBase->GetExactDist2d(goal), ULDUAR_FL_KITE_FIRE_LOOKAHEAD);
-    if (LegClearOfHazards(_vehicleBase, here, along(bearing, lookahead), fires, ULDUAR_FL_TOWER_HAZARD_MARGIN))
+    if (LegClearOfHazards(_vehicleBase, here, along(bearing, lookahead), fires, margin))
         return std::nullopt;
 
     float const bossDist = _vehicleBase->GetExactDist2d(boss);
@@ -1135,7 +1136,7 @@ std::optional<Position> FlameLeviathanDriveAction::DetourAroundFire(Unit* boss, 
         if (!FlameLeviathanInArena(detour) || (!mayClose && boss->GetExactDist2d(detour) < bossDist))
             continue;
 
-        if (LegClearOfHazards(_vehicleBase, here, detour, fires, ULDUAR_FL_TOWER_HAZARD_MARGIN))
+        if (LegClearOfHazards(_vehicleBase, here, detour, fires, margin))
             return detour;
     }
 
@@ -1180,16 +1181,16 @@ bool FlameLeviathanDriveAction::Kite(Unit* boss, char const*& branch)
             _kiteIdx = (_kiteIdx + _kiteDir + count) % count;
     }
 
-    bool const ramming = _vehicleBase->HasAura(SPELL_FL_BATTERING_RAM) ||
-                         boss->IsWithinCombatRange(_vehicleBase, ULDUAR_FL_BATTERING_RAM_CAST_RANGE);
+    float const fireMargin = boss->IsWithinCombatRange(_vehicleBase, ULDUAR_FL_BATTERING_RAM_CAST_RANGE)
+                                 ? 0.0f
+                                 : ULDUAR_FL_TOWER_HAZARD_MARGIN;
 
     Position goal = ring[_kiteIdx];
-    if (!ramming)
-        if (std::optional<Position> detour = DetourAroundFire(boss, goal, false))
-        {
-            goal = *detour;
-            branch = "kite:detour";
-        }
+    if (std::optional<Position> detour = DetourAroundFire(boss, goal, false, fireMargin))
+    {
+        goal = *detour;
+        branch = "kite:detour";
+    }
 
     DriveTo(goal, nullptr, false, MovementPriority::MOVEMENT_FORCED);
 
