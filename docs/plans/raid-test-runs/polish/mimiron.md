@@ -102,9 +102,11 @@ Water Spray, P4 mines and Hand Pulse.
 - Q10 (a) (2026-11-24): the off-tank stands 10-12 yd off the ACU's ground spot, taunts every phase 3 Bomb
   Bot and takes the blast.
 - Q11 (2026-11-24 yes, dropped 2026-11-25): the phase 4 healer mana change is not built.
+- Q12 (2026-11-25): only Mimiron's 10-man group gets a third ranged DPS, a warlock (DC row `uld-mimiron`,
+  DC `d8859c6`; the 10n groups had an arcane mage and a hunter); every other boss's 10-man group unchanged.
+- Q13 (2026-11-25): fire bots still alive when P4 starts are culled early in P4 (r24), extending Q4.
 
-**Open questions.** Q12 (round 24): how 10-man gets enough ranged damage onto the P4 ACU; recommended (a),
-a third ranged DPS in each design's first six.
+**Open questions.** None.
 
 **Watch.** Melee and the off-tank sent to the unreachable P4 ACU walk between slot and stack (174 `arc
 spread <-> reach melee` A-B-A in uld3's P4); if a core change seats it without hover, melee reach it and
