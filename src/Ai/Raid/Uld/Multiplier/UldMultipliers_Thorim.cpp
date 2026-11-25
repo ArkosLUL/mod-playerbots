@@ -105,3 +105,24 @@ float ThorimBalconyGuardMultiplier::GetValue(Action* action)
 
     return target->GetEntry() == NPC_SIF ? 0.0f : 1.0f;
 }
+
+float ThorimChainWaitCastHoldMultiplier::GetValue(Action* action)
+{
+    if (!action || !ThorimCampWaitingOnChain(botAI, bot))
+        return 1.0f;
+
+    auto cached = spellIds.find(action);
+    if (cached == spellIds.end())
+    {
+        CastSpellAction* spellAction = dynamic_cast<CastSpellAction*>(action);
+        uint32 const spellId =
+            spellAction ? context->GetValue<uint32>("spell id", spellAction->getSpell())->Get() : 0;
+        cached = spellIds.emplace(action, spellId).first;
+    }
+
+    SpellInfo const* info = cached->second ? sSpellMgr->GetSpellInfo(cached->second) : nullptr;
+    if (!info)
+        return 1.0f;
+
+    return info->IsChanneled() || info->CalcCastTime(bot) > 0 ? 0.0f : 1.0f;
+}

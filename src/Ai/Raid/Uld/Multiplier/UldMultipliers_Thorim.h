@@ -10,6 +10,8 @@
 #include "Define.h"
 #include "Multiplier.h"
 
+#include <unordered_map>
+
 class ThorimRunicBarrierMultiplier : public Multiplier
 {
 public:
@@ -29,6 +31,16 @@ class ThorimBalconyGuardMultiplier : public Multiplier
 public:
     ThorimBalconyGuardMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "thorim balcony guard") {}
     float GetValue(Action* action) override;
+};
+
+class ThorimChainWaitCastHoldMultiplier : public Multiplier
+{
+public:
+    ThorimChainWaitCastHoldMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "thorim chain wait cast hold") {}
+    float GetValue(Action* action) override;
+
+private:
+    std::unordered_map<Action*, uint32> spellIds;
 };
 
 #endif

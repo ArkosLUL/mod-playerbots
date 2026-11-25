@@ -50,6 +50,8 @@ enum UlduarThorimIds
     SPELL_THORIM_RUNIC_BARRIER = 62338,
     SPELL_THORIM_LIGHTNING_ORB_VISUAL = 62186,
     SPELL_THORIM_CHARGE_ORB = 62016,
+    SPELL_THORIM_CHAIN_LIGHTNING_10 = 62131,
+    SPELL_THORIM_CHAIN_LIGHTNING_25 = 64390,
 
     NPC_SIF = 33196,
     NPC_SIF_BLIZZARD = 32879,
@@ -120,6 +122,8 @@ inline constexpr float ULDUAR_THORIM_RING_SLOT_SEPARATION = 1.0472f;
 inline constexpr float ULDUAR_THORIM_RING_ANCHOR_GAIN = 0.5f;
 
 inline constexpr float ULDUAR_THORIM_CHAIN_LIGHTNING_JUMP = 5.0f;
+inline constexpr uint32 ULDUAR_THORIM_CHAIN_WAIT_CAP_MS = 1000;
+inline constexpr uint32 ULDUAR_THORIM_CHAIN_WAIT_LEAD_MS = 5000;
 inline constexpr float ULDUAR_THORIM_RING_CHAIN_MARGIN = 0.5f;
 inline constexpr float ULDUAR_THORIM_RING_CHAIN_MIN_STEP = 1.0f;
 
@@ -270,10 +274,13 @@ struct ThorimEncounterState
         bool sheltered = false;
         bool stepSought = false;
         bool stepped = false;
+        bool chainChecked = false;
+        bool chainWait = false;
         Position step;
     };
 
     std::unordered_map<ObjectGuid, RangedShelter> rangedShelters;
+    uint32 chainLightningEndMs = 0;
 
     RaidObs::ObsValue<uint32> runicSmashSide{"thorim.smashside"};
     uint32 runicSmashSeenMs = 0;
@@ -552,6 +559,9 @@ bool ThorimWalkUnderBlizzard(Player* bot, Position const& from, Position const& 
 bool ThorimCampSpotInLitCone(PlayerbotAI* botAI, Position const& spot);
 
 bool ThorimCampBlizzardEscape(PlayerbotAI* botAI, Player* bot, Position& out);
+
+void ThorimTickChainLightning(PlayerbotAI* botAI);
+bool ThorimCampWaitingOnChain(PlayerbotAI* botAI, Player* bot);
 
 Unit* ThorimChargedThunderOrb(PlayerbotAI* botAI, uint32 markerSpell);
 

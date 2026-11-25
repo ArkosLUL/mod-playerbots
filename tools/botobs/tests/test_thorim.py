@@ -7,7 +7,8 @@ on the off-tank spot and the hazards on each tank; a Sif Blizzard over slot 2 pi
 second cast from the camp through a stepped slot 0 into slot 2 pins the chains section; one lit orb with a slowed
 camp bot dying short of its row and another on a cone step pins the shelters section; the same orb over a held
 ring walk and a ring walker dying past reach pins the ring cone section; a Runic Colossus Smash over a healer on his
-target and one behind him pins the colossus section. The shared v14 fixture shows every section reads empty elsewhere.
+target and one behind him pins the colossus section; orb 1 with two camp walks held until the chain lands pins the
+chain wait section. The shared v14 fixture shows every section reads empty elsewhere.
 """
 from __future__ import annotations
 
@@ -406,6 +407,55 @@ class Colossus(unittest.TestCase):
 
     def test_no_cast(self):
         self.assertIn("no Smash cast", printed(thorim.show_colossus, load(pull())))
+
+
+THUNDER_ORB = (1 << 32) | 5
+
+
+def chain_wait_pull() -> list[dict]:
+    records = pull()
+    records[0]["roster"].append({"g": CASTER, "n": "Flicker", "r": "ranged", "c": 8, "h": 0})
+    for rec in records:
+        if rec.get("e") == "snap":
+            rec["u"].append([CASTER, 2132.5, -257.5, 419.8, 0, 100, 80, THORIM])
+            rec["u"].append([THUNDER_ORB, 2164.2, -233.47, 433.3, 0, 100, 0, 0])
+    records += [
+        {"t": 0, "e": "unit", "g": THUNDER_ORB, "en": 33378, "n": "Thunder Orb"},
+        {"t": 1000, "e": "note", "g": RANGED, "k": "thorim.rangedslot", "txt": "4"},
+        {"t": 1000, "e": "note", "g": CASTER, "k": "thorim.rangedslot", "txt": "3"},
+        {"t": 5000, "e": "note", "g": RANGED, "k": "thorim.lightningorb", "txt": str(THUNDER_ORB)},
+        {"t": 5100, "e": "note", "g": CASTER, "k": "thorim.shelter", "txt": "slot 3 orb 1 wait"},
+        {"t": 5100, "e": "note", "g": RANGED, "k": "thorim.shelter", "txt": "slot 4 orb 1 wait"},
+        {"t": 6000, "e": "dmg", "s": THORIM, "d": MELEE, "sp": 64390, "a": 4000, "ok": 0, "hp": 100.0},
+        {"t": 6001, "e": "dmg", "s": THORIM, "d": CASTER, "sp": 64390, "a": 6000, "ok": 0, "hp": 100.0},
+        {"t": 6200, "e": "note", "g": CASTER, "k": "thorim.shelter", "txt": "slot 3 orb 1"},
+        {"t": 6200, "e": "note", "g": RANGED, "k": "thorim.shelter", "txt": "slot 4 orb 1 step"},
+        {"t": 9900, "e": "dmg", "s": THORIM, "d": RANGED, "sp": 62466, "a": 18000, "ok": 0, "hp": 100.0},
+    ]
+    return sorted(records, key=lambda rec: rec.get("t", -1))
+
+
+class ChainWait(unittest.TestCase):
+    def test_two_waits_released_by_the_landing(self):
+        text = printed(thorim.show_chainwait, load(chain_wait_pull()))
+        self.assertIn("+4.0 s orb 1: chain camp hops 2, 0 dead; waits 2 (released by the landing 2, by the cap 0); "
+                      "waiters hit by the chain standing 1 / walking 0, dead 0; by the cone 1, dead 0; steps 1", text)
+        self.assertIn("all: orbs 1-2 lit 1, chains with 4+ camp hits 0, camp chain deaths 0 (0 before the first tank "
+                      "death); waits 2 (released by the landing 2, by the cap 0), wait p50 1.1 max 1.1 s; waiters hit "
+                      "by the chain standing 1 / walking 0, dead 0; by the cone 1, dead 0 (0 before the first tank "
+                      "death); steps after a wait 1", text)
+
+    def test_an_orb_that_holds_no_walk_is_left_out(self):
+        records = chain_wait_pull()
+        for rec in records:
+            if rec.get("e") == "snap":
+                rec["u"][-1][1:3] = [2145.5, -222.62]
+        text = printed(thorim.show_chainwait, load(records))
+        self.assertIn("all: orbs 1-2 lit 0", text)
+
+    def test_without_the_probe(self):
+        self.assertIn("no thorim.lightningorb probe or no lit orb in phase 2",
+                      printed(thorim.show_chainwait, load(pull())))
 
 
 class Deaths(unittest.TestCase):
