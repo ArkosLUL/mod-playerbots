@@ -437,6 +437,9 @@ GUARDIAN_FLOOR_PCT = 30.0
 GUARDIAN_WEAKENED_PCT = 10.0
 BURN_PCT = 12.0
 BURN_LOOK_MS = 60000
+NPC_MARKED_IMMORTAL_GUARDIAN = 36064
+WEAKENED_PCT = 1.0
+FACING_REACH = 12.0
 # Deafening Roar: 2.3 s cast, then 4 s of silence within 50 yd. Aura Mastery with the caster's own
 # Concentration Aura up puts 64364, silence immunity, on the raiders carrying that aura.
 SPELL_DEAFENING_ROAR = 64189
@@ -5914,6 +5917,97 @@ def fall_rate(series: list[tuple[int, float]], start: int, stop: int) -> float |
     return (high - low) / ((ended - began) / 1000) if ended > began else None
 
 
+def in_front(spot: tuple[float, float], facing: float, other: tuple[float, float]) -> bool:
+    bearing = math.atan2(other[1] - spot[1], other[0] - spot[0])
+    return abs((bearing - facing + math.pi) % (2 * math.pi) - math.pi) <= math.pi / 2
+
+
+def facing_split(samples: list[tuple[bool, bool, int]], hits: list[tuple[bool, bool, int]]) -> dict:
+    out: dict = {}
+    for gaze, front, ms in samples:
+        sec, n, dealt = out.get((gaze, front), (0.0, 0, 0))
+        out[(gaze, front)] = (sec + ms / 1000, n, dealt)
+    for gaze, front, amount in hits:
+        sec, n, dealt = out.get((gaze, front), (0.0, 0, 0))
+        out[(gaze, front)] = (sec, n + 1, dealt + amount)
+    return out
+
+
+def show_facing(trace: Trace) -> None:
+    print(f"TANK FACING (live Guardians on each tank within {FACING_REACH:.0f} yd, phase 3 to the first tank death)")
+    span = next(((start, stop) for phase, start, stop in phase_spans(trace) if phase == 3), None)
+    if not span:
+        print("  phase 3 never reached")
+        return
+    start, stop = span
+    roster = roster_guids(trace)
+    tanks = sorted((guid for guid in roster if trace.role(guid) == "tank"), key=trace.name)
+    stop = min((rec["t"] for rec in death_records(trace) if rec.get("g") in tanks and start <= rec["t"] <= stop),
+               default=stop)
+    guardians = guids_of_entry(trace, NPC_IMMORTAL_GUARDIAN) | guids_of_entry(trace, NPC_MARKED_IMMORTAL_GUARDIAN)
+    gazes = [(rec["t"], rec["t"] + LUNATIC_GAZE_MS) for rec in trace.of("cast")
+             if rec.get("sp") == SPELL_LUNATIC_GAZE_YOGG and start - LUNATIC_GAZE_MS <= rec["t"] <= stop]
+
+    def gazing(when: int) -> bool:
+        return any(first <= when < last for first, last in gazes)
+
+    frames = [snap for snap in trace.of("snap") if start <= snap["t"] <= stop]
+    stamps = [snap["t"] for snap in frames]
+    samples: dict[int, list] = {guid: [] for guid in tanks}
+    for index, snap in enumerate(frames[:-1]):
+        step = frames[index + 1]["t"] - snap["t"]
+        if step > 1000:
+            continue
+        rows = {row[0]: row for row in snap.get("u", [])}
+        for guid in guardians:
+            row = rows.get(guid)
+            if not row or len(row) < 8 or row[7] not in samples or row[5] < WEAKENED_PCT:
+                continue
+            tank = rows.get(row[7])
+            if tank and math.hypot(tank[1] - row[1], tank[2] - row[2]) <= FACING_REACH:
+                samples[row[7]].append((gazing(snap["t"]), in_front((tank[1], tank[2]), tank[4], (row[1], row[2])),
+                                        step))
+    hits: dict[int, list] = {guid: [] for guid in tanks}
+    for rec in trace.of("dmg"):
+        if rec.get("sp") or rec.get("s") not in guardians or rec.get("d") not in hits or not start <= rec["t"] < stop:
+            continue
+        index = bisect.bisect_right(stamps, rec["t"]) - 1
+        if index < 0:
+            continue
+        rows = {row[0]: row for row in frames[index].get("u", [])}
+        tank, guardian = rows.get(rec["d"]), rows.get(rec["s"])
+        if tank and guardian and guardian[5] >= WEAKENED_PCT:
+            hits[rec["d"]].append((gazing(rec["t"]), in_front((tank[1], tank[2]), tank[4], (guardian[1], guardian[2])),
+                                   rec.get("a", 0) + rec.get("ab", 0)))
+
+    for guid in tanks:
+        split = facing_split(samples[guid], hits[guid])
+        human = " (human)" if guid in trace.humans else ""
+        print(f"  {trace.name(guid)}{human}")
+        for gaze in (False, True):
+            seconds = {front: split.get((gaze, front), (0.0, 0, 0)) for front in (True, False)}
+            total = seconds[True][0] + seconds[False][0]
+            if not total:
+                continue
+            parts = []
+            for front in (True, False):
+                sec, n, dealt = seconds[front]
+                rate = f"{n / sec:.2f} hits/s, {dealt / sec / 1000:.1f}k/s" if sec else "-"
+                parts.append(f"{'front' if front else 'behind'} {sec:5.0f} s ({sec / total:.0%}) {rate}")
+            print(f"    {'gaze' if gaze else 'out '}  " + "   ".join(parts))
+        turns = [rec for rec in notes(trace, "yogg.pileface") if rec.get("g") == guid and start <= rec["t"] <= stop]
+        if turns:
+            print(f"    yogg.pileface    : {len(turns)} turns")
+    gaze_rows = collections.Counter(rec.get("txt") for rec in notes(trace, "yogg.gaze")
+                                    if rec.get("g") in tanks and start <= rec["t"] <= stop)
+    if gaze_rows:
+        print(f"  yogg.gaze on tanks : {dict(gaze_rows)}")
+    holds = collections.Counter(rec.get("txt") for rec in notes(trace, "yogg.tankhold")
+                                if rec.get("txt") in ("attack", "pile attack") and start <= rec["t"] <= stop)
+    if holds:
+        print(f"  yogg.tankhold      : {dict(holds)}")
+
+
 def show_burn(trace: Trace) -> None:
     print(f"BURN (ranged leave the Guardians once Yogg is under {BURN_PCT:.0f}%)")
     span = next(((start, stop) for phase, start, stop in phase_spans(trace) if phase == 3), None)
@@ -6330,6 +6424,8 @@ SECTIONS = (
      " casts, healer mana, phase 2 leftovers and the pets on them", show_phase3),
     ("burn", "phase 3's end against the burn under 12 percent: the crossing, Yogg's fall before and after, tank deaths"
      " and the raid's last life from there, the ranged bots' targets and the Guardians' power after", show_burn),
+    ("facing", "each tank's live Guardians in front and behind, in and out of gazes, the hits a second and damage"
+     " they landed from each side, pile turns and gaze branches", show_facing),
     ("crush", "Crush and who took it, knockback, Death Rays and the last walk before each", show_crush),
     ("sanity", "Sanity minima, trips below, the bench, Rebirths into Insane", show_sanity),
 )

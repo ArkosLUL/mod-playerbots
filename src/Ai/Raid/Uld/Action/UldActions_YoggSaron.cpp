@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <optional>
 #include <string>
 #include <tuple>
 #include <vector>
@@ -26,6 +27,7 @@
 #include "UldEncounter_YoggSaron.h"
 #include "UldHardMode.h"
 #include "UldScripts.h"
+#include "UldYoggSaronPile.h"
 #include "EncounterHelpers.h"
 #include "RtiValue.h"
 #include "ScriptedCreature.h"
@@ -1605,6 +1607,30 @@ bool YoggSaronLunaticGazeAction::Execute(Event /*event*/)
     }
 
     Unit* target = AI_VALUE(Unit*, "current target");
+    float facePile = away;
+    if (PlayerbotAI::IsTank(bot) && !bot->isMoving() && !YoggSaronBeaconDragging(bot))
+    {
+        std::vector<float> const pile = YoggSaronPileBearings(bot);
+        std::optional<YoggSaronPile::Facing> const keep =
+            target && target != bot && target->IsAlive()
+                ? YoggSaronPile::Best(pile, bot->GetAngle(target), towardYogg, away)
+                : std::nullopt;
+        if (keep)
+        {
+            float const heading = Position::NormalizeOrientation(keep->heading);
+            if (RaidObs::Active())
+                RaidObs::NoteDerived(bot, "yogg.gaze", "pile");
+
+            if (YoggSaronHeadingGap(bot->GetOrientation(), heading) > ULDUAR_YOGG_SARON_FACING_TOLERANCE)
+                bot->SetFacingTo(heading);
+
+            return false;
+        }
+
+        if (std::optional<YoggSaronPile::Facing> const turn = YoggSaronPile::Best(pile, std::nullopt, towardYogg, away))
+            facePile = Position::NormalizeOrientation(turn->heading);
+    }
+
     if (target && target->IsAlive() && !bot->isMoving())
     {
         float const towardTarget = bot->GetAngle(target);
@@ -1642,8 +1668,9 @@ bool YoggSaronLunaticGazeAction::Execute(Event /*event*/)
         if (RaidObs::Active())
             RaidObs::NoteDerived(bot, "yogg.gaze", "tankfree");
 
-        if (!bot->isMoving() && YoggSaronHeadingGap(bot->GetOrientation(), away) > ULDUAR_YOGG_SARON_FACING_TOLERANCE)
-            bot->SetFacingTo(away);
+        if (!bot->isMoving() &&
+            YoggSaronHeadingGap(bot->GetOrientation(), facePile) > ULDUAR_YOGG_SARON_FACING_TOLERANCE)
+            bot->SetFacingTo(facePile);
 
         return false;
     }
@@ -1651,7 +1678,7 @@ bool YoggSaronLunaticGazeAction::Execute(Event /*event*/)
     if (RaidObs::Active())
         RaidObs::NoteDerived(bot, "yogg.gaze", "away");
 
-    bot->SetFacingTo(away);
+    bot->SetFacingTo(facePile);
 
     return true;
 }
@@ -2027,19 +2054,23 @@ bool YoggSaronGuardianControlAction::ControlPhaseThree()
     }
 
     Unit* current = AI_VALUE(Unit*, "current target");
+    bool const currentHeld = IsYoggSaronHoldableGuardian(current) &&
+                             current->GetExactDist2d(spot) <= ULDUAR_YOGG_SARON_PHASE_3_MELEE_GUARDIAN_RANGE;
+    float const currentLead = currentHeld ? YoggSaronTankThreatLead(bot, current) : 0.0f;
+    bool const comfortable = hold && !inReach.empty() && holdLead > ULDUAR_YOGG_SARON_TANK_THREAT_SWITCH_LEAD &&
+                             (!currentHeld || currentLead > ULDUAR_YOGG_SARON_TANK_THREAT_SWITCH_LEAD);
+    if (comfortable)
+        hold = YoggSaronPileTarget(bot, inReach, current);
+
     if (!hold || current == hold)
         return false;
 
-    if (IsYoggSaronHoldableGuardian(current) &&
-        current->GetExactDist2d(spot) <= ULDUAR_YOGG_SARON_PHASE_3_MELEE_GUARDIAN_RANGE)
-    {
-        float const currentLead = YoggSaronTankThreatLead(bot, current);
-        if (currentLead <= ULDUAR_YOGG_SARON_TANK_THREAT_SWITCH_LEAD || currentLead <= holdLead)
-            return false;
-    }
+    if (currentHeld && !comfortable &&
+        (currentLead <= ULDUAR_YOGG_SARON_TANK_THREAT_SWITCH_LEAD || currentLead <= holdLead))
+        return false;
 
     if (RaidObs::Active())
-        RaidObs::NoteDerived(bot, "yogg.tankhold", "attack");
+        RaidObs::NoteDerived(bot, "yogg.tankhold", comfortable ? "pile attack" : "attack");
 
     return Attack(hold);
 }
@@ -2320,6 +2351,20 @@ bool YoggSaronVigilanceAction::Execute(Event /*event*/)
         RaidObs::Note(bot, "yogg.vigilance", tank->GetName());
 
     return true;
+}
+
+bool YoggSaronTankPileFacingAction::Execute(Event /*event*/)
+{
+    std::optional<YoggSaronPileTurnPlan> const turn = YoggSaronPileTurn(botAI);
+    if (!turn)
+        return false;
+
+    if (RaidObs::Active())
+        RaidObs::Note(bot, "yogg.pileface", std::to_string(turn->before) + " " + std::to_string(turn->after));
+
+    bot->SetFacingTo(turn->heading);
+
+    return false;
 }
 
 bool YoggSaronHealerCombatEngineAction::Execute(Event /*event*/)

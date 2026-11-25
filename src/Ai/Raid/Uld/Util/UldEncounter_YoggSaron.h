@@ -11,6 +11,7 @@
 #include "Position.h"
 #include "UldData.h"
 
+#include <optional>
 #include <vector>
 
 class PlayerbotAI;
@@ -786,6 +787,17 @@ bool YoggSaronTauntFadesShort(Player* bot, Unit* guardian);
 bool YoggSaronGuardianThreatAllows(Player* bot, Unit* guardian, bool holding);
 
 float YoggSaronTankThreatLead(Player* tank, Unit* guardian);
+
+struct YoggSaronPileTurnPlan
+{
+    float heading = 0.0f;
+    int before = 0;
+    int after = 0;
+};
+
+std::vector<float> YoggSaronPileBearings(Player* bot);
+std::optional<YoggSaronPileTurnPlan> YoggSaronPileTurn(PlayerbotAI* botAI);
+Unit* YoggSaronPileTarget(Player* bot, std::vector<Unit*> const& candidates, Unit* current);
 
 bool YoggSaronConstrictorHolding(Unit* unit);
 

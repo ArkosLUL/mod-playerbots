@@ -1506,6 +1506,20 @@ class YoggPhases(unittest.TestCase):
                                            15000)
         self.assertEqual((who, end), ([1, 1], 14000))
 
+    def test_in_front_is_the_tanks_front_half(self):
+        self.assertTrue(yogg_saron.in_front((0.0, 0.0), 0.0, (3.0, 2.9)))
+        self.assertFalse(yogg_saron.in_front((0.0, 0.0), 0.0, (-3.0, 0.5)))
+        self.assertTrue(yogg_saron.in_front((0.0, 0.0), math.pi, (-3.0, 0.5)))
+        self.assertTrue(yogg_saron.in_front((10.0, 10.0), -math.pi / 2, (10.5, 5.0)))
+
+    def test_facing_split_adds_seconds_and_hits_per_side(self):
+        samples = [(False, True, 250), (False, True, 250), (False, False, 500), (True, False, 1000)]
+        hits = [(False, True, 9000), (False, False, 12000), (False, False, 8000)]
+        self.assertEqual(yogg_saron.facing_split(samples, hits),
+                         {(False, True): (0.5, 1, 9000), (False, False): (0.5, 2, 20000),
+                          (True, False): (1.0, 0, 0)})
+        self.assertEqual(yogg_saron.facing_split([], []), {})
+
     def test_pet_piles_count_guardians_on_a_draggers_summons_only(self):
         victims = {50: 101, 51: 101, 52: 102, 53: 3, 54: 201}
         owners = {101: 4, 102: 4, 201: 9}
