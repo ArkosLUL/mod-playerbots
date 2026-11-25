@@ -2863,10 +2863,17 @@ void ValidateUnderFinish(Group* group, AlgalonEncounterState& state)
     state.finisherLatch = ObjectGuid::Empty;
 }
 
+uint32 FinishHandOverHp(AlgalonEncounterState const& state, AlgalonScanUnit const& star)
+{
+    uint32 const pair = ULDUAR_ALGALON_STAR_TEAM_10;
+    uint32 const members = std::max(static_cast<uint32>(state.starTeam.size()), pair);
+    return star.tickHp * ULDUAR_ALGALON_UNDER_FINISH_TICKS * members / pair;
+}
+
 bool HandOverFinish(Group* group, AlgalonEncounterState& state, AlgalonScanUnit const& star)
 {
     uint32 const left = BulkLeftHp(star);
-    if (!state.finishLatch.IsEmpty() || !left || left > star.tickHp * ULDUAR_ALGALON_UNDER_FINISH_TICKS)
+    if (!state.finishLatch.IsEmpty() || !left || left > FinishHandOverHp(state, star))
         return false;
 
     Player* finisher = ElectFinisher(group, state);

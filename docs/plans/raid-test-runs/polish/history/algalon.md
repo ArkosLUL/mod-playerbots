@@ -1239,3 +1239,50 @@ Tank burst: Q2 stands (uld4: 95-104 k in 6 s, 30-37 k healed, the tank healers 1
 **Next window should show.** No change this round: on this build, two wave-3 stars after Big Bang 2's hit in most
 pulls again. Once Q6 is built: two wave-3 under-stars in Big Bang 2's window in most pulls, at most one wave-3 star
 after its hit, explosion deaths between Big Bang 2 and 3 under window 38's 22, and P1 against 310-348 s.
+
+## Round 15 (2026-11-25, no new pulls: window 38 build 008c167b4 still the newest)
+
+**Data.** `window38-algalon.md` again; `--stars` focus spans on all six traces for the wave-3 spawn and Big Bang
+1's last bulk span. No scratch scripts: the reader's focus spans now carry the team's size (below).
+
+**Stop rules.** Not polished: on 008c167b4 only C killed (uld3, 2 dead). Not stuck: round 14 wrote the fourth pick
+of wave 3's leftovers as a question, and the user answered it (Q6), so this round builds the answer instead of
+picking the failure again.
+
+**Verdict on round 14:** no change to judge (question only).
+
+**Picked: Q6, wave 3's leftovers after Big Bang 2** (22 dead in window 38, both B wipes). Built as answered:
+
+- `StarTeamReinforced` (`UldEncounter_Algalon.cpp:1159`): 25-man, the cycle toward Big Bang 2
+  (`bigBangCount + 1 == …_STAR_TEAM_EXTRA_BIG_BANG`), outside the cast, and a living star first seen after Big Bang
+  1's end. Wave 2 spawns at P1 + 76.5 s, before Big Bang 1's cast (P1 + 90), so the first star seen after its end
+  (~P1 + 98) is wave 3's (P1 + 136.5; uld1, uld2, uld3 and uld6 opened their first wave-3 bulk at 2:42.6-2:42.9,
+  P1 starting 0:26.1-0:26.3). It closes
+  at Big Bang 2's cast, or earlier if every wave-3 star is dead.
+- `ElectStarTeam` (`:1169`): fills the core (2/3) as before, then up to `…_STAR_TEAM_EXTRA_25` = 2 ranged only,
+  kept in `starTeamExtras`; out of the window the extras leave and the core stays. 10-man unchanged.
+- `TeamSpeed` (`:1229`): a measured speed's excess over the 1 %/s drain times team size now over team size when
+  measured. The bulk's size is taken at its span start (`bulkFromTeam`, `:3355`; committed `:2965`), since the span
+  ending at Big Bang 2's cast is committed after the team shrank; the paced kill speed's before `ElectStarTeam`
+  (`:3305`), the team that worked the previous focus. Used by `BulkWorkMs` (`:2613`) and `FinishBand`'s fast
+  bound (`:1507`). Outside the window the size is unchanged, so the scale is 1.
+- Effect at the spawn: two wave-3 stars (~48% to the line each, plus a 3 s switch) fit cast − 5 s = 39 s from
+  +2.91 beyond the drain; scaled 5/3 that needs +1.75 measured with three. Big Bang 1's last bulk span: uld3 +1.6
+  (one at the spawn, the second once the 5-member speed commits at the first star's hand-off), uld6 +1.8 (two).
+- Reader: `focus_rates` rows carry `team` (the `algalon.starteam` size at the span's start), `--stars` prints it
+  per span and the bulk median per team size; test `test_each_focus_span_reads_the_star_team_size_at_its_start`.
+- `docs/raids/ulduar/algalon.md`: wave-3 paragraph, the plan bullet and the star team paragraph.
+
+Shared code: none.
+
+**Watch.** The hand-off to the finisher stays at 5 ticks above the line; four members leaving a star instead of two
+put roughly twice the in-flight damage on it (three: median 1.3-2.2%, p75 4-4.5%), so `early` releases of
+wave-3 under-stars may rise. Extras also step off him for ~44 s once a pull: P1 length against window 38's
+310-348 s.
+
+**Next window should show.** `--stars`: focus spans at team 5 from ~P1 + 136.5 to Big Bang 2's cast, and their
+bulk median against team 3's (expected +2.0 to +3.8 against +1.2 to +2.3); two wave-3 under-stars planned in most
+pulls and in Big Bang 2's window, at most one wave-3 star off after its hit; explosion deaths between Big Bang 2
+and 3 under window 38's 22 (uld1 3, uld2 10, uld5 8, uld6 1); wave-3 `early` releases not above window 38's two;
+P1 not past 348 s. If `early` releases rise, the finish hand-off should scale with the team (a bug fix, not a
+question).
