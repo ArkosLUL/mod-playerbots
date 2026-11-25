@@ -809,9 +809,8 @@ Chain Lightning. The struck holder now keeps him until the corridor tank comes i
 
 **A tank bound for the off-tank spot holds its charges** (`thorim waiting tank charge hold`, the `Charge`
 family while `ThorimTankBoundForOffTankSpot`). The corridor bear Feral Charged him off the jump landing in
-nearly every pull with one (49 times in 73 hard-mode pulls, +6.5-15.5 s), landed 6-8 yd south-east of him
-between slots 0 and 1 and stood there ~3.7 s on a [stalled walk](#phase-2): 5 opening chains ran through it,
-8 dead past it.
+44 of 45 hard-mode pulls with a bear (+6.5-15 s), landed 6-8 yd south-east of him between slots 0 and 1 and
+stood there ~3.7 s on a [stalled walk](#phase-2): 5 opening chains ran through it, 8 dead past it.
 
 **Thorim's threat table is empty at the phase change**, because he sits at 100% untouched through
 phase 1, so the pickup taunt hands him straight back
