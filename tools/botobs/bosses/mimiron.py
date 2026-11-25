@@ -1901,7 +1901,7 @@ def bear_form_share(trace: Trace, guid: int, span) -> float | None:
         return None
 
     start, stop = span
-    since = None
+    since = None if changes[0][1] else start
     covered = 0
     for when, on in changes:
         if when <= start:

@@ -1150,6 +1150,9 @@ class BombTankPull(unittest.TestCase):
         self.assertEqual(self.rows["verdicts"], {"FAILED": 1, "OK": 1})
         self.assertAlmostEqual(self.rows["bear"][GUARD], 5000 / 6000)
 
+    def test_a_first_record_that_removes_the_form_counts_it_up_before(self):
+        self.assertAlmostEqual(mm.bear_form_share(self.trace, GUARD, (-1000, 6000)), 6000 / 7000)
+
     def test_a_tank_with_no_bear_form_record_has_no_share(self):
         self.assertIsNone(mm.bear_form_share(self.trace, BULWARK, (0, 6000)))
 
