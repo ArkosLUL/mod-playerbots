@@ -1751,9 +1751,12 @@ every 5 s until it lands, and a Guardian it hits reschedules the next 45 s out
   one latched side healed each other, up to 112.5k/s each. West and south-west were rejected (53 yd walks
   round Yogg), east (2028.3, −25.6) sat 11.5 yd from the ranged spot, south-east (2010.2, −50.7) 20.2 from
   south; closer 27 yd spots let three stacked heals reach the tank's own Guardians.
-  - **Claims** (`beaconDrags`): bot tanks while another tank lives, then non-heal paladins and Death
-    Knights, then hunters, then feral druids, by GUID, taunt off cooldown, **never a bot an unmarked
-    Guardian is hitting** — that one would follow it out. It attacks only once standing, since `Attack`'s
+  - **Claims** (`beaconDrags`): bot tanks while another living tank isn't dragging, then non-heal
+    paladins and Death Knights, then hunters, then feral druids, by GUID, taunt off cooldown, **never a
+    bot an unmarked Guardian is hitting** — that one would follow it out. A tank holding only marked
+    Guardians is free, so counting living tanks alone let both drag: the pile and each fresh Guardian
+    went untaunted ~11 s, one Guardian killed 6 raiders, and all 7 such drags in 54 traces had a tank dead
+    within 25 s of the release. It attacks only once standing, since `Attack`'s
     facing turn ends a walk; it releases on the heal aura or 3 s after the mark ends. A claimed Guardian
     isn't holdable, so guardian control leaves it, and the gaze node leaves a dragger's tick free.
 - **A taunt that didn't take hands the mark on** (`tauntMs`, `missed`): the victim is not the dragger 1.5 s
@@ -2181,6 +2184,9 @@ count, so skip `r:1` rows when taking a minimum or every bot reads as Insane.
   fresh Guardian` counts deaths to one no tank had held yet; `swaps deferred` ties a tank death to a
   `yogg.swapdefer` naming it within 10 s. `melee on Yogg` bands melee samples on Yogg from 15 s in by distance
   from the melee spot: within the 15 yd station, to the tanks' 30 yd taunts, beyond.
+- `--phase3`'s `dragged by` takes `yogg.beacondrag` claims within 6 s as one mark's and counts raiders,
+  tanks aside, dead from the first claim to the last claimer's release, at most 15 s; `every tank
+  dragging` totals the marks every living tank claimed.
 - A step-out that wakes the next Guardian leaves no other trace: the note says only why it moved.
 - `yogg.p1dodge` is derived, so `--novas` reads back-line dodges off the moves instead: `dodges landing
   inside the band` counts accepted phase 1 spacing moves by ranged and healers ending inside 20.5 yd, and the

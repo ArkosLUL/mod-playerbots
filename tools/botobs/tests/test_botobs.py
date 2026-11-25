@@ -1460,6 +1460,19 @@ class YoggPhases(unittest.TestCase):
         # Falling the whole time is not a heal, and a heal before the first sample has nothing to compare.
         self.assertEqual(yogg_saron.beacon_heal_rises([(0, 80.0), (10000, 60.0)], [500, -5000]), 0)
 
+    def test_drag_wave_runs_to_the_last_release_and_counts_raiders_dead_in_it(self):
+        tanks = {1, 2}
+        claims = [(1000, 3), (1100, 1), (1200, 2), (60000, 3)]
+        releases = [(500, 1), (11000, 1), (11700, 3), (12000, 2)]
+        deaths = [(900, 5), (3000, 5), (5000, 1), (11900, 6), (12500, 7)]
+        who, end, dead = yogg_saron.drag_wave(claims, releases, deaths, tanks, 1000, 1200, 15000)
+        self.assertEqual(who, [3, 1, 2])
+        self.assertEqual(end, 12000)
+        self.assertEqual(dead, [5, 6])
+        # A dragger never released holds the wave open to the cap.
+        _, end, _ = yogg_saron.drag_wave([(1000, 4)], [], [], tanks, 1000, 1000, 15000)
+        self.assertEqual(end, 16000)
+
     def test_drag_exposure_counts_only_the_window_after_the_heal(self):
         hits = [(900, 7, 2000), (1500, 7, 9000), (4000, 7, 36000), (5000, 8, 26000), (30000, 7, 40000)]
         self.assertEqual(yogg_saron.drag_exposure(hits, 1000, 20000), {7: (45000, 36000, 2), 8: (26000, 26000, 1)})

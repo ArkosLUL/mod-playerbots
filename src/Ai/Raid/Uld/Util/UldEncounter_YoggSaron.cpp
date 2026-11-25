@@ -1594,9 +1594,14 @@ std::vector<Player*> YoggSaronBeaconDraggerOrder(Player* bot, std::list<Creature
             held.insert(guardian->GetVictim()->GetGUID());
 
     uint32 tanksAlive = 0;
+    uint32 tanksDragging = 0;
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
         if (Player* member = ref->GetSource(); member && member->IsAlive() && PlayerbotAI::IsTank(member))
+        {
             ++tanksAlive;
+            if (YoggSaronBeaconDragging(member))
+                ++tanksDragging;
+        }
 
     std::vector<Player*> backups;
     std::vector<Player*> hunters;
@@ -1614,10 +1619,7 @@ std::vector<Player*> YoggSaronBeaconDraggerOrder(Player* bot, std::list<Creature
             continue;
 
         if (PlayerbotAI::IsTank(member))
-        {
-            if (tanksAlive > 1)
-                tanks.push_back(member);
-        }
+            tanks.push_back(member);
         else if (!PlayerbotAI::IsHeal(member) &&
                  (member->getClass() == CLASS_PALADIN || member->getClass() == CLASS_DEATH_KNIGHT))
             backups.push_back(member);
@@ -1630,6 +1632,9 @@ std::vector<Player*> YoggSaronBeaconDraggerOrder(Player* bot, std::list<Creature
 
     auto const byGuid = [](Player* left, Player* right) { return left->GetGUID() < right->GetGUID(); };
     std::sort(tanks.begin(), tanks.end(), byGuid);
+    uint32 const tankSlots = tanksAlive > tanksDragging + 1 ? tanksAlive - tanksDragging - 1 : 0;
+    if (tanks.size() > tankSlots)
+        tanks.resize(tankSlots);
     std::sort(backups.begin(), backups.end(), byGuid);
     std::sort(hunters.begin(), hunters.end(), byGuid);
     std::sort(bears.begin(), bears.end(), byGuid);

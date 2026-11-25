@@ -2257,3 +2257,55 @@ or the raid more often: Vigilance moves 10% of the bear's threat to the warrior 
 **Seen, not picked.** A's DK tank had Death Grip ready at every swing on a non-tank while the control never casts it;
 B's warrior and bear hold Challenging Shout and Roar all phase 3; uld6 lost its paladin tank to Deafening Roar at
 11:50 with Yogg near 5% and wiped at 1.65%.
+
+## Round 25 (2026-11-25, window 39 build 6694fb83e: round 24)
+
+**Data.** Window report `scratchpad/window39/window39/window39-yogg-saron.md` (six pulls, one per pool). Traces
+`603_12…1795560525`, `603_7…1795560485`, `603_8…1795560495`, `603_11…1795560520`, `603_10…1795560514`,
+`603_9…1795560500` (uld1-uld6) with `--phase3` and the new `--burn`; Vigilance resets (50725 cast rows on the warrior)
+counted per phase 3 in B.
+
+Deaths by mechanic (phase 1 / 2 / 3):
+
+- uld1 (A): nova 2 / Death Ray 1 / Immortal Guardian 27, Roar 1, Hand of Sacrifice 1, Drain Life 1; Yogg 3.63%.
+- uld4 (A): — / — / Immortal Guardian 31, Drain Life 1; Yogg 4.75%.
+- uld2 (B): nova 2 (one melee twice) / — / Immortal Guardian 29; Yogg 12.31%.
+- uld5 (B): nova 2 (one melee twice) / Death Ray 1 / Immortal Guardian 26, Gaze 2; Yogg 9.41%.
+- uld3 (C): nova 1 / Death Ray 1 / Immortal Guardian 29, Drain Life 1; Yogg 9.70%.
+- uld6 (C) kill: — / Crush 1 / Immortal Guardian 2.
+
+**Verdict on round 24 (Vigilance on the other tank): kept**, on its own target in B. `yogg.vigilance` named the bear
+in both B pulls; the warrior's Taunt reset 86 (uld2) and 57 (uld5) times in phase 3 (window 37 16 and 29), and it
+taunted 36 / 34 times against the bear's 21 / 18. Raiders killed by a fresh Guardian before the first tank death 0 /
+0 (2.25 a pull). Not met: `no bot tank with a taunt ready` 1 of 12 in uld2 (8%) but 24 of 35 in uld5 (69%, was
+25-50%); fresh Guardians on a raider a median 1.3 / 1.8 s (target under 1). B's first tank death: uld5 +161 s, uld2's
+warrior +65 s (back by a rez, again at 11:03); `first off a tank` went to melee 13 / 14, ranged 3 / 2. A and C
+unchanged.
+
+**Stop rules.** Not polished: only C has a kill on this build. Not stuck: Q3 is the user's answer, built as asked.
+
+**Picked: the user's Q3 burn** against phase 3's Immortal Guardian deaths (144, every pull). Evidence, `--burn` on
+window 39: five pulls crossed 12% at +129-154 s into phase 3; Yogg fell 0.11-0.13%/s in the 60 s before and
+0.07-0.15%/s after up to the first tank death; tanks died after the crossing at +11-20 s (uld3), +27-30 (uld5),
++41-43 (uld4), +83-93 (uld1), and uld6 killed at +88 s with both tanks up. `--phase3`'s damage split: ranged
+77-112k/s, 54-86% on Guardians over 30% (uld2 32% on tentacles), Yogg 1-9%; after the crossing the ranged bots aimed at Guardians 74-98% of
+samples. Cause: `IsAllowedTarget` (`UldActions_YoggSaron.cpp:660-697`) keeps a Guardian over 30% allowed for phase 3
+ranged at tier 2, ahead of Yogg's tier 7, to the end. The last 12% is 5.3M; ranged on him make it ~40 s.
+
+**Fix.** `YoggSaronPhase3Burn` (`UldEncounter_YoggSaron.cpp:2106`): a ranged non-healer on the platform in phase 3
+sees Yogg alive under `ULDUAR_YOGG_SARON_PHASE_3_BURN_PCT` (12); `yogg.burn` writes `guardians` / `burn` on change.
+`ResolveTarget` sets `brain.burn` (`:739`) and the Guardian case (`:675`) then allows one only as a gaze target, any
+Keepers. Tentacle tiers stay above Yogg, the gaze exception stays (no cast on Yogg in a gaze), DoTs, pets, drags and
+melee unchanged; switching off a Guardian already stops pets on it. Same code at 10 and 25, normal and hard mode; a
+human ranged does its own thing. No shared code. Reader: `--burn` (in `--summary`): the crossing, Yogg's fall before
+and after, each tank's death from it, the roster's last life, ranged targets and Guardian power after, `yogg.burn`;
+`burn_crossing` and `fall_rate` tested. The room gate left `--phases` for `--room` to keep the summary near size.
+
+**Next window should show** `yogg.burn` on every ranged bot within a second of the crossing; ranged bots after it
+on Yogg 0.8+ of samples (0.01-0.25), Yogg falling 0.25%/s or more after it (0.07-0.15); a kill where the tanks
+live ~40 s past 12% (uld1, uld4, uld6 here), and Yogg's end lower where they don't. Judge the risk by the first tank
+death after the crossing against window 39's +11 to +83 s and `Guardians at 90%+ after` (13-48%); back out if the
+tanks fall sooner and Yogg ends no lower.
+
+**Seen, not picked.** Phase 1 cost 7 nova deaths, no tick killing two; phase 3 leftovers 1-3 everywhere. Hunters
+cast Misdirection 10-15 times a phase 3, all onto one tank (Q4). uld2 bottomed at 12.31% and never crossed.
