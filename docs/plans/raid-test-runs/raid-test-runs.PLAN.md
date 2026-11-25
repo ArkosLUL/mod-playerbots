@@ -8,13 +8,13 @@ The polish loop runs on the user's standing go ("Polish loop" below), scheduled 
 
 **Done** (polished at 25 plus the 10-man check): Jaraxxus, Twin Val'kyr, Northrend Beasts, Faction Champions, Kologarn, Ignis, Razorscale, Auriaya, Iron Assembly, XT-002, Hodir, Freya, Vezax ("Bosses" below).
 
-**Bosses in the loop** (one window per build, every lane starts from it): Yogg-Saron (r29 coding), Thorim (r29 merged), Mimiron (r24 coding, 25n and 10n), Algalon (r17 merged), Anub'arak (r3 merged), Flame Leviathan (r1 merged, r2 coding the bot rider turn; polish log `polish/flame-leviathan.md`).
+**Bosses in the loop** (one window per build, every lane starts from it): Yogg-Saron (r29 merged), Thorim (r30 merged), Mimiron (r24 merged, r25 coding, 25n and 10n), Algalon (r18 merged), Anub'arak (r4 coding), Flame Leviathan (r2 merged, the bot rider turn; polish log `polish/flame-leviathan.md`).
 
-**Window 50 running** (2026-11-25, rebuild of Custom `0200b8827` with DC `0b2488a`): Flame Leviathan r1, Thorim r29, Algalon r17, Anub'arak r3, Mimiron 25n on all pools; reports `scratchpad/window50/window50/window50-<boss>.md`. Earlier: `scratchpad/window49/` (Thorim r28, Yogg-Saron r28, Mimiron r23 10n and one 25n pull), `scratchpad/window48/`, `scratchpad/filler47/`. If the scratchpad is gone, rerun the windows. Windows 29-50 and fillers: `windows.md`.
+**Window 51 running** (2026-11-25, rebuild of Custom `c9b718c29` with DC `d8859c6`): Flame Leviathan 25n re-check on r2 and 10n, Yogg-Saron r29, Thorim r30, Algalon r18, Mimiron r24 25n and 10n (10n with the warlock), all on the six Ulduar pools; jobs `scratchpad/window51-jobs.json`, reports `scratchpad/window51/window51/window51-<boss>*.md`. Earlier: `scratchpad/window50/` (Flame Leviathan r1, Thorim r29, Algalon r17, Anub'arak r3, Mimiron r23 25n), `scratchpad/window49/`. If the scratchpad is gone, rerun the windows. Windows 29-51 and fillers: `windows.md`.
 
 **Next:**
-- On window 50's Mimiron 25n report: Mimiron r25 with it. Next window: Flame Leviathan 25n re-check on r2 (all pools) plus 10n, Yogg-Saron r29, Mimiron 25n and 10n (10n with the warlock), and whatever Thorim r30, Algalon r18, Anub'arak r4 merge.
-- Running: Thorim r30, Algalon r18, Anub'arak r4. Merged, not yet built: Flame Leviathan r2 (`6a6f31910`), Yogg-Saron r29 (`8c997544f`), Mimiron r24 (`bda84de97`), DC `d8859c6`. Rebuild once enough has merged to fill a window.
+- On each window 51 report: Flame Leviathan r3 (25n and 10n reports), Yogg-Saron r30, Thorim r31, Algalon r19; Mimiron's reports go to r26 (or to r25 if it is still running and asks).
+- Running: Anub'arak r4, Mimiron r25 (both from window 50). Rebuild once enough has merged to fill a window.
 - DC lane AE (`ae-dc-mimiron-10n-spawn.PLAN.md`) stopped unneeded: Mimiron's 10n spawn was missing from the live world DB (see Mimiron's row). DC lane AC (`rt/dc-ac`, the boss kept passive until each start) stays unmerged: it would hide the ritual-walk bug the tests should catch.
 - Merges: `merge-lane.sh` refuses DC branches for argument-name and edited comments, DC's own style: merge DC lanes by hand (`git merge-tree`, then `git merge --no-ff -F`) after reading the added comment lines. During a window the server lock's owner is the window, which `merge-lane.sh` allows.
 - Next question batch: none open.
