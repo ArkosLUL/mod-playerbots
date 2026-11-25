@@ -107,23 +107,18 @@ once the side tank carries 6+ stacks). r1's defensive keep from the pull (kept
 2026-11-25). Q1 (2026-11-25, restated for r4): polish with 4 healers for now,
 no fifth healer; compare the pool side tanks' defense and avoidance with
 Felesta's and Bulwark's (done r3: no gap) and build the facing fix (built r3).
+- Q2 (2026-11-25): yes. In heroic, bots pick the side tanks by how they take
+  burrower hits, prot paladin first, then blood DK, prot warrior, bear last, and
+  the tank left over takes Anub'arak (at 10 man the same order picks the one side
+  tank), instead of the main tank flag deciding; a human tank keeps the job the
+  flag gives him. Expected: C the user's setup (bear on him, paladin plus DK on
+  burrowers), A paladin plus DK (warrior on him), B paladin plus warrior (bear on
+  him). Bears took 6.1k burrower damage a contact second against a paladin's
+  3.5k and died first in 17 of 20 pulls (r4).
+- Q3 (2026-11-25): no. The hold walk is not re-issued when the back-up decision
+  flips; the stuck rule stands for r3's gap.
 
-**Open questions.**
-
-- **Q2 (plan change: which tanks hold burrowers).** In heroic, pick the two side
-  tanks by how they take burrower hits, prot paladin first, then blood DK, prot
-  warrior, bear last, and give Anub'arak to the one left over (at 10 man the
-  same order picks the one side tank), instead of the main tank flag deciding? Bears take 6.1k burrower damage a contact second
-  against a paladin's 3.5k and died first in 17 of 20 pulls; the user's kills
-  had the bear on him and paladin plus DK on burrowers. C would get the user's
-  setup, A paladin plus DK (warrior on him), B paladin plus warrior (bear on
-  him). Recommended: yes, among bots; a human tank keeps the job the flag gives
-  him. A test without code: the runner makes the bear (B, C) and the warrior
-  (A) the main tank.
-- **Q3 (waive the stuck rule for r3's gap).** Re-issue the hold walk when the
-  back-up decision flips (this boss's action only): ~6.5% of contact from 0.69
-  to ~0.28 landed a second, about 7% fewer landed burrower hits, too few alone
-  to change a wipe. Recommended: build it with Q2 if Q2 is yes; alone, skip.
+**Open questions.** None.
 
 ## Round 4 (build 0200b8827, window 50, stuck)
 
