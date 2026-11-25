@@ -215,11 +215,35 @@ class RingBlizzard(unittest.TestCase):
         text = printed(thorim.show_blizzard, load(blizzard_pull()))
         self.assertIn("blizzard 1 +19.0..+34.0 s: slot points covered 2 7.0 s; in it Cleaver 7.0 s (1x, longest "
                       "7.0 s, 3 ticks 13k); deaths 0; steps 1 (0 onto the bunny's path ahead, 0 under a zone within "
-                      "8 s, 0 across it), stepped 7.0 bot-s, out of reach 7.0 of them; walk back p50 0.5 max 0.5 s, "
-                      "0 ticks on the way", text)
+                      "8 s, 0 across it), stepped 7.0 bot-s, out of reach 7.0 of them, in another slot's jump 0.0; "
+                      "walk back p50 0.5 max 0.5 s, 0 ticks on the way", text)
         self.assertIn("all: ring melee in a zone 7.0 bot-s, stays p50 7.0 max 7.0 s, 3 ticks 13k, deaths 0; steps 1 "
                       "(0 onto the bunny's path ahead, 0 under a zone within 8 s, 0 across it), stepped 7.0 bot-s, "
-                      "out of reach 7.0; walk back p50 0.5 max 0.5 s, 0 ticks on the way", text)
+                      "out of reach 7.0, in another slot's jump 0.0; walk back p50 0.5 max 0.5 s, 0 ticks on the way",
+                      text)
+
+    def test_stepped_in_another_slots_jump(self):
+        records = blizzard_pull()
+        records[0]["roster"].append({"g": MELEE_B, "n": "Edge", "r": "melee", "c": 4, "h": 0})
+        for rec in records:
+            if rec.get("e") == "snap":
+                spot = (2127.0, -251.0) if rec["t"] <= 24000 else (2140.0, -265.0)
+                rec["u"].append([MELEE_B, spot[0], spot[1], 419.6, 0, 100, 0, THORIM])
+        records.append({"t": 1000, "e": "note", "g": MELEE_B, "k": "thorim.ringspot",
+                        "txt": "slot 0 bearing 200 solved 200"})
+        text = printed(thorim.show_blizzard, load(sorted(records, key=lambda rec: rec.get("t", 0))))
+        self.assertIn("stepped 7.0 bot-s, out of reach 7.0 of them, in another slot's jump 4.0;", text)
+
+    def test_a_dead_slots_point_leaves_the_jump(self):
+        records = blizzard_pull()
+        records[0]["roster"].append({"g": MELEE_B, "n": "Edge", "r": "melee", "c": 4, "h": 0})
+        for rec in records:
+            if rec.get("e") == "snap":
+                rec["u"].append([MELEE_B, 2140.0, -265.0, 419.6, 0, 100 if rec["t"] <= 24000 else 0, 0, THORIM])
+        records.append({"t": 1000, "e": "note", "g": MELEE_B, "k": "thorim.ringspot",
+                        "txt": "slot 0 bearing 54 solved 54"})
+        text = printed(thorim.show_blizzard, load(sorted(records, key=lambda rec: rec.get("t", 0))))
+        self.assertIn("stepped 7.0 bot-s, out of reach 7.0 of them, in another slot's jump 4.0;", text)
 
     def test_step_points_on_the_bunny_path_and_under_a_zone(self):
         records = blizzard_pull()
