@@ -517,9 +517,6 @@ DEATH_AFTER_HIT_MS = 1500
 SWAP_DEFER_LOOK_MS = 10000
 HOLD_BURST = "hold burst until tank engaged"
 SPELL_MISDIRECTION = 34477
-MISDIRECT = "yogg.misdirect"
-MISDIRECT_CLAIM_MS = 8000
-GUARDIAN_STASIS_MS = 4000
 # A tank's own buttons and the externals it gives or takes, by spell id.
 TANK_BUTTONS = {31884: "Avenging Wrath", 498: "Divine Protection", 642: "Divine Shield", 6940: "Hand of Sacrifice",
                 48788: "Lay on Hands", 27154: "Lay on Hands", 33206: "Pain Suppression", 47788: "Guardian Spirit"}
@@ -2546,6 +2543,10 @@ def drag_wave(claims: list[tuple[int, int]], releases: list[tuple[int, int]], de
     end = min(max(ends, default=first), first + cap_ms)
     dead = [guid for when, guid in deaths if first <= when <= end and guid not in tanks]
     return [guid for _, guid in wave], end, dead
+
+
+def pet_piles(victims: dict[int, int], owners: dict[int, int], draggers: set) -> collections.Counter:
+    return collections.Counter(owners[victim] for victim in victims.values() if owners.get(victim) in draggers)
 
 
 def group_runs(stamps: list[int], gap_ms: int, min_ms: int) -> list[tuple[int, int]]:
@@ -4752,35 +4753,6 @@ def fresh_on_raider(rows: list[list], tanks: set, raiders: set, stop: int) -> tu
     return on, False
 
 
-def misdirected_openers(claims: list[tuple[int, int, int]], shots: list[tuple[int, int, int]],
-                        claim_ms: int = MISDIRECT_CLAIM_MS) -> dict[int, tuple[int, int, int | None]]:
-    spans = []
-    held: dict[int, tuple[int, int]] = {}
-    for when, hunter, guardian in sorted(claims):
-        if hunter in held:
-            begun, aim = held.pop(hunter)
-            spans.append((begun, hunter, aim, min(when, begun + claim_ms)))
-        if guardian:
-            held[hunter] = (when, guardian)
-    spans += [(begun, hunter, aim, begun + claim_ms) for hunter, (begun, aim) in held.items()]
-    ordered = sorted(shots)
-    openers: dict[int, tuple[int, int, int | None]] = {}
-    for begun, hunter, aim, end in sorted(spans):
-        shot = next((when for when, caster, target in ordered
-                     if caster == hunter and target == aim and begun <= when <= end), None)
-        if aim not in openers or (openers[aim][2] is None and shot is not None):
-            openers[aim] = (hunter, begun, shot)
-    return openers
-
-
-def phase3_openers(trace: Trace, guardians: set, start: int, stop: int) -> dict[int, tuple[int, int, int | None]]:
-    claims = [(rec["t"], rec.get("g", 0), int(str(rec.get("txt") or 0))) for rec in notes(trace, MISDIRECT)
-              if start - MISDIRECT_CLAIM_MS <= rec["t"] <= stop]
-    shots = [(rec["t"], rec.get("s"), rec.get("tgt")) for rec in trace.of("cast")
-             if rec.get("tgt") in guardians and start <= rec["t"] <= stop]
-    return misdirected_openers(claims, shots)
-
-
 def killed_by_fresh(deaths: list[tuple[int, int, int]], rows: dict[int, list[list]], tanks: set,
                     stop: int) -> list[tuple[int, int, int]]:
     return [(when, victim, killer) for when, victim, killer in deaths
@@ -5250,33 +5222,6 @@ def show_phase3_tanks(trace: Trace, start: int, stop: int, rows: dict[int, list[
                   f" ({trace.role(aim)})")
 
 
-def show_phase3_misdirects(trace: Trace, start: int, stop: int, rows: dict[int, list[list]], guardians: set,
-                           tanks: set, roster: set, first_tank_death: int, killed: list[tuple[int, int, int]]) -> None:
-    openers = phase3_openers(trace, guardians, start, stop)
-    teleports: dict[int, list[int]] = collections.defaultdict(list)
-    for rec in trace.of("cast"):
-        if rec.get("sp") == SPELL_SIMPLE_TELEPORT:
-            teleports[rec.get("s")].append(rec["t"])
-    shot = {guid: when for guid, (_, _, when) in openers.items() if when is not None and rows.get(guid)}
-    after = [(when - guardian_spawn(rows[guid][0][0], teleports.get(guid, []))) / 1000 for guid, when in shot.items()]
-    firsts = [next((row for row in rows[guid] if row[8] in roster), None) for guid in shot]
-    on_tank = sum(1 for row in firsts if row and row[8] in tanks)
-    stasis = sum(1 for seconds in after if seconds * 1000 < GUARDIAN_STASIS_MS)
-    print(f"    misdirected       : {len(openers)} claimed, {len(shot)} shot ({stasis} inside the stasis"
-          + (f", median +{statistics.median(after):.1f} s after the spawn" if after else "")
-          + f"), first victim a tank {on_tank} of {len(shot)}")
-    raider = {guid: fresh_on_raider(rows[guid], tanks, roster - tanks, first_tank_death)[0] / 1000
-              for guid in guardians if rows.get(guid) and rows[guid][0][0] < first_tank_death}
-
-    def split(seconds: list[float]) -> str:
-        loose = [value for value in seconds if value]
-        return f"{len(loose)} of {len(seconds)}" + (f" (median {statistics.median(loose):.1f} s)" if loose else "")
-
-    print(f"      on a raider before a tank held them: misdirected {split([s for g, s in raider.items() if g in shot])},"
-          f" the rest {split([s for g, s in raider.items() if g not in shot])}; raiders killed by a misdirected one"
-          f" {sum(1 for _, _, killer in killed if killer in shot)}")
-
-
 def show_phase3_fresh(trace: Trace, start: int, stop: int, rows: dict[int, list[list]], guardians: set,
                       tanks: set, roster: set) -> None:
     deaths = [rec for rec in death_records(trace) if start <= rec["t"] <= stop]
@@ -5293,7 +5238,6 @@ def show_phase3_fresh(trace: Trace, start: int, stop: int, rows: dict[int, list[
                              first_tank_death)
     print(f"    raiders killed by a fresh Guardian before the first tank death: {len(killed)}"
           + "".join(f", {trace.name(victim)} {clock(when)}" for when, victim, _ in killed))
-    show_phase3_misdirects(trace, start, stop, rows, guardians, tanks, roster, first_tank_death, killed)
     defers = []
     for rec in notes(trace, "yogg.swapdefer"):
         holder, _, pct = str(rec.get("txt", "")).rpartition(" ")
@@ -5469,7 +5413,6 @@ def show_phase3(trace: Trace) -> None:
     for rec in trace.of("cast"):
         if rec.get("tgt") in guardians and start <= rec["t"] <= stop:
             casts_at[rec["tgt"]].append((rec["t"], rec.get("s"), trace.spells.get(rec.get("sp"), "")))
-    openers = phase3_openers(trace, guardians, start, stop)
     print(f"\n  Immortal Guardians : {len(guardians)}, Weakened {len(weakened & guardians)}")
     for guid in sorted(guardians, key=lambda g: rows[g][0][0] if rows.get(g) else 0):
         own = rows.get(guid)
@@ -5488,15 +5431,13 @@ def show_phase3(trace: Trace) -> None:
             cast = {name for when, caster, name in casts_at[guid]
                     if caster == flip[8] and flip[0] - FLIP_CAUSE_MS <= when <= flip[0]}
             flips.append(((flip[0] - spawned) / 1000, flip_role, flip_cause(flip_role, cast)))
-        opened = openers.get(guid, (0, 0, None))[2]
-        misdirected = f"  misdirected +{(opened - spawned) / 1000:.1f} s" if opened is not None else ""
         print(f"    {clock(spawned)}  first victim"
               f" {trace.role(victim[8]) if victim else '-':6} +{max(0, (victim[0] if victim else spawned) - spawned) / 1000:4.1f} s"
               f"  off a tank {flip_role or '-':6} +{max(0, (flip[0] if flip else spawned) - spawned) / 1000:4.1f} s"
               f"  first hit {trace.role(hit['d']) if hit else '-':6}"
               f" +{((hit['t'] if hit else spawned) - spawned) / 1000:4.1f} s  lowest {lowest:5.1f}%"
               f"  at the stack {at_stack * 100 // len(own):3}%  {'gone ' + clock(own[-1][0]) if gone else 'alive'}"
-              f"{'  Weakened' if guid in weakened else ''}{misdirected}")
+              f"{'  Weakened' if guid in weakened else ''}")
     by_role = collections.Counter(trace.role(rec.get("d")) for rec in melee_hits)
     print(f"    gone at 10% or less (Titanic Storm): {stormed}")
     print(f"    melee hits by victim role: {dict(by_role)}")
@@ -5648,6 +5589,7 @@ def show_phase3(trace: Trace) -> None:
     claim_runs = group_runs([when for when, _ in claims], DRAG_CLAIM_GAP_MS, 0)
     claimed_marks = 0
     every_tank: list[int] = []
+    pet_marks: list[int] = []
     print(f"\n  Shadow Beacons     : {len(beacons)}")
     classes = {row["g"]: row.get("c") for row in trace.header.get("roster", [])}
     handbacks: list[tuple[str, float | None]] = []
@@ -5712,9 +5654,18 @@ def show_phase3(trace: Trace) -> None:
             dragging = len(set(who) & tanks)
             if standing and dragging >= len(standing):
                 every_tank.append(len(dead))
+            victims = {}
+            for guid in guardians - marked:
+                row = row_before(rows.get(guid, []), mark_at)
+                if row and mark_at - row[0] <= 1500 and row[8]:
+                    victims[guid] = row[8]
+            piles = pet_piles(victims, trace.owners, set(who))
+            if piles:
+                pet_marks.append(len(healed))
             print(f"      dragged by: {', '.join(f'{trace.name(guid)} {trace.role(guid)}' for guid in who)};"
                   f" tanks dragging {dragging} of {len(standing)} up; raiders dead to the last release"
-                  f" (+{(end - run[0]) / 1000:.1f} s): {len(dead)}")
+                  f" (+{(end - run[0]) / 1000:.1f} s): {len(dead)}; on their pets at the mark:"
+                  f" {', '.join(f'{trace.name(owner)} {count}' for owner, count in piles.most_common()) or 'none'}")
         reserve = next((text for when, text in kick_notes
                         if mark_at - 1000 <= when <= mark_at + 3000 and text.startswith("reserve")), None)
         if reserve is not None:
@@ -5770,6 +5721,8 @@ def show_phase3(trace: Trace) -> None:
     if claimed_marks:
         print(f"    every tank dragging: {len(every_tank)} of {claimed_marks} marks, raiders dead inside those"
               f" {sum(every_tank)}")
+        print(f"    a dragger's pets held Guardians: {len(pet_marks)} of {claimed_marks} marks, other Guardians"
+              f" those heals reached {sum(pet_marks)}")
     drags = collections.Counter(str(rec.get("txt", "")) for rec in drag_notes)
     if drags:
         print(f"    yogg.beacondrag  : {dict(drags)}")

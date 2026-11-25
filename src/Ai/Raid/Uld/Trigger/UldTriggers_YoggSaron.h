@@ -506,15 +506,6 @@ public:
     bool IsActive() override;
 };
 
-class YoggSaronGuardianMisdirectTrigger : public YoggSaronTrigger
-{
-public:
-    static constexpr char const* Name = "yogg-saron guardian misdirect trigger";
-
-    YoggSaronGuardianMisdirectTrigger(PlayerbotAI* botAI) : YoggSaronTrigger(botAI, Name) {}
-    bool IsActive() override;
-};
-
 class YoggSaronHealerCombatEngineTrigger : public YoggSaronTrigger
 {
 public:

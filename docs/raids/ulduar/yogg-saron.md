@@ -1753,7 +1753,10 @@ every 5 s until it lands, and a Guardian it hits reschedules the next 45 s out
   south; closer 27 yd spots let three stacked heals reach the tank's own Guardians.
   - **Claims** (`beaconDrags`): bot tanks while another living tank isn't dragging, then non-heal
     paladins and Death Knights, then hunters, then feral druids, by GUID, taunt off cooldown, **never a
-    bot an unmarked Guardian is hitting** — that one would follow it out. A tank holding only marked
+    bot an unmarked Guardian is hitting, or whose pet or summon one is** — those would follow it out. A Death
+    Knight's second Army of the Dead lands ~2 min into phase 3 and its ghouls take up to 9-14 Guardians off the
+    tanks; at the next mark the ghouls reached their dragging Death Knight's lane, took the mark back within
+    4-7 s, and its heal spread to a median 6 (0-12) Guardians over 11 such drags. A tank holding only marked
     Guardians is free, so counting living tanks alone let both drag: the pile and each fresh Guardian
     went untaunted ~11 s, one Guardian killed 6 raiders, and all 8 such drags had a tank dead within 25 s
     of the release, against 38 of 120 drags by one tank or none with no death in the 20 s before. It
@@ -1989,20 +1992,9 @@ Death Grip, which the control never casts).
 and the first in the map's player list becomes its victim (`--phase3` `first victim`: one fixed melee at +4.0 s), so
 the first heal anywhere takes it.
 
-**A hunter Misdirects each fresh Guardian onto a tank, by the user's choice** (`yogg-saron guardian misdirect`,
-`ACTION_RAID + 2`): `ThreatManager::AddThreat` books the redirected share before the hunter's own, so the tank becomes
-the Guardian's first victim and the stasis ends onto it; after the stasis any threat still beats a 0-threat victim.
-Fresh means Recently Spawned (64497, cast at spawn, 15 s), unmarked, holdable, and on no tank or on one leading the
-rest by 1.5× at most, a taunt's matched threat included. A bot hunter not dragging, staged or returning, Misdirection
-ready, claims the oldest fresh one within 34 yd in sight (`yogg.misdirect`, one hunter a Guardian, 8 s at most),
-casts it on the tank holding the most Guardians, then the healthiest, never one shedding a swap or under
-`YoggSaronTankLowHold`, humans included, and shoots: Arcane, Chimera, Aimed, Multi-Shot, Steady, each only if it lands
-inside the redirect (34477 unspent, or 35079's 4 s outlasting cast and flight + 0.5 s), since a later hit opens the
-Guardian on the hunter. It keeps shooting while 35079 lasts, not under the burn. During a gaze it acts only on a
-Guardian already inside its 120° cast arc (`mdshot` `gaze` otherwise): a shot turns the bot to its target, possibly
-into Yogg. The 30 s cooldown gives two hunters 4 of 6 spawns a minute, and reach caps it lower: a hunter stood within
-35 yd of a third of spawns at spawn, half before a tank held them. `misdirection on main tank` is held in phase 3
-(`yogg-saron misdirection hold`), or it spends the cooldown on one tank whatever the hunter hits.
+**Hunters do not Misdirect fresh Guardians onto a tank**: tried for one window, two hunters' 30 s cooldowns and
+34 yd reach shot 43 of 105 spawns, only 10 inside the 4 s stasis (median +8 s); misdirected Guardians sat on a raider
+as often as the rest (21 of 41 against 26 of 51) and killed 4 raiders.
 
 **A taunt from the pile runs out before the Guardian arrives.** They spawn 41-63 yd from the melee spot
 and walk ~11 yd/s, so a stasis-end taunt's 3 s leaves them 15-27 yd short. The taunt only matched the top
@@ -2149,7 +2141,7 @@ hand.
 | Platform hazards | `knockback` (`inside` / `clear`), `crush` (incl. `reach`), `deathray`, `castcut` (spell), `detour` (`around` / `spot`), `stunned` (`engage` / `clear`), `petguard` (`pulled` / `held` / `clear` / `leftover`), `judgement`, `powerbreak` (`none` / `walk` / `hit` / `out`, then the Crusher), `walk` (node and branch), `walkstep` |
 | Portals and Sanity | `wave`, `portal` (`notteam` / `waiting` / `spreading` / `holding` / `late` / `clicking`), `portalslot`, `brainteam`, `benched`, `portalcancel`, `brainlink` (`none` / `closing` / `clear`), `sanity` (`low` / `topping` / `refill` / `idle`: the walk's reason, not a level), `squeeze` |
 | Brain level | `room`, `roomstate` (`walkingin` / `fighting` / `doorshut` / `tobrain` / `atbrain` / `reprisal` / `staged`), `tentacle`, `spread` (`free` / `shared` / `kept`), `share` (group name / `orphan` / `first` / `helper` / `done` / `joined` / `staged` / `lifted`), `reprisal`, `reprisalheal` (spell), `regroup` (`range` / `sight`), `skull`, `skullturn` (`angled` / `free`), `brainspot`, `brainhold` (`open` / `dots` / `hold` / `finish` / `clear`), `charge`, `dash` (`used` / `cooldown`), `nitro` (`used` / `cooldown` / `station`), `exit`, `exitcancel` |
-| Phase 3 | `station` (`walking` / `shifted` / `parked` / `released` / `unreachable`), `gaze` (above), `tankhold` (`taunt` / `chain taunt` / `defense` / `leash` / `attack` / `return taunt` / `return defense` / `swap taunt` / `swap defense`), `tankswap`, `swapdefer` (holder and health), `tankshed`, `tankloh`, `vigilance` (tank), `misdirect` (Guardian, `0` on release), `mdshot` (`misdirect` / `open` / `dump` / `gaze`), `beacondrag` (`claim` / `taunt` / `missed` / `hold` / `shot` / `feign` / `release` / `return`), `beaconspot`, `beaconstage` (`pick` / `walk` / `ready` / `stuck` / `timeout`), `beaconbear`, `dragdef`, `dragext`, `roar` (`preswitch` / `noconc` / `claimed` / `press`), `p3area` (`few` / `fresh` / `allowed`), `p3dot` (spell), `burn` (`guardians` / `burn`), `kicknudge`, `markkick`, `mortalstrike`, `healcut`, `warlockpet`, `lust`, `lustready`, `healerengine` |
+| Phase 3 | `station` (`walking` / `shifted` / `parked` / `released` / `unreachable`), `gaze` (above), `tankhold` (`taunt` / `chain taunt` / `defense` / `leash` / `attack` / `return taunt` / `return defense` / `swap taunt` / `swap defense`), `tankswap`, `swapdefer` (holder and health), `tankshed`, `tankloh`, `vigilance` (tank), `beacondrag` (`claim` / `taunt` / `missed` / `hold` / `shot` / `feign` / `release` / `return`), `beaconspot`, `beaconstage` (`pick` / `walk` / `ready` / `stuck` / `timeout`), `beaconbear`, `dragdef`, `dragext`, `roar` (`preswitch` / `noconc` / `claimed` / `press`), `p3area` (`few` / `fresh` / `allowed`), `p3dot` (spell), `burn` (`guardians` / `burn`), `kicknudge`, `markkick`, `mortalstrike`, `healcut`, `warlockpet`, `lust`, `lustready`, `healerengine` |
 
 **Do not add a Sanity level probe.** 63050 is already in the aura stream, with 63752 low-sanity and 63120
 Insane beside it, as are Grim Reprisal 64039 and Lunatic Gaze 64168 in `dmg`. A removal row carries no stack
@@ -2200,12 +2192,11 @@ count, so skip `r:1` rows when taking a minimum or every bot reads as Insane.
   fresh Guardian` counts deaths to one no tank had held yet; `swaps deferred` ties a tank death to a
   `yogg.swapdefer` naming it within 10 s. `melee on Yogg` bands melee samples on Yogg from 15 s in by distance
   from the melee spot: within the 15 yd station, to the tanks' 30 yd taunts, beyond.
-- `--phase3` tags a Guardian `misdirected +s` at its `yogg.misdirect` claimer's first shot inside the claim (8 s at
-  most); `misdirected` counts claims, shots, those inside the 4 s stasis and first victims on a tank, then time on a
-  raider and deaths for misdirected Guardians against the rest.
 - `--phase3`'s `dragged by` takes `yogg.beacondrag` claims within 6 s as one mark's and counts raiders,
   tanks aside, dead from the first claim until each claim's release or `missed`, at most 15 s; `every
-  tank dragging` totals the marks every living tank claimed.
+  tank dragging` totals the marks every living tank claimed. `on their pets at the mark` counts unmarked
+  Guardians whose snapshot target is a dragger's pet or summon (the trace's owner field), and `a dragger's pets
+  held Guardians` the heals those marks spread.
 - A step-out that wakes the next Guardian leaves no other trace: the note says only why it moved.
 - `yogg.p1dodge` is derived, so `--novas` reads back-line dodges off the moves instead: `dodges landing
   inside the band` counts accepted phase 1 spacing moves by ranged and healers ending inside 20.5 yd, and the
