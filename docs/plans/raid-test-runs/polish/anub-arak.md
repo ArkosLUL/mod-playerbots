@@ -100,13 +100,12 @@ One build each, so no regression call on C.
 **User answers in force.** The boss doc's user calls (east tank pair in heroic,
 DPS split by side, the push, keep killing phase 3 waves, battle res as is, focus
 once the side tank carries 6+ stacks). r1's defensive keep from the pull (kept
-2026-11-25).
+2026-11-25). Q1 (2026-11-25): polish with 4 healers for now, no fifth healer;
+r3 compares the pool side tanks' defense and avoidance with Felesta's and
+Bulwark's and builds the facing fix (each side tank keeps both of its burrowers
+in front).
 
-**Open questions.**
-
-- **Q1 (r2): should heroic 25 get a fifth healer?** Recommended: yes, swap the
-  roster's spare healer in for one DPS in DC's `totc-anubarak` scenario; no
-  strategy code changes. All 12 window 46 wipes began when a side tank (the tank
+**Open questions.** None. Q1's case, for reference: all 12 window 46 wipes began when a side tank (the tank
   holding two burrowers) went from 80-100% health to dead in under 6 s at 9
   Expose Weakness stacks, almost always with its long cooldowns (Shield Wall,
   Icebound Fortitude and the like) still recharging from an earlier wave. Those

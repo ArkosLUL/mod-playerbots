@@ -129,13 +129,11 @@ past the kill; raid %/s before it 0.46-0.52. A gauntlet healer lost in phase 1 c
 - 2026-11-25, Q1 (a) of round 24: a camp bot whose shelter walk for orb 1 or 2 passes within the 8 yd jump of
   another slot's body waits to set off until Thorim's Chain Lightning has landed, taking R23's cone step when the late
   start leaves the row out of reach; replayed before it ships. Built in R26.
+- 2026-11-25, Q1 (a) of round 28: a ring walk or step that starts while the orb is lit (cone dodge, Blizzard re-step,
+  walk back) and would end within the 8 yd jump of another group's body or point waits until the cast lands (cap
+  1 s), only when the cone is still escapable after the wait; replayed before it ships. Build in R29.
 
-**Open questions:**
-- Q1 (R28): should ring melee wait for Chain Lightning like the camp? Recommended (a): a ring walk or step that
-  starts while the orb is lit (cone dodge, Blizzard re-step, walk back) and would end within the 8 yd jump of
-  another group's body or point waits until the cast lands (cap 1 s), only when the cone is still escapable after
-  the wait; replayed before it ships. (b) no; keep fixing single paths (tank-yard solver separation, cone steps
-  seeing each other's destinations).
+**Open questions:** none.
 
 ## Round 28 (window 46: build 37cc72a94 with round 27)
 
