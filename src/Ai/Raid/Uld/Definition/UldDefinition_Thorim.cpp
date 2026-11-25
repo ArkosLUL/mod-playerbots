@@ -108,6 +108,7 @@ void TickThorim(PlayerbotAI* botAI)
     ThorimTickHumanTankCalls(botAI);
     ThorimTickAnchorTank(botAI);
     ThorimTickFrostAuraPaladin(botAI);
+    ThorimTickChainLightning(botAI);
 }
 
 void DefineThorim(EncounterBuilder& e)
@@ -198,6 +199,7 @@ void DefineThorim(EncounterBuilder& e)
     e.Block("thorim taunt guard", Role::Any, ThorimTauntWouldSteal, Family::Taunt);
 
     e.Multiplier<BossNatureAspectHoldMultiplier>(Family::Spell, "thorim");
+    e.Multiplier<ThorimChainWaitCastHoldMultiplier>(Family::Spell);
 
     e.Block("thorim frost aura hold", Role::Any, ThorimFrostAuraHeld, 0,
             {"devotion aura", "retribution aura", "concentration aura", "crusader aura", "sanctity aura",

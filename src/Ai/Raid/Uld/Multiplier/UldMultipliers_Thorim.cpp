@@ -105,3 +105,27 @@ float ThorimBalconyGuardMultiplier::GetValue(Action* action)
 
     return target->GetEntry() == NPC_SIF ? 0.0f : 1.0f;
 }
+
+float ThorimChainWaitCastHoldMultiplier::GetValue(Action* action)
+{
+    if (!action || !ThorimCampWaitingOnChain(botAI, bot))
+        return 1.0f;
+
+    auto const classify = [action]
+    {
+        Facts facts;
+        facts.cast = dynamic_cast<CastSpellAction*>(action);
+        return facts;
+    };
+
+    Facts& facts = _facts.Get(action, classify);
+    if (!facts.cast)
+        return 1.0f;
+
+    uint32 const spellId = facts.spellId.Get(botAI, facts.cast);
+    SpellInfo const* info = spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
+    if (!info)
+        return 1.0f;
+
+    return info->IsChanneled() || info->CalcCastTime(bot) > 0 ? 0.0f : 1.0f;
+}

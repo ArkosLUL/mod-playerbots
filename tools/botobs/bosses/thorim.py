@@ -22,6 +22,9 @@
                                  and how many ring walks were held for crossing the lit cone
     thorim.py <file> --colossus  each Runic Colossus Smash against the gauntlet healers: how far off his facing
                                  and his target each stood, the move that put it there, who it hit or killed
+    thorim.py <file> --chainwait each orb 1 or 2 against the camp: shelter walks held until Chain Lightning
+                                 landed, released by the landing or the cap, the chain's camp hops, and what the
+                                 chain and the cone did to the waiters
 """
 from __future__ import annotations
 
@@ -102,6 +105,16 @@ COLOSSUS_SMASH = 62339
 SMASH_LAND_MS = 3500
 SMASH_LOOK = 20.0
 SMASH_ON_TARGET = 6.0
+NPC_THUNDER_ORB = 33378
+THUNDER_ORB_SPOTS = ((2145.50, -222.62), (2164.20, -233.47), (2164.55, -293.00), (2105.04, -292.56), (2092.95, -263.00),
+                     (2104.94, -233.44), (2124.30, -222.60))
+ORB_MATCH = 4.0
+CHAIN_WAIT_ORBS = (1, 2)
+SHELTER_ORB = re.compile(r"slot \d+ orb (\d+)( wait| step)?$")
+WAIT_LOOK_MS = 4800
+CHAIN_LOOK_MS = (-1000, 3000)
+CAMP_CHAIN_BRIDGE = 4
+RELEASE_SLACK_MS = 500
 
 
 def mine(trace: Trace) -> bool:
@@ -1147,6 +1160,124 @@ def show_ringcone(trace: Trace) -> None:
           f"before the first tank death hit {total['early hit']}, dead {total['early dead']}")
 
 
+def thunder_orb_index(trace: Trace, guid, when: int) -> int | None:
+    where = at(trace, guid, when, NEAREST) if guid else None
+    if not where:
+        return None
+    return next((index for index, spot in enumerate(THUNDER_ORB_SPOTS) if dist2(where, spot) <= ORB_MATCH), None)
+
+
+class ChainWaits:
+    def __init__(self, trace: Trace, start: int):
+        self.trace = trace
+        self.camp = {note.get("g") for note in notes(trace, "thorim.rangedslot")}
+        self.orbs = {note["t"]: int(note["txt"]) for note in notes(trace, "thorim.lightningorb")
+                     if str(note.get("txt")).isdigit() and str(note.get("txt")) != "0"}
+        self.shelters = notes(trace, "thorim.shelter")
+        self.chains = chain_casts(trace, start, set(trace.roles))
+        self.cones = [rec for rec in trace.of("dmg") if rec.get("sp") == LIGHTNING_CHARGE]
+        self.deaths = [(death["g"], death["t"], blow_spell(death)) for death in combat_deaths(trace)]
+
+    def orb_of(self, lit: int) -> int | None:
+        index = thunder_orb_index(self.trace, self.orbs.get(lit), lit)
+        if index is not None:
+            return index
+        for note in self.shelters:
+            if lit - SHELTER_LEAD_MS <= note["t"] <= lit + WAIT_LOOK_MS:
+                if found := SHELTER_ORB.match(str(note.get("txt"))):
+                    return int(found.group(1))
+        return None
+
+    def died(self, guid, when: int, spells) -> bool:
+        return any(g == guid and spell in spells and abs(t - when) <= CHAIN_DEATH_MS for g, t, spell in self.deaths)
+
+    def read(self, lit: int) -> dict:
+        waits: dict = {}
+        for note in self.shelters:
+            if not lit - SHELTER_LEAD_MS <= note["t"] <= lit + WAIT_LOOK_MS:
+                continue
+            text = str(note.get("txt"))
+            if text.endswith(" wait"):
+                waits.setdefault(note["g"], {"from": note["t"], "until": None, "step": False})
+            elif note["g"] in waits and waits[note["g"]]["until"] is None:
+                waits[note["g"]].update(until=note["t"], step=text.endswith(" step"))
+        chain = next((cast for cast in self.chains if CHAIN_LOOK_MS[0] <= cast[0]["t"] - lit <= CHAIN_LOOK_MS[1]),
+                     [])
+        land = chain[0]["t"] if chain else None
+        hops = [index + 1 for index, rec in enumerate(chain) if rec["d"] in self.camp]
+        out = {"waits": waits, "camp_hops": hops,
+               "camp_dead": sum(self.died(rec["d"], rec["t"], CHAIN_LIGHTNING) for rec in chain if rec["d"] in self.camp),
+               "landed": 0, "standing": 0, "walking": 0, "chain_dead": 0, "cone_hit": 0, "cone_dead": 0, "steps": 0,
+               "lengths": []}
+        hit_at = {rec["d"]: rec["t"] for rec in chain}
+        for guid, wait in waits.items():
+            until = wait["until"]
+            if until is not None:
+                out["lengths"].append(until - wait["from"])
+            out["landed"] += land is not None and wait["from"] <= land and (until is None or
+                                                                             land <= until + RELEASE_SLACK_MS)
+            if guid in hit_at:
+                out["standing" if until is None or hit_at[guid] <= until else "walking"] += 1
+                out["chain_dead"] += self.died(guid, hit_at[guid], CHAIN_LIGHTNING)
+            cone = next((rec["t"] for rec in self.cones
+                         if rec["d"] == guid and CONE_LEAD_MS[0] <= rec["t"] - lit <= CONE_LEAD_MS[1]), None)
+            if cone is not None:
+                out["cone_hit"] += 1
+                out["cone_dead"] += self.died(guid, cone, (LIGHTNING_CHARGE,))
+            out["steps"] += wait["step"]
+        return out
+
+
+def show_chainwait(trace: Trace) -> None:
+    print("CHAIN WAITS")
+    if not mine(trace):
+        return
+    start = phase2_start(trace)
+    if start is None:
+        print("  phase 2 never started")
+        return
+    lits = lit_orbs(trace, start)
+    if not lits:
+        print("  no thorim.lightningorb probe or no lit orb in phase 2")
+        return
+    waits = ChainWaits(trace, start)
+    first_tank = first_tank_death(trace, start)
+    total = collections.Counter()
+    lengths: list[int] = []
+    for lit in lits:
+        orb = waits.orb_of(lit)
+        if orb not in CHAIN_WAIT_ORBS:
+            continue
+        read = waits.read(lit)
+        n = len(read["waits"])
+        early = first_tank is None or lit < first_tank
+        lengths += read["lengths"]
+        for key, value in (("lit", 1), ("bridged", len(read["camp_hops"]) >= CAMP_CHAIN_BRIDGE),
+                           ("camp dead", read["camp_dead"]), ("waits", n), ("landed", read["landed"]),
+                           ("standing", read["standing"]), ("walking", read["walking"]),
+                           ("chain dead", read["chain_dead"]), ("cone hit", read["cone_hit"]),
+                           ("cone dead", read["cone_dead"]), ("steps", read["steps"])):
+            total[key] += value
+            if early:
+                total["early " + key] += value
+        if not n and not read["camp_hops"]:
+            continue
+        hops = ", ".join(str(hop) for hop in read["camp_hops"]) or "-"
+        waited = (f" (released by the landing {read['landed']}, by the cap {n - read['landed']}); waiters hit by the "
+                  f"chain standing {read['standing']} / walking {read['walking']}, dead {read['chain_dead']}; by the "
+                  f"cone {read['cone_hit']}, dead {read['cone_dead']}; steps {read['steps']}") if n else ""
+        print(f"  +{(lit - start) / 1000.0:.1f} s orb {orb}: chain camp hops {hops}, {read['camp_dead']} dead; "
+              f"waits {n}{waited}")
+    print(f"  all: orbs 1-2 lit {total['lit']}, chains with {CAMP_CHAIN_BRIDGE}+ camp hits {total['bridged']}, camp "
+          f"chain deaths {total['camp dead']} ({total['early camp dead']} before the first tank death); waits "
+          f"{total['waits']} (released by the landing {total['landed']}, by the cap "
+          f"{total['waits'] - total['landed']}), wait p50 {yd(quantile([v / 1000.0 for v in lengths], .5))} max "
+          f"{yd(max(lengths) / 1000.0 if lengths else None)} s; waiters hit by the chain standing {total['standing']} / "
+          f"walking {total['walking']}, dead {total['chain dead']}; by the cone {total['cone hit']}, dead "
+          f"{total['cone dead']} ({total['early cone dead']} before the first tank death); steps after a wait "
+          f"{total['steps']}")
+
+
 def rows_before(trace: Trace, when: int) -> dict:
     last = None
     for snap in frames(trace):
@@ -1222,6 +1353,8 @@ SECTIONS = (
      "walks held for crossing the lit cone", show_ringcone),
     ("colossus", "each Runic Colossus Smash against the gauntlet healers: how far off his facing and his target "
      "each stood, the move that put it there, who it hit", show_colossus),
+    ("chainwait", "each orb 1 or 2 against the camp: shelter walks held for Chain Lightning, how they were released, "
+     "the chain's camp hops, and what the chain and the cone did to the waiters", show_chainwait),
 )
 SUMMARY = ("deaths", "phase2")
 

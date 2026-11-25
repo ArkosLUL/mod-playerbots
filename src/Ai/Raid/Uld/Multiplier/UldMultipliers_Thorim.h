@@ -9,6 +9,7 @@
 
 #include "Define.h"
 #include "Multiplier.h"
+#include "RaidCombatHelpers.h"
 
 class ThorimRunicBarrierMultiplier : public Multiplier
 {
@@ -29,6 +30,22 @@ class ThorimBalconyGuardMultiplier : public Multiplier
 public:
     ThorimBalconyGuardMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "thorim balcony guard") {}
     float GetValue(Action* action) override;
+};
+
+class ThorimChainWaitCastHoldMultiplier : public Multiplier
+{
+public:
+    ThorimChainWaitCastHoldMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "thorim chain wait cast hold") {}
+    float GetValue(Action* action) override;
+
+private:
+    struct Facts
+    {
+        CastSpellAction* cast = nullptr;
+        RaidSpellIdRef spellId;
+    };
+
+    RaidActionCache<Facts> _facts;
 };
 
 #endif

@@ -610,6 +610,31 @@ ties to the row; the note reads `slot N orb M step`. It needs no body clearance:
 the camp bot stands in the lit cone. Replayed on those walks, the step took 11 of 25 hit walkers out of
 the cone and 6 of 16 dying ones (deaths within 1.5 s); a rooted or late bot it cannot save.
 
+**A walk that passes another slot's body waits for the chain.** Measured from the lit stamp, Chain
+Lightning's cast starts at p50 0.5 s, p90 1.0, max 1.5 and lands at p50 1.05 s (395 hard-mode casts), so
+it lands mid-walk, and crossing walks bridge it: on the 53 hard-mode pulls on disk, 16 of the 20 camp chain
+deaths before the first tank death came under orbs 1 and 2, whose walks cross (slots 3 and 4 under orb 1,
+slots 0-4 under orb 2). There (`ULDUAR_THORIM_CHAIN_WAIT_ORBS`, the user's call) `ThorimCampChainWait`
+decides once per orb: a camp bot whose straight walk to its row passes within the jump (5 yd plus both
+reaches) of any floor member outside its own ranged slot stands until Thorim's Chain Lightning cast bar
+ends; the note reads `slot N orb M wait`.
+
+- **No cast, no wait.** 191 of 586 lit orbs had no Chain Lightning: the core drops a cast that fails its
+  checks and still repeats the event in 15 s. With no cast bar 1 s after the lit
+  (`ULDUAR_THORIM_CHAIN_WAIT_CAP_MS`) the bot walks; a cast that ended up to 5 s before the lit
+  (`ULDUAR_THORIM_CHAIN_WAIT_LEAD_MS`) counts as this orb's, so the bot never waits.
+- **Only when the late start is affordable:** the bot waits only if, setting off at the bar's end or the
+  cap, its row or a cone step is still in reach, or it stands outside the lit cone. After the wait the
+  in-time test and the step run as above.
+- **No cast starts while it waits:** `ThorimChainWaitCastHoldMultiplier` zeroes spells with a cast time or
+  channel, or a cast begun in the wait would hold the walk past the landing.
+
+Replayed on those pulls (1,251 orb 1 and 2 walks; the chain re-run hop by hop to the nearest unhit body,
+pets included, within 8 yd): 651 walks wait, 548 of them set off later; the reach test lets 63 walk (2
+chain hits, none dead); all 14 walkers a chain killed stand when it lands; on the 80 chains the hop model
+reproduces, camp hits at hop 5 or later fall from 14 to 4. Cone hits (37.5° off its axis, where every
+decoded hit lies): 11 walks newly end inside, 11 others leave it.
+
 `ULDUAR_THORIM_LIGHTNING_CHARGE_RANGED_MARGIN` (2.5°) is deliberately untouched: it already read that
 home as covered, at 36° inside the 40° half-width, so the absent row was the whole defect. It is far
 tighter than the ring's because a yard of boss drift is 7° at 8 yd but 2-4° at 15-32 yd, and any wider
@@ -1393,7 +1418,7 @@ navprobes, not a nudge, and each new point needs the hazard check navprobe does 
 `tools/botobs/bosses/thorim.py <trace>`, reading `thorim.p2start`, `thorim.sifjoined` (hard mode),
 `thorim.ringspot` (each ring bot's slot), `thorim.ringstep` (a ring bot stepped out of Blizzard),
 `thorim.unreach` (whom his cannot-reach flag names), `thorim.lightningorb` (the lit orb),
-`thorim.rangedslot` (the camp), `thorim.shelter` (a camp bot's home, row or cone step) and
+`thorim.rangedslot` (the camp), `thorim.shelter` (a camp bot's home, row, cone step or chain wait) and
 `thorim.ringconehold` (a ring walk held for crossing the lit cone):
 
 - `--deaths`: deaths by mechanic, phase 1 and phase 2 apart.
@@ -1429,6 +1454,10 @@ navprobes, not a nudge, and each new point needs the hazard check navprobe does 
 - `--colossus`: per Runic Colossus Smash, each healer within 20 yd of him: yards from him and off his
   facing, yards from his target, its last accepted move's mover, hit or death; then totals, with those
   within 6 yd of his target.
+- `--chainwait`: per lit orb 1 or 2 (indexed by the orb's position), the chain's camp hops and deaths and
+  the walks that waited for it: released by the landing or the cap, waiters the chain hit standing or
+  walking, cone hits and deaths on them, steps after; then totals, with chains of 4+ camp hits and camp
+  chain deaths, which traces from before the wait read too.
 
 Per snapshot the holder is the tank he hits and every other living tank on the floor waits; spacing
 counts from 15 s after the drop. Damage rows come in hop order (each hop does 1.5 times the last), and

@@ -2581,3 +2581,69 @@ in Blizzard (user's rule); a cast-time spell holding a shelter walk (server-side
 **Questions for the user:** question 1 (State).
 
 **Shared code touched:** none (Thorim files and the Thorim reader).
+
+## Round 25 (window 37: build ce636f992 with round 24)
+
+**Data:** `window37-thorim.md` (session scratchpad), one valid pull per pool; traces
+`603_{23,24,21,22,27,30}_thorim_{1795556848,1795556868,1795556724,1795556806,1795557202,1795557334}` (uld1, uld4,
+uld2, uld5, uld3, uld6), read with `thorim.py --ringcone/--blizzard/--deaths`, the new `--colossus`, `postmortem.py
+--death/--bot`, and session scratchpad `thorim_r25/` scripts (Thorim's health and the first tank death over the
+75 pulls on disk since 11-23, phase 1 deaths, the Smash geometry and the healers' last moves, a stand-off replay).
+
+| Pool | Out | Deaths by mechanic |
+|---|---|---|
+| uld1 (A) | wipe, hard, 4.0% | P1 Stomp 1 (melee); none in phase 2 until the tanks at +152 s; Thorim melee 22, CL 3, Volley 2, LC 2, Frostbolt 1, US 1 |
+| uld4 (A) | wipe, hard, 4.0% | CL 1, LC 1 (camp, +132-136 s), then tanks +141 s, Thorim melee 26, US 3, LC 1, Volley 1 |
+| uld2 (B) | kill, normal, 3 | P1: Iron Ring Guard melee, Smash (melee within 2 yd), Cleave (healer) |
+| uld5 (B) | wipe, hard, 45.2% | P1 Smash 1 (gauntlet healer); Whirlwind 1 (+46 s), tank +66.8 s (US), Thorim melee 19, CL 3, US 2, Champion 3, Volley 1 |
+| uld3 (C) | wipe, hard, 60.7% | P1 Smash 2 (both gauntlet healers), Stomp 1 (one revived); Volley 1, tank +44.8 s (melee, 9 Blizzard ticks), Thorim melee 20, US 2, Volley 1, Blizzard 1, CL 1, LC 1 |
+| uld6 (C) | wipe, hard, 32.1% | CL 2 (+26.9 s lust), Volley 2, Blizzard 3, LC 2 before the tanks at +123 s; Thorim melee 16, LC 2, CL 1, US 1, Volley 1, Frostbolt 1 |
+
+**Stop rules:** waived for Thorim (user, 2026-11-24). Done rule on this build: B has a kill, but in normal mode; A and C
+none.
+
+**Round 24 verdict (ring walks held across the lit cone): held in A, B and C.** `--ringcone`, before the first tank
+death: hits 2 / 0 (A), 0 (uld5; uld2 normal 0), 0 / 2 (C); deaths 0 / 0, 0, 0 / 1 (uld6 Uldwaj `blocked`, +116.0 s),
+1 against w35's 5. No stepped bot died standing past reach (uld1 +11.1 s one hit, alive). Held walks 3 / 2 / 0 / 0 / 4;
+2 of the 9 were hit after the hold released (uld1 +11.1 s alive, uld6 +131.3 s dead after the tanks). Melee on Thorim to
++100 s 99.7-100%. Ring melee in Blizzard 11.3-32.9 bot-s a pull (w35 0.9-54.3); one ring Blizzard death before the first
+tank death (uld6 Uldwat, 4.1 s in a zone, +79.6 s; w35 0).
+
+**Failure picked: gauntlet healers standing on the leader in the Runic Colossus' Smash** (the race is no bug; this
+loss set the two earliest collapses).
+- uld3: at 1:31.9 Uldzaf and Uldzae took `thorim gauntlet positioning action` to (2229.28, −389.65), the leader
+  Uldzab's own spot 4.4 yd south of the Colossus, and stood there 18 s; Smash at 1:49.9 hit both (24k, 29k), the tank
+  and a melee within 1.9 yd; both healers dead. Phase 2 had 2 of 4 healers: first tank death +44.8 s, wipe at 60.7%.
+  uld5 the same (1:22.9 walk, 1:47.0 Smash): Uldvaf dead, first tank death +66.8 s, wipe at 45.2%.
+- `--colossus` over 53 pulls with a Smash (61 casts) since 11-23: in 10 both gauntlet healers stood on his target
+  (4.4-4.5 yd, 0° off his facing), every time both hit, 12 dead; healers 7-13 yd behind him were never hit. Hard mode
+  6 of them, first tank death +44.8-137.3 s (p50 77) against p50 119 in hard pulls without the loss. In all ten the
+  healers' last move was the trail onto the leader from the y −360 pull line (28.9-31.3 yd).
+- Code: the trail branch of `ThorimGauntletPositioningAction::Execute` (`UldActions_Thorim.cpp:232`) walked to the
+  leader's exact spot; `ThorimTrailsGauntletLeader` (`UldEncounter_Thorim.cpp:1761`) only gates the start at 20 yd.
+- **Classification: bug.** The 20 yd tether keeps healers in range of the leader; nothing intends them on the tank.
+
+**Fix** (`UldEncounter_Thorim.cpp/.h`, `UldActions_Thorim.cpp`, Thorim only, no size, mode or player branch):
+`ThorimGauntletTrailSpot` (`:1774`) gives a trailing healer the path to the leader cut 15 yd short
+(`ULDUAR_THORIM_GAUNTLET_HEALER_STANDOFF`, asserted under the tether so the trail doesn't re-fire; core
+`ShortenPathUntilDist`), the leader's spot when no normal path exists; non-healers still walk to him (the picker hands
+them his target there). Replayed on the ten pulls: all twenty stops land 10.6 yd behind the Colossus (176-180° off his
+facing). Reader `--colossus`, tested in `test_thorim.py`; boss doc: the Smash row, the rule and the evidence. `pb-check`
+passes (syntax, pblint, codestyle, botobs).
+
+**Next window should show** (`--colossus`, every pull):
+- no healer within 6 yd of his target at a Smash, gauntlet healer Smash hits and deaths 0 (w37: 4 hit, 3 dead in 2 of 6).
+- gauntlet healers 10-15 yd behind him; no healer death in the corridor or at the Giant from falling out of heal range,
+  phase 2 still within Sif's clock in the hard-mode pulls (w37 5 of 6).
+- Watch: Stomp and Rune Detonation on healers at the Giant hold (they now stop 15 yd short of the leader there too);
+  first tank deaths no earlier than +100 s where no healer died in phase 1.
+- Watch: corridor Runic Smash (62465) on gauntlet healers, who also stop 15 yd short of a leader walking between
+  waypoint radii, where the dodge reaches them only inside a radius of their own (`ThorimResolveGauntletIndex`; w37 11
+  hits, 0 dead; 160 hits, 1 dead over the 107 pulls on disk).
+
+**Seen, not picked:** the A pulls losing the race by 4% with nothing dying before the tanks; the opening chain under
+lust (uld6); uld6's healers in Blizzard; Smash on melee standing inside the Colossus (survived); question 1.
+
+**Questions for the user:** none new; question 1 (State) stays open.
+
+**Shared code touched:** none (Thorim files and the Thorim reader).
