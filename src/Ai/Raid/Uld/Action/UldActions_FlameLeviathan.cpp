@@ -1349,7 +1349,6 @@ bool FlameLeviathanEnterVehicleAction::Execute(Event /*event*/)
 
 bool FlameLeviathanSeatAction::Leave(char const* why)
 {
-    _target.Clear();
     if (!RequestVehicleExit(bot))
         return false;
 
@@ -1370,24 +1369,8 @@ bool FlameLeviathanSeatAction::Execute(Event /*event*/)
     if (stunned || !boss->IsAlive() || !boss->IsInCombat())
         return Leave(stunned ? "shutdown" : "fight over");
 
-    Unit* turret = FlameLeviathanRiderTurret(bot);
-    if (!turret)
-    {
-        _target.Clear();
-        return FlameLeviathanRiderStranded(bot) && Leave("stranded");
-    }
+    if (Unit* turret = FlameLeviathanRiderTurret(bot))
+        return Attack(turret);
 
-    uint32 const now = getMSTime();
-    bool const fresh = !_seenMs || getMSTimeDiff(_seenMs, now) > ULDUAR_FL_RIDER_ABSENT_MS;
-    _seenMs = now;
-    if (fresh || turret->GetGUID() != _target || turret->GetHealth() < _targetHealth)
-    {
-        _target = turret->GetGUID();
-        _targetHealth = turret->GetHealth();
-        _progressMs = now;
-    }
-    else if (getMSTimeDiff(_progressMs, now) >= ULDUAR_FL_RIDER_STALL_MS)
-        return Leave("stalled");
-
-    return Attack(turret);
+    return FlameLeviathanRiderStranded(bot) && Leave("stranded");
 }
