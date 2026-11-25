@@ -558,8 +558,12 @@ to the centre (one off Permafrost) runs forward: frost first. Before it, in 12 p
 test pools a burrower stood behind a side tank 29% of their contact, 95% of that on a hold walk and
 about half on the 7 yd crawl to the rim under the patch's 80% slow, landing 0.61 hits a second against
 0.34 walking and 0.29 standing with it in front (CT, CU, CV: 21%, 0.51, 0.36, 0.23). Backing up runs at
-`MOVE_RUN_BACK` (4.5 against 7), so a walk takes 1.56 times as long and saves about an eighth of its
-hits; `AnubarakSpikeReachesFirst` times it at that speed.
+`MOVE_RUN_BACK` (4.5 against 7), so a walk takes 1.56 times as long; `AnubarakSpikeReachesFirst` times it
+at that speed. In the 12 pulls after it a backed-up walk landed 0.28 hits a second, as standing does,
+but behind time only fell to 22% and the landed rate held (0.36 against 0.38): a `back` decision
+doesn't reach a forward walk the move gates hold (`IsWaitingForLastMove` at the same `MOVEMENT_COMBAT`
+priority, `IsDuplicateMove` for the same hold, neither comparing `backwards`), so 38% of the walking
+under it went forward at 0.69 a second; centre walks added 9.6% of contact at 0.64.
 
 **The test pools' side tanks avoid as well as the user's.** Standing with a burrower in front, 0.55 of
 its swings landed in those pulls and in CT, CU and CV alike (read off the gaps between one burrower's
@@ -567,7 +571,11 @@ landed hits, 1.22 s a swing): pool paladins 0.51-0.54 against Bulwark's 0.57, bl
 against Felesta's 0.50, bears 0.51-0.63, warriors 0.59-0.62. A hit at equal Expose Weakness is within
 13% of theirs, and no tank's hits cluster at twice the median, which a tank under the defense cap
 would show: burrowers are level 83. The pools' extra landed hits are time with a burrower behind
-(above) and more swings a second in front (0.29 landed a second against 0.24 at the same 0.55).
+(above) and more swings a second in front (0.29 landed a second against 0.24 at the same 0.55). By
+class the bear takes the most: burrower damage a contact second before phase 3, over 30 pulls of
+2026-11-25, bear 6.1k, warrior 5.1k, blood DK 4.5k, paladin 3.5k (Felesta 3.7k, Bulwark 3.0k), and a
+bear side tank died first in 17 of the 20 pulls with one; CT, CU and CV had their bear, Ecoterrorist, on
+him.
 
 **Side tanks spend their area threat** (`anubarak side tank area threat`, `anub.saoe`). Taunts took
 burrowers back in a median 0.4-0.9 s of 24-33 pull-offs a pull (2026-10-30 BA-BE); "medium aoe" needs
