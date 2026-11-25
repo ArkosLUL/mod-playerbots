@@ -65,8 +65,9 @@ healers, 19 DPS):
    draggers for three marks; two marks healed on the pile (one unclaimed, the bear's Growl missed on the other),
    reaching 11 other Guardians, and both tanks died +6.0/+6.4 s (Q5). uld5: B's late race, tanks dead at the 12%
    crossing.
-2. Draggers killed by their marks (window 51: uld3 4, uld6 3): a false `missed` verdict at a Drain Life's end (r30),
-   defensives spent before the heal, the return queue (3 marks back on 2 tanks' 8 s taunts).
+2. Draggers killed by their marks (window 51: uld3 4, uld6 3): the mark's first swing after a kick ends its Drain
+   Life (uld3 Uldzam, 33.8k), defensives spent before the heal, the return queue (3 marks back on 2 tanks' 8 s
+   taunts).
 3. Fresh Guardians on raiders: 10 pre-collapse deaths in window 51 (14 in window 49), mostly ranged and healers at
    +2-12 s of a Guardian's life.
 4. Phase 1 at the handover: 6 (uld3 three melee in one tick at 62-64%, 6.6 s after the previous nova; Sara's
@@ -178,18 +179,19 @@ Guardian deaths 121 → 77, kills 2 → 4, median deaths 30.5 → 8.5.
 **Stop rules.** Not polished: A has its kill (uld1, 2 deaths, Freya-only mask), B's best is 6 (uld2), C's 11 (uld6).
 Not stuck: phase 3 Guardians stay first, but r30 picks a new mechanism (beacon drags were r26 and r28, each fixed).
 
-**Picked: draggers lost to a false `missed` verdict.** uld3's wipe came at beacon 3 (10:36): `beaconstage` picked
+**Picked: a false `missed` verdict at a Drain Life's end.** uld3's wipe came at beacon 3 (10:36): `beaconstage` picked
 two (Uldzak, Uldzas) for three marks, the bear's Growl missed, one mark had no claim, and the heal at 10:46.3 reached
 11 other Guardians on the pile; both tanks died +6.0/+6.4 s. Every paladin and DK was dead by then: Uldzao in the
 handover nova, Uldzaw on its beacon 1 return (+5.6 s, its DP spent 8 s before the heal), Uldzai on its beacon 2
-return (+7.0 s, IBF spent at beacon 1), and Uldzam to a verdict that was wrong:
+return (+7.0 s, IBF spent at beacon 1), and Uldzam to his mark's first swing, just after a verdict that was wrong:
 
 - 9:49.06 Guardian …633 (a mark) starts Drain Life on Uldzaj; 9:49.40 Uldzam's Dark Command on it; 9:51.381 a kick
   cuts the channel; 9:51.390 `yogg.beacondrag missed`; the claim goes to the hunter Uldzau; 9:51.601 …633 one-shots
   Uldzam (33.8k at 100%, the taunt had taken); 9:54.35 Uldzau's Distracting Shot takes …633, which kills Uldzau at
-  9:58.8. One verdict, two draggers.
-- uld5 10:26.887: the same, Uldvan's Hand of Reckoning, the channel cut 10:26.9, the mark on Uldvan 0.14 s later;
-  the claim went to a second paladin.
+  9:58.8. The verdict cost neither death (review): Uldzam's death 0.21 s later would have freed the mark for
+  Uldzau all the same, and the shot waits on the mark's time left, not the claim.
+- uld5 10:26.887: the same, Uldvan's Hand of Reckoning, the channel cut 10:26.9, the mark on Uldvan 0.14 s later
+  (absorbed, he lived); the claim went to a second paladin, Uldvaw, whose taunt then took it off him.
 
 Cause: `YoggSaronBeaconDragGuardian` (`UldEncounter_YoggSaron.cpp:1708-1720`) waits out a channel that hides the
 victim switch (`channelMs` elapsed, `…_TAUNT_LAND_MS`), but the tick the channel ends `channelMs` reads −1 and the
@@ -207,8 +209,9 @@ human draggers or not. No shared code.
 **Next window must show:**
 
 - `missed taunts`: the mark on its dragger within 1 s after 0 and at a Drain Life's end 0 (window 51: 2 of 6).
-- No dragger killed within 2 s of a `missed` on its own claim; the hand-off on a real miss at most 1 s later than
-  before (`missed` to the next `claim`).
+- No second dragger claiming a mark already on its first; the hand-off on a real miss at most 1 s later than before
+  (`missed` to the next `claim`). A dragger one-shot by its mark's first swing after a kick is open failure 2, not
+  a verdict on r30: the fix saves a spare dragger's taunt, not the first dragger.
 - r29 held: behind under 30% / 32% per composition, first tank death after 12% no earlier than window 51.
 
 **Question.** Q5 in State (a mark with no free dragger; recommended: the tank with fewer Guardians drags it).

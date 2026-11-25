@@ -1774,9 +1774,9 @@ every 5 s until it lands, and a Guardian it hits reschedules the next 45 s out
   claim goes to the next bot with a taunt ready, rather than sitting out an 8 s cooldown after a `MISS`.
   Not under a Drain Life already running when the taunt landed, nor 1 s past its end (`hiddenMs`,
   `…_BEACON_TAUNT_LAND_MS`): the Guardian's `UpdateAI` returns while casting, before `UpdateVictim`, and
-  switches 0.1-0.2 s after the channel ends. Verdicts on the tick a kick cut it handed on two taunts that
-  had taken; one of those marks one-shot its dragger, then the hunter given it. A channel started later
-  doesn't hide the switch. Death Grip is impossible (immunity set −286: GRIP, PULL_TOWARDS, ROOT, SNARE).
+  switches 0.1-0.2 s after the channel ends, so a verdict on the tick a kick cut it handed a held mark to a
+  second dragger. A channel started later doesn't hide the switch. Death Grip is impossible (immunity set
+  −286: GRIP, PULL_TOWARDS, ROOT, SNARE).
 - **Draggers are pre-staged, by the user's choice** (`YoggSaronTickBeacon`, `yogg-saron beacon stage`,
   `ACTION_RAID + 3.5`). 5 s before the next beacon is due (off the last first mark) the claim's rules and
   order pick `RAID_MODE(1, 3)` stagers, lanes north / south / north-east in order; the claim gives a stager
