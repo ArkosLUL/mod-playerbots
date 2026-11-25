@@ -130,7 +130,8 @@ TURRET_SPOTS = {"rear-left": (0.6, 3.0), "rear-right": (0.6, -3.0),
                 "front-left": (4.0, 1.6), "front-right": (4.0, -1.6)}
 RIDER_BEHIND_TURRET = 1.2
 SET_FACING_DEG = 45.0
-RIDER_ARC_DEG = 90.0            # keep at half of ULDUAR_FL_RIDER_ARC
+CAST_ARC_DEG = 90.0
+BOSS_MOVED_YD = 0.5
 RIDER_CAP = {True: 2, False: 1}  # keep in step with ULDUAR_FL_RIDER_CAP_25 and _10
 
 
@@ -1840,7 +1841,15 @@ def seat_bearing(rider_seat: str, turret_seat: str) -> float:
 def bearing_band(degrees: float) -> str:
     if degrees <= SET_FACING_DEG:
         return "ahead"
-    return "flank" if degrees <= RIDER_ARC_DEG else "behind"
+    return "flank" if degrees <= CAST_ARC_DEG else "behind"
+
+
+def turn_sample(boss: tuple[float, float, float], moved: bool, rider: tuple[float, float, float],
+                turret: tuple[float, float]) -> str | None:
+    if bearing_deg((rider[0], rider[1]), boss[2], turret) <= CAST_ARC_DEG:
+        return None
+    faced = bearing_deg((rider[0], rider[1]), rider[2], turret) <= CAST_ARC_DEG
+    return f"{'moving' if moved else 'still'} {'faced' if faced else 'not'}"
 
 
 def concurrent_max(stays: list[tuple[int, int]]) -> int:
@@ -1865,21 +1874,27 @@ def rider_stays(trace: Trace, fl: Fight) -> list[dict]:
         for start, stop, _after in seat_stays(track, ON_HIS_SEAT):
             why = next((txt for t, txt in jumps.get(member, ()) if abs(t - stop) <= JUMP_NOTE_MS), "ejected")
             stays.append({"g": member, "cls": classes.get(member, 0), "start": start, "stop": stop, "end": why,
-                          "seat": None, "dealt": collections.Counter(), "secs": collections.Counter()})
+                          "seat": None, "dealt": collections.Counter(), "secs": collections.Counter(),
+                          "turned": collections.Counter()})
     stays.sort(key=lambda stay: stay["start"])
 
     samples: dict[int, list[tuple[int, int, str | None]]] = collections.defaultdict(list)
     seats: dict[int, collections.Counter] = collections.defaultdict(collections.Counter)
+    last = None
     for snap in trace.of("snap"):
         when = snap["t"]
         live = [index for index, stay in enumerate(stays) if stay["start"] <= when < stay["stop"]]
         if not live:
+            last = None
             continue
         rows = {row[0]: row for row in snap.get("u", [])}
         boss = next((row for guid, row in rows.items() if trace.entries.get(guid) == BOSS_ENTRY), None)
         if not boss:
+            last = None
             continue
         frame = (boss[1], boss[2], boss[4])
+        moved = last is not None and math.hypot(frame[0] - last[0], frame[1] - last[1]) > BOSS_MOVED_YD
+        last = frame
         for index in live:
             row = rows.get(stays[index]["g"])
             if not row or len(row) <= 11:
@@ -1888,6 +1903,10 @@ def rider_stays(trace: Trace, fl: Fight) -> list[dict]:
             target = rows.get(row[7]) if trace.entries.get(row[7]) == TURRET_ENTRY else None
             aim = seat_label(his_frame(frame, (target[1], target[2])), rider=False) if target else None
             samples[index].append((when, row[11], aim))
+            if target:
+                turn = turn_sample(frame, moved, (row[1], row[2], row[4]), (target[1], target[2]))
+                if turn:
+                    stays[index]["turned"][turn] += 1
 
     for index, stay in enumerate(stays):
         if not seats[index]:
@@ -1902,12 +1921,23 @@ def rider_stays(trace: Trace, fl: Fight) -> list[dict]:
     return stays
 
 
+def turned_line(stays: list[dict]) -> str:
+    turned = sum((stay["turned"] for stay in stays), collections.Counter())
+    parts = []
+    for motion in ("moving", "still"):
+        faced, total = turned[f"{motion} faced"], turned[f"{motion} faced"] + turned[f"{motion} not"]
+        if total:
+            parts.append(f"while he is {motion} {faced}/{total} ({100 * faced / total:.0f}%)")
+    return ("riders turned onto a turret behind them (past 90 deg of his heading): " +
+            (", ".join(parts) if parts else "no such samples"))
+
+
 def show_riders(trace: Trace) -> int:
     fl = fight(trace)
     stays = rider_stays(trace, fl)
     cap = RIDER_CAP[trace.header.get("diff") in (1, 3)]
     print("His seats: who rode, which seat, how each stay ended, and the damage each rider dealt by where\n"
-          f"its turret sat against his heading (ahead <= {SET_FACING_DEG:.0f} deg, flank <= {RIDER_ARC_DEG:.0f},"
+          f"its turret sat against his heading (ahead <= {SET_FACING_DEG:.0f} deg, flank <= {CAST_ARC_DEG:.0f},"
           " behind)\n")
     if not stays:
         print("  nobody rode his seats")
@@ -1925,6 +1955,7 @@ def show_riders(trace: Trace) -> int:
           + f" (cap {cap}); hunters seated {sum(1 for s in stays if s['cls'] == HUNTER_CLASS)} (want 0)")
     print("  damage dealt at a turret " + ", ".join(
         f"{band} {dealt / secs:,.0f}/s over {secs:.0f} s" for band, (dealt, secs) in totals.items() if secs))
+    print("  " + turned_line(stays))
     print("  seats " + ", ".join(f"{seat} {n}" for seat, n in
                                  collections.Counter(s["seat"] or "?" for s in stays).most_common())
           + "; ended " + ", ".join(f"{why} {n}" for why, n in
@@ -2015,6 +2046,7 @@ def show_mechanics(trace: Trace) -> int:
               f" (cap {RIDER_CAP[trace.header.get('diff') in (1, 3)]}), hunters seated"
               f" {sum(1 for s in stays if s['cls'] == HUNTER_CLASS)}; rider damage at a turret "
               + ", ".join(rates) + " (--riders)")
+        print(f"     {turned_line(stays)}")
 
     pickups = holder_spans(trace, "fl.pickup", fl.end)
     assigned = sum(1 for track in pickups.values() for held, _s, _e in track if held not in ("0", ""))

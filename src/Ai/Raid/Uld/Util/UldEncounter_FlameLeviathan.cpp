@@ -1678,17 +1678,6 @@ Unit* FlameLeviathanBossUnder(Player* rider)
     Unit* seat = rider ? rider->GetVehicleBase() : nullptr;
     return seat && seat->GetEntry() == NPC_FL_SEAT ? seat->GetVehicleBase() : nullptr;
 }
-
-float FlameLeviathanRiderBearing(Unit* rider, Unit* boss, Unit* turret)
-{
-    float const bearing = Position::NormalizeOrientation(rider->GetAngle(turret) - boss->GetOrientation());
-    return bearing > float(M_PI) ? 2.0f * float(M_PI) - bearing : bearing;
-}
-
-bool FlameLeviathanRiderFaces(Unit* rider, Unit* boss, Unit* turret)
-{
-    return FlameLeviathanRiderBearing(rider, boss, turret) <= ULDUAR_FL_RIDER_ARC / 2.0f;
-}
 }
 
 Unit* FlameLeviathanRiderTurret(Player* bot)
@@ -1699,20 +1688,14 @@ Unit* FlameLeviathanRiderTurret(Player* bot)
         return nullptr;
 
     Unit* best = nullptr;
-    float bestBearing = 0.0f;
     for (uint8 i = 0; i < ULDUAR_FL_LEVIATHAN_SEATS; ++i)
     {
         Unit* turret = FlameLeviathanSeatTurret(kit->GetPassenger(i));
-        if (!turret || turret->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE) || !bot->IsValidAttackTarget(turret) ||
-            !FlameLeviathanRiderFaces(bot, boss, turret))
+        if (!turret || turret->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE) || !bot->IsValidAttackTarget(turret))
             continue;
 
-        float const bearing = FlameLeviathanRiderBearing(bot, boss, turret);
-        if (!best || bearing < bestBearing)
-        {
+        if (!best || bot->GetExactDistSq(turret) < bot->GetExactDistSq(best))
             best = turret;
-            bestBearing = bearing;
-        }
     }
 
     return best;
@@ -1725,30 +1708,28 @@ bool FlameLeviathanRiderStranded(Player* bot)
     if (!kit || FlameLeviathanRiderTurret(bot))
         return false;
 
-    std::vector<Unit*> riders;
+    bool turretLeft = false;
+    uint32 riders = 0;
+    Player* leaver = nullptr;
     for (uint8 i = 0; i < ULDUAR_FL_LEVIATHAN_SEATS; ++i)
     {
         Unit* seat = kit->GetPassenger(i);
-        Vehicle* seatKit = seat && seat->GetEntry() == NPC_FL_SEAT ? seat->GetVehicleKit() : nullptr;
-        Unit* rider = seatKit ? seatKit->GetPassenger(ULDUAR_FL_SEAT_RIDER) : nullptr;
-        if (rider && rider != bot)
-            riders.push_back(rider);
-    }
+        if (FlameLeviathanSeatTurret(seat))
+            turretLeft = true;
 
-    for (uint8 i = 0; i < ULDUAR_FL_LEVIATHAN_SEATS; ++i)
-    {
-        Unit* turret = FlameLeviathanSeatTurret(kit->GetPassenger(i));
-        if (!turret || FlameLeviathanRiderFaces(bot, boss, turret))
+        Vehicle* seatKit = seat && seat->GetEntry() == NPC_FL_SEAT ? seat->GetVehicleKit() : nullptr;
+        Unit* passenger = seatKit ? seatKit->GetPassenger(ULDUAR_FL_SEAT_RIDER) : nullptr;
+        Player* rider = passenger ? passenger->ToPlayer() : nullptr;
+        if (!rider)
             continue;
 
-        bool const covered = !turret->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE) &&
-                             std::any_of(riders.begin(), riders.end(), [boss, turret](Unit* rider)
-                                         { return FlameLeviathanRiderFaces(rider, boss, turret); });
-        if (!covered)
-            return true;
+        ++riders;
+        if (GET_PLAYERBOT_AI(rider) && (!leaver || rider->GetGUID() < leaver->GetGUID()))
+            leaver = rider;
     }
 
-    return false;
+    uint32 const cap = IsRaid25Man(bot) ? ULDUAR_FL_RIDER_CAP_25 : ULDUAR_FL_RIDER_CAP_10;
+    return turretLeft && riders >= cap && leaver == bot;
 }
 
 Unit* FlameLeviathanPickupChopper(PlayerbotAI* /*botAI*/, Player* member)

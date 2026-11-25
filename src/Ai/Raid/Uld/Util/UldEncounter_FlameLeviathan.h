@@ -233,9 +233,6 @@ inline constexpr uint32 ULDUAR_FL_SEAT_CLAIM_MS = 15000;
 inline constexpr uint32 ULDUAR_FL_SEAT_CLAIM_GRACE_MS = 2000;
 inline constexpr uint32 ULDUAR_FL_RIDER_CAP_25 = 2;
 inline constexpr uint32 ULDUAR_FL_RIDER_CAP_10 = 1;
-inline constexpr float ULDUAR_FL_RIDER_ARC = float(M_PI);
-inline constexpr uint32 ULDUAR_FL_RIDER_STALL_MS = 15000;
-inline constexpr uint32 ULDUAR_FL_RIDER_ABSENT_MS = 5000;
 
 inline constexpr float ULDUAR_FL_PICKUP_ARRIVE = 3.0f;
 inline constexpr uint32 ULDUAR_FL_PICKUP_TIMEOUT_MS = 20000;

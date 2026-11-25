@@ -272,14 +272,15 @@ The core chain, read from `boss_flame_leviathan.cpp`, the DBC and `conditions`:
   70.8k health and takes damage only from players on his seats, and only once activated: until then
   it is `NOT_SELECTABLE`. Seats 0-3 are rear-left, rear-right, front-left, front-right (VehicleSeat
   3043, 3065, 3071, 3072), so a 25-man pair is one **side**, and all four take a rider on each side.
-- **A rider sees his turrets at fixed bearings**: every seat faces his heading, a rider sits 1.2 yd
-  behind its own turret and cannot turn (each move of his resets its orientation). From a rear seat
-  they sit at 0°, 17° (same-side front), 45° and 79° (other-side rear); from a front seat at 0°,
-  69° (other front), 116° and 148°. The core's facing check is ±90°, but `set facing` fires past
-  ±45° and outranks the rotation, so on a target past 45° it re-turned the rider every tick and
-  nothing was cast: window48 riders dealt ~3.3k/s at a turret ≤45°, ~370/s at 69-79°, ~340/s
-  behind, and the fight stalled 3-14 min whenever only such turrets were left. Hence riders block
-  `set facing`, and a rear rider can reach all four turrets, a front rider only the two fronts.
+- **A rider can turn**: 33114's seat 0 (VehicleSeat 3044) has `ALLOW_TURNING`, so a rider faces
+  and kills every activated turret from any seat. A seat faces his heading and a rider sits 1.2 yd
+  behind its own turret: from a rear seat the turrets sit at 0°, 17° (same-side front), 45° and 79°
+  (other-side rear), from a front seat at 0°, 69° (other front), 116° and 148°, against the core's
+  ±90° cast facing check. A bot keeps a turn only through its seat offset
+  ([vehicles](../../engine/raid-mechanics-lessons.md#vehicles-and-flight)); without it, in window48
+  riders faced a turret behind them in 10 of 3,259 samples while he moved, dealt ~3.3k/s at a
+  turret ≤45°, ~370/s at 69-79° and ~340/s behind, and the fight stalled 3-14 min whenever only
+  such turrets were left.
 - **Hunters never ride.** A shot's minimum range is `max(both combat reaches + 4/3, 5)` = 5 yd
   (turret reach 2.0), and his own turret sits 1.2 yd from every seat, its partner 2.6 or 4.8 yd:
   a hunter can shoot one or two turrets of the other side, never its own pair. Seated hunters fell
@@ -305,16 +306,14 @@ What the bots do, each seat's job done by whoever sits there, human or bot:
   not counted), or still loaded when he shuts down, leaves seat 3 and clicks back onto its gun
   (`fl.unload` `wait` or `shutdown`).
 - **Rider** (`flame leviathan seat`, an `Exclusive` rule over its movement and pickers, plus a block on
-  `set facing`, Frost Nova, Blink, Disengage and charges: a gnome mage Blinked off within 2-6 s of
-  every landing) attacks the activated turret nearest its heading within ±90°
-  (`ULDUAR_FL_RIDER_ARC`), and stays seated, immune, until he shuts down, then leaves (`fl.jump`
-  `shutdown`). It leaves early only when **stranded** (no turret to attack while a live one sits
-  outside its arc and no other rider's, which only happens on a front seat) or **stalled** (its target
-  lost no health for `ULDUAR_FL_RIDER_STALL_MS`, 15 s). Either frees the cap, and the hookshot skips a
-  seat whose turret died (its device channels Overload Circuit), so the next throw lands where the
-  work is. Off his back a rider is
-  on foot under 15k Flame Vents ticks. Vehicle 341's exit launches and knocks back the rider; Smoke
-  Trail's Parachute 61242 feather-falls it.
+  Frost Nova, Blink, Disengage and charges: a gnome mage Blinked off within 2-6 s of every landing)
+  attacks the nearest activated turret, its own first, and stays seated, immune, until he shuts
+  down, then leaves (`fl.jump` `shutdown`). It leaves early only when **stranded**: its side's
+  turrets are dead, the other side's wait unactivated, and the riders on him fill the cap, so no
+  throw can go out; the bot aboard with the lowest guid leaves. That frees the cap, and the hookshot
+  skips a seat whose turret died (its device channels Overload Circuit), so the next throw lands on
+  the other side. Off his back a rider is on foot under 15k Flame Vents ticks. Vehicle 341's exit
+  launches and knocks back the rider; Smoke Trail's Parachute 61242 feather-falls it.
 - **Pickup**: each raider on foot in the arena — not in hookshot flight, not claimed, not within 15 yd
   of a gunnerless demolisher — gets the nearest chopper with a usable driver and an empty rear seat
   (`fl.pickup`, kept 20 s). The driver parks 2 yd off them; they walk to it and click (65030 seats a
@@ -661,19 +660,20 @@ so the next silent election failure is visible.
   rider leaving on its own, with why, so 6 → 9 without it is his eject. Also `fl.load`, `fl.claim`,
   `fl.origin`, `fl.unload`, `fl.pickup`, `fl.heal`, `fl.regun` and `fl.crate`; First Aid Kit heals are
   `heal` rows of 64660. `--riders` names each stay's seat and end, and splits the rider's damage (the
-  snapshot's dealt column) by its target's bearing: ahead ≤45°, flank ≤90°, behind.
+  snapshot's dealt column) by its target's bearing from his heading: ahead ≤45°, flank ≤90°,
+  behind; it also counts the samples where a rider faced a target behind, while he moves and while
+  he stands.
 
 ## Known gaps
 
-- **Unverified rider reach**: that with `set facing` blocked a rider hits a flank turret (69-79°;
-  `--riders` flank should near ahead's rate), and whether a cast-time spell at a turret behind it
-  completes. Whether the stun pays for the riders' lost Mortar, crate grabs and Increased Speed (a
-  Pursued demolisher whose gunner is away has none) is open too. Load into Catapult's 30 s cooldown
-  floors the cycle.
+- **Unverified rider turning**: that a bot rider faces a turret behind it while he moves and deals
+  near ahead's rate at flank and behind turrets (`--riders`). Whether the stun pays for the riders'
+  lost Mortar, crate grabs and Increased Speed (a Pursued demolisher whose gunner is away has none)
+  is open too. Load into Catapult's 30 s cooldown floors the cycle.
 - **Nothing picks the landing seat**: the hookshot takes the free seat nearest the passenger in
   flight. In window48, throws from his front half landed 37 front, 31 rear and missed 14; from
-  behind him 18 rear, 6 front and missed 27. Two front riders kill only the fronts and are then
-  stranded.
+  behind him 18 rear, 6 front and missed 27. Two riders on one side activate only its pair, so one
+  of them must leave stranded before a throw can reach the other side.
 - **A crewless bot walks to its pickup**, on foot under Missile Barrage and, outside a stun, Flame Vents
   (500 yd), which killed 22 of 26 bots in one wipe before pickups. With every chopper's rear seat
   full it gets no pickup and walks to any open seat.

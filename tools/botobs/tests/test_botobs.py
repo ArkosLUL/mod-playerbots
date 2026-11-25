@@ -787,13 +787,24 @@ class FlameLeviathanReader(unittest.TestCase):
         self.assertEqual(flame_leviathan.seat_label((2.8, -1.6), rider=True), "front-right")
         self.assertEqual(flame_leviathan.seat_label((4.0, 1.6), rider=False), "front-left")
 
-    def test_a_rear_rider_sees_every_turret_and_a_front_rider_neither_rear_one(self):
+    def test_turret_bearings_from_his_heading_on_a_rear_and_a_front_seat(self):
         bands = {seat: {aim: flame_leviathan.bearing_band(flame_leviathan.seat_bearing(seat, aim))
                         for aim in flame_leviathan.TURRET_SPOTS} for seat in flame_leviathan.TURRET_SPOTS}
         self.assertEqual(bands["rear-left"], {"rear-left": "ahead", "front-left": "ahead",
                                               "front-right": "ahead", "rear-right": "flank"})
         self.assertEqual(bands["front-right"], {"front-right": "ahead", "front-left": "flank",
                                                 "rear-left": "behind", "rear-right": "behind"})
+
+    def test_turn_sample_counts_only_turrets_behind_the_cast_arc(self):
+        boss = (0.0, 0.0, 0.0)
+        self.assertIsNone(flame_leviathan.turn_sample(boss, True, (0.0, 0.0, 0.0), (2.0, 1.0)))
+        self.assertEqual(flame_leviathan.turn_sample(boss, True, (0.0, 0.0, 0.0), (-2.0, 1.0)), "moving not")
+        self.assertEqual(flame_leviathan.turn_sample(boss, False, (0.0, 0.0, math.pi), (-2.0, 1.0)), "still faced")
+        stays = [{"turned": collections.Counter({"moving not": 3, "moving faced": 1})},
+                 {"turned": collections.Counter({"still faced": 2})}]
+        self.assertEqual(flame_leviathan.turned_line(stays),
+                         "riders turned onto a turret behind them (past 90 deg of his heading): "
+                         "while he is moving 1/4 (25%), while he is still 2/2 (100%)")
 
     def test_concurrent_max_counts_overlapping_stays(self):
         self.assertEqual(flame_leviathan.concurrent_max([(0, 10), (5, 20), (10, 30), (25, 40)]), 2)

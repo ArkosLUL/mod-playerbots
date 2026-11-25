@@ -5,8 +5,25 @@
  */
 
 #include "ServerFacade.h"
+#include "DBCEnums.h"
+#include "DBCStructure.h"
 #include "Player.h"
 #include "TargetedMovementGenerator.h"
+#include "Vehicle.h"
+
+namespace
+{
+void KeepSeatFacing(Player* bot, float angle)
+{
+    Vehicle* vehicle = bot->GetVehicle();
+    VehicleSeatEntry const* seat = vehicle ? vehicle->GetSeatForPassenger(bot) : nullptr;
+    if (!seat || !(seat->m_flags & VEHICLE_SEAT_FLAG_ALLOW_TURNING) || seat->CanControl())
+        return;
+
+    bot->m_movementInfo.transport.pos.SetOrientation(
+        Position::NormalizeOrientation(angle - vehicle->GetBase()->GetOrientation()));
+}
+}
 
 float ServerFacade::GetDistance2d(Unit* unit, WorldObject* wo)
 {
@@ -51,6 +68,7 @@ void ServerFacade::SetFacingTo(Player* bot, WorldObject* wo, bool /*force*/)
     // else
     // {
     bot->SetOrientation(angle);
+    KeepSeatFacing(bot, angle);
 
     if (!bot->IsRooted())
         // enforce (bool self) true otherwhise when using real-client with SelfBot wont
