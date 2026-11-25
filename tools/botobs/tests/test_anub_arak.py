@@ -6697,5 +6697,71 @@ class SideTankHealthLines(unittest.TestCase):
         self.assertIn("healer mana at the engage: Mercy 80%\n", text)
 
 
+R37_SIDE = 7101
+R37_B1, R37_B2 = CREATURE | 1801, CREATURE | 1802
+
+
+def r37_pull() -> list[dict]:
+    def frame(when):
+        walking = 4000 <= when < 6000
+        tank = [R37_SIDE, X, Y, Z, 0.0, 100.0, 100.0, R37_B1, 1 if walking else 0, 0, 0, 0]
+        units = [tank, [R37_B1, X + 3.0, Y, Z, math.pi, 100.0, 0.0, R37_SIDE, 0, 0, 0, 0]]
+        if when < 8000:
+            units.append([R37_B2, X - 3.0 if walking else X + 2.0, Y + 1.0, Z, 0.0, 100.0, 0.0, R37_SIDE, 0, 0, 0, 0])
+        return {"t": when, "e": "snap", "hz": [], "u": units}
+
+    records = [
+        {"e": "hdr", "v": 14, "ts": 1791100000000, "map": ab.MAP_TOC, "inst": 9, "diff": 3, "boss": "anub-arak",
+         "roster": [{"g": R37_SIDE, "n": "Felesta", "r": "tank", "c": 6, "h": 0}]},
+        {"t": 0, "e": "pull", "boss": "anub-arak", "src": "engage"},
+        {"t": -500, "e": "unit", "g": BOSS, "en": ab.NPC_ANUBARAK, "n": "Anub'arak", "b": 1},
+        {"t": 0, "e": "unit", "g": R37_B1, "en": ab.NPC_BURROWER, "n": "Nerubian Burrower"},
+        {"t": 0, "e": "unit", "g": R37_B2, "en": ab.NPC_BURROWER, "n": "Nerubian Burrower"},
+        note(0, R37_SIDE, "anub.phase", 1),
+        note(0, R37_SIDE, "anub.side0", R37_SIDE),
+        note(3900, R37_SIDE, "anub.backup", "back"),
+        dmg(500, R37_B1, R37_SIDE, 0, 5000), dmg(1720, R37_B1, R37_SIDE, 0, 5000),
+        dmg(3700, R37_B1, R37_SIDE, 0, 5000),
+        dmg(4500, R37_B2, R37_SIDE, 0, 5000), dmg(5500, R37_B2, R37_SIDE, 0, 5000),
+        dmg(9800, R37_B1, R37_SIDE, 0, 5000),
+        note(10000, R37_SIDE, "anub.phase", 3),
+        {"t": 10000, "e": "end", "out": "wipe"},
+    ]
+    records += [frame(when) for when in range(0, 10500, 500)]
+    return records
+
+
+class SideTankFacingLines(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        cls.trace = write_trace(cls.folder.name, "649_9_anub-arak_1791100000.ndjson", r37_pull())
+        cls.samples = ab.Samples(cls.trace)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_contact_and_hits_split_by_walking_and_behind(self):
+        row = ab.side_tank_facing(self.trace, self.samples)[R37_SIDE]
+        self.assertEqual(row[(False, False)], {"ms": 13500, "landed": 4})
+        self.assertEqual(row[(True, False)], {"ms": 2000, "landed": 0})
+        self.assertEqual(row[(True, True)], {"ms": 2000, "landed": 2})
+        self.assertEqual(row[(False, True)], {"ms": 0, "landed": 0})
+
+    def test_landed_a_swing_counts_standing_front_gaps_only(self):
+        row = ab.side_tank_facing(self.trace, self.samples)[R37_SIDE]
+        self.assertEqual((row["gaps"], row["swings"]), (2, 3))
+
+    def test_the_lines_print(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            ab.show_tanks(self.trace)
+        text = out.getvalue()
+        self.assertIn("Felesta      standing front 13.5 s 4 0.30/s, behind 0.0 s 0; walking front 2.0 s 0,"
+                      " behind 2.0 s 2 1.00/s; a swing 0.67 (2 gaps)\n", text)
+        self.assertIn("anub.backup: Felesta back 1\n", text)
+
+
 if __name__ == "__main__":
     unittest.main()

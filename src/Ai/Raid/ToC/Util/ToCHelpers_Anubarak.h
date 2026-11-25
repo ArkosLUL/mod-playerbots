@@ -45,6 +45,7 @@ inline constexpr float ANUBARAK_GRIP_STEP_OUT = 16.0f;
 inline constexpr float ANUBARAK_GRIP_REACH_MARGIN = 3.0f;
 
 inline constexpr float ANUBARAK_SIDE_TANK_RIM = 7.0f;
+inline constexpr float ANUBARAK_SIDE_BACKUP_REACH = 8.0f;
 inline constexpr float ANUBARAK_MELEE_BURROWER_REACH = 4.5f;
 inline constexpr float ANUBARAK_MELEE_PATCH_CLEARANCE = 8.0f;
 inline constexpr float ANUBARAK_SWARM_MELEE_REACH_MARGIN = 0.25f;
@@ -248,7 +249,7 @@ bool AnubarakLustOpen(PlayerbotAI* botAI);
 Creature* GetPursuingSpike(Player* bot);
 Player* GetSpikeTarget(Player* bot);
 bool AnubarakSpikeLaneCrosses(Player* bot, Position const& spot);
-bool AnubarakSpikeReachesFirst(Player* bot, Position const& spot);
+bool AnubarakSpikeReachesFirst(Player* bot, Position const& spot, bool backwards = false);
 
 bool IsFrostSphereFlying(Unit* sphere);
 bool IsFrostSphereFalling(Unit* sphere);
@@ -260,6 +261,7 @@ Position GetAnubarakTankSidePoint(uint8 side);
 Creature* GetAnubarakTankPatch(Player* bot, uint8 side);
 Position GetAnubarakTankSpot(Player* bot, uint8 side);
 Position GetAnubarakSideTankHold(Player* bot, uint8 side);
+bool AnubarakSideTankBacksUp(Player* bot, Position const& hold);
 Position GetAnubarakBossAnchor(Player* bot);
 Position GetAnubarakPickupStand(Player* bot);
 Position GetAnubarakPrepullSideStand(Player* bot, uint8 side);
