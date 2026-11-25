@@ -2328,6 +2328,14 @@ bool YoggSaronGuardianMisdirectAction::Execute(Event /*event*/)
     if (!guardian)
         return false;
 
+    if (YoggSaronGazeActive(botAI) && !bot->HasInArc(CAST_ANGLE_IN_FRONT, guardian))
+    {
+        if (RaidObs::Active())
+            RaidObs::NoteDerived(bot, "yogg.mdshot", "gaze");
+
+        return false;
+    }
+
     if (!bot->HasAura(SPELL_HUNTER_MISDIRECTION) && !bot->HasAura(SPELL_MISDIRECTION))
     {
         Player* tank = YoggSaronMisdirectTank(botAI);

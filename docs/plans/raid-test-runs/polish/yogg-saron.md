@@ -188,7 +188,9 @@ Guardian (`yogg.misdirect`, 8 s at most); with Misdirection ready it casts it on
 then the healthiest, never one shedding a swap or under `YoggSaronTankLowHold`, then shoots (Arcane, Chimera, Aimed,
 Multi-Shot, Steady) only where the shot lands inside the redirect (`YoggSaronMisdirectShotLands`: 34477 unspent, or
 35079's time left over cast + flight + 0.5 s), else the Guardian would open on the hunter. It keeps shooting while
-35079 lasts, not under the burn. `yogg-saron misdirection hold` blocks `misdirection on main tank` in phase 3.
+35079 lasts, not under the burn. During a gaze it acts only on a Guardian already inside its 120° cast arc
+(`yogg.mdshot` `gaze` otherwise; review fix: a shot turns the bot to its target, possibly into Yogg).
+`yogg-saron misdirection hold` blocks `misdirection on main tank` in phase 3.
 `…_DISTRACTING_SHOT_RANGE` renamed `…_HUNTER_SHOT_RANGE`. Any tank, humans included; 10 and 25, normal and hard
 mode alike. No shared code. Reader: `--phase3` tags `misdirected +s` per Guardian and prints `misdirected` (claims,
 shots, inside the stasis, first victim a tank; time on a raider and deaths, misdirected against the rest);

@@ -1998,10 +1998,11 @@ ready, claims the oldest fresh one within 34 yd in sight (`yogg.misdirect`, one 
 casts it on the tank holding the most Guardians, then the healthiest, never one shedding a swap or under
 `YoggSaronTankLowHold`, humans included, and shoots: Arcane, Chimera, Aimed, Multi-Shot, Steady, each only if it lands
 inside the redirect (34477 unspent, or 35079's 4 s outlasting cast and flight + 0.5 s), since a later hit opens the
-Guardian on the hunter. It keeps shooting while 35079 lasts, not under the burn. The 30 s cooldown gives two hunters
-4 of 6 spawns a minute, and reach caps it lower: a hunter stood within 35 yd of a third of spawns at spawn, half
-before a tank held them. `misdirection on main tank` is held in phase 3 (`yogg-saron misdirection hold`), or it
-spends the cooldown on one tank whatever the hunter hits.
+Guardian on the hunter. It keeps shooting while 35079 lasts, not under the burn. During a gaze it acts only on a
+Guardian already inside its 120° cast arc (`mdshot` `gaze` otherwise): a shot turns the bot to its target, possibly
+into Yogg. The 30 s cooldown gives two hunters 4 of 6 spawns a minute, and reach caps it lower: a hunter stood within
+35 yd of a third of spawns at spawn, half before a tank held them. `misdirection on main tank` is held in phase 3
+(`yogg-saron misdirection hold`), or it spends the cooldown on one tank whatever the hunter hits.
 
 **A taunt from the pile runs out before the Guardian arrives.** They spawn 41-63 yd from the melee spot
 and walk ~11 yd/s, so a stasis-end taunt's 3 s leaves them 15-27 yd short. The taunt only matched the top
@@ -2148,7 +2149,7 @@ hand.
 | Platform hazards | `knockback` (`inside` / `clear`), `crush` (incl. `reach`), `deathray`, `castcut` (spell), `detour` (`around` / `spot`), `stunned` (`engage` / `clear`), `petguard` (`pulled` / `held` / `clear` / `leftover`), `judgement`, `powerbreak` (`none` / `walk` / `hit` / `out`, then the Crusher), `walk` (node and branch), `walkstep` |
 | Portals and Sanity | `wave`, `portal` (`notteam` / `waiting` / `spreading` / `holding` / `late` / `clicking`), `portalslot`, `brainteam`, `benched`, `portalcancel`, `brainlink` (`none` / `closing` / `clear`), `sanity` (`low` / `topping` / `refill` / `idle`: the walk's reason, not a level), `squeeze` |
 | Brain level | `room`, `roomstate` (`walkingin` / `fighting` / `doorshut` / `tobrain` / `atbrain` / `reprisal` / `staged`), `tentacle`, `spread` (`free` / `shared` / `kept`), `share` (group name / `orphan` / `first` / `helper` / `done` / `joined` / `staged` / `lifted`), `reprisal`, `reprisalheal` (spell), `regroup` (`range` / `sight`), `skull`, `skullturn` (`angled` / `free`), `brainspot`, `brainhold` (`open` / `dots` / `hold` / `finish` / `clear`), `charge`, `dash` (`used` / `cooldown`), `nitro` (`used` / `cooldown` / `station`), `exit`, `exitcancel` |
-| Phase 3 | `station` (`walking` / `shifted` / `parked` / `released` / `unreachable`), `gaze` (above), `tankhold` (`taunt` / `chain taunt` / `defense` / `leash` / `attack` / `return taunt` / `return defense` / `swap taunt` / `swap defense`), `tankswap`, `swapdefer` (holder and health), `tankshed`, `tankloh`, `vigilance` (tank), `misdirect` (Guardian, `0` on release), `mdshot` (`misdirect` / `open` / `dump`), `beacondrag` (`claim` / `taunt` / `missed` / `hold` / `shot` / `feign` / `release` / `return`), `beaconspot`, `beaconstage` (`pick` / `walk` / `ready` / `stuck` / `timeout`), `beaconbear`, `dragdef`, `dragext`, `roar` (`preswitch` / `noconc` / `claimed` / `press`), `p3area` (`few` / `fresh` / `allowed`), `p3dot` (spell), `burn` (`guardians` / `burn`), `kicknudge`, `markkick`, `mortalstrike`, `healcut`, `warlockpet`, `lust`, `lustready`, `healerengine` |
+| Phase 3 | `station` (`walking` / `shifted` / `parked` / `released` / `unreachable`), `gaze` (above), `tankhold` (`taunt` / `chain taunt` / `defense` / `leash` / `attack` / `return taunt` / `return defense` / `swap taunt` / `swap defense`), `tankswap`, `swapdefer` (holder and health), `tankshed`, `tankloh`, `vigilance` (tank), `misdirect` (Guardian, `0` on release), `mdshot` (`misdirect` / `open` / `dump` / `gaze`), `beacondrag` (`claim` / `taunt` / `missed` / `hold` / `shot` / `feign` / `release` / `return`), `beaconspot`, `beaconstage` (`pick` / `walk` / `ready` / `stuck` / `timeout`), `beaconbear`, `dragdef`, `dragext`, `roar` (`preswitch` / `noconc` / `claimed` / `press`), `p3area` (`few` / `fresh` / `allowed`), `p3dot` (spell), `burn` (`guardians` / `burn`), `kicknudge`, `markkick`, `mortalstrike`, `healcut`, `warlockpet`, `lust`, `lustready`, `healerengine` |
 
 **Do not add a Sanity level probe.** 63050 is already in the aura stream, with 63752 low-sanity and 63120
 Insane beside it, as are Grim Reprisal 64039 and Lunatic Gaze 64168 in `dmg`. A removal row carries no stack
