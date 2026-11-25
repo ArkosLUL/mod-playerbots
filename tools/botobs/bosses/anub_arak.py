@@ -7958,17 +7958,12 @@ def side_tank_contact(trace: Trace, samples: Samples) -> dict[int, dict]:
 
 
 def engage_mana(trace: Trace, samples: Samples | None = None) -> list[tuple[int, float]]:
-    samples = samples or Samples(trace)
-    index = bisect.bisect_left(samples.stamps, 0)
-    if index >= len(samples.stamps):
+    pulls = trace.of("pull")
+    if not pulls:
         return []
-    when = samples.stamps[index]
-    out = []
-    for guid in sorted((guid for guid, role in trace.roles.items() if role == "heal"), key=trace.name):
-        row = samples.recent(guid, when)
-        if row is not None and len(row) > 6:
-            out.append((guid, row[6]))
-    return out
+    samples = samples or Samples(trace)
+    rows = ((guid, samples.row(guid, pulls[0]["t"])) for guid in healer_guids(trace))
+    return [(guid, row[6]) for guid, row in rows if row is not None and len(row) > 6]
 
 
 def long_defensive_rows(rows: list[dict]) -> list[dict]:
