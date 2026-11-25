@@ -436,7 +436,6 @@ void TickFlameLeviathan(PlayerbotAI* botAI, Player* bot)
         state.pickup.clear();
         state.pickupMs.clear();
         state.cratesTaken.clear();
-        state.turrets = 0;
         state.shutdown = false;
         state.shutdownSoon = false;
         return;

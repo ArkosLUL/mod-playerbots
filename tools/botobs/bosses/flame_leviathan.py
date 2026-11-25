@@ -115,13 +115,13 @@ MELEE_YD = 8.0                  # close enough for Lash (0-5 yd) plus a snapshot
 ATTRITION_WINDOW_MS = 5000
 CREW_YD = 8.0
 
-# FlameLeviathanSeat, the fl.seat value per raid member; "0" is dead or gone.
+# keep in step with FlameLeviathanSeat in UldEncounter_FlameLeviathan.h, fl.seat writes its raw values
 SEAT_NAMES = {"0": "gone", "1": "siege driver", "2": "siege gunner", "3": "demolisher driver",
               "4": "demolisher gunner", "5": "catapult", "6": "his seat", "7": "chopper driver",
               "8": "chopper passenger", "9": "on foot"}
-ON_HIS_SEAT, ON_FOOT, IN_CATAPULT, CHOPPER_PASSENGER, DEMO_GUNNER = "6", "9", "5", "8", "4"
-LAND_WINDOW_MS = 3000           # the hookshot ticks every 500 ms for 5 s, so a landed throw boards fast
-JUMP_NOTE_MS = 1000             # fl.jump is written the tick the rider leaves, an eject has none
+ON_HIS_SEAT, ON_FOOT, CHOPPER_PASSENGER, DEMO_GUNNER = "6", "9", "8", "4"
+LAND_WINDOW_MS = 3000
+JUMP_NOTE_MS = 1000
 FIRST_AID_KIT = 64660
 
 
@@ -1743,15 +1743,11 @@ def show_vents(trace: Trace) -> int:
     return 0
 
 
-# -------------------------------------------------------------------------------------- --mechanics
-
 def popcount(value: int) -> int:
     return bin(value).count("1")
 
 
 def turret_changes(spans) -> tuple[list[int], list[int]]:
-    """`(kills, installs)` times off the `fl.turrets` mask latch: a seat's bit clearing is its turret
-    killed, a bit setting is one installed again by Start the Engine."""
     kills: list[int] = []
     installs: list[int] = []
     previous = None
@@ -1769,8 +1765,6 @@ def held_windows(spans, value: str = "1") -> list[tuple[int, int]]:
 
 
 def hp_rates(points: list[tuple[int, float]], windows: list[tuple[int, int]]) -> tuple[float, float]:
-    """Boss health % lost per second inside and outside `windows`, off `[(t, hp%)]` in order. A rise is a
-    reset, and a gap over 2 s is a missing stretch: both are left out."""
     lost = [0.0, 0.0]
     seconds = [0.0, 0.0]
     for (t0, h0), (t1, h1) in zip(points, points[1:]):
@@ -1785,7 +1779,6 @@ def hp_rates(points: list[tuple[int, float]], windows: list[tuple[int, int]]) ->
 
 
 def throw_records(notes: list[dict]) -> list[tuple[int, int, int, float, float]]:
-    """`(t, driver, passenger, distance, his speed)` per `fl.throw` note."""
     out = []
     for rec in notes:
         parts = str(rec.get("txt", "")).split()
@@ -1799,7 +1792,6 @@ def throw_records(notes: list[dict]) -> list[tuple[int, int, int, float, float]]
 
 
 def first_value_after(track, when: int, window_ms: int, wanted: str) -> int | None:
-    """The first `t` in `[when, when + window_ms]` a member's `fl.seat` track reads `wanted`."""
     for held, start, stop in track or ():
         if held == wanted and start <= when + window_ms and stop > when:
             return max(start, when)
@@ -1807,7 +1799,6 @@ def first_value_after(track, when: int, window_ms: int, wanted: str) -> int | No
 
 
 def seat_stays(track, value: str) -> list[tuple[int, int, str]]:
-    """`(start, stop, next value)` per span of `value` in one member's `fl.seat` track."""
     out = []
     for index, (held, start, stop) in enumerate(track or ()):
         if held == value:
