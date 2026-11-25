@@ -455,19 +455,19 @@ fixes it: a median **4 zones up (max 6)** leaves under 105° of ring 11 yd clear
 slots plus the anchor, in **14.5-31.1%** of a wipe's Blizzard snapshots, and none in 5% (0% in the kill).
 
 **Covered melee step out past the ring and walk back when it fades.** `ThorimRingBlizzardCovered`: the
-slot point within `ULDUAR_THORIM_RING_BLIZZARD_CLEARANCE` of a zone or the bunny, or, for a bot standing
-clear more than 3 yd off it, the straight walk there passing one. Each change flips `thorim.ringstep`
-and drops the arrival latch, so the walk back takes the 3 yd tolerance, not the 5 that would leave it out
-of reach. While covered the positioning row stands down: a bot clear of every zone and the lit cone holds
-where it stands, one in either takes `ThorimRingBlizzardStep` through the Blizzard node at
-`MOVEMENT_FORCED`, to the nearest point 11 yd clear of every zone, outside the cone, in the arena box,
-ties to the one nearest its slot point. In order: past the ring, 8 yd (the jump plus both reaches) off
-both tank spots and out of the jump (5.5 yd plus both reaches) of every floor body but the tanks and its
-own slot, each other slot also at its point; the same clear of the slots but not the camp; of neither;
-past the ring alone. These four run twice, first within 20 yd and 11 yd clear of the bunny's walk ahead
-(below), then within 15 yd without it; then anywhere within 20. Slot 0 sits south-west of him between
-the west wall (x ~2100), the tank spots and the trail, so a hard tank clearance found no point for 14-79%
-of the covered time in a six-pull replay.
+slot point within `ULDUAR_THORIM_RING_BLIZZARD_CLEARANCE` of a zone, the bunny or its next 8 yd of path
+(below), or, for a bot standing clear more than 3 yd off it, the straight walk there passing a zone or the
+bunny. Each change flips `thorim.ringstep` and drops the arrival latch, so the walk back takes the 3 yd
+tolerance, not the 5 that would leave it out of reach. While covered the positioning row stands down: a
+bot clear of all three and the lit cone holds where it stands, one in any takes `ThorimRingBlizzardStep`
+through the Blizzard node at `MOVEMENT_FORCED`, to the nearest point 11 yd clear of all three, outside the
+cone, in the arena box, ties to the one nearest its slot point. In order: past the ring, 8 yd (the jump
+plus both reaches) off both tank spots and out of the jump (5.5 yd plus both reaches) of every floor body
+but the tanks and its own slot, each other slot also at its point; the same clear of the slots but not
+the camp; of neither; past the ring alone. These four run twice, first within 20 yd and 11 yd clear of
+the bunny's walk ahead (below), then within 15 yd without it; then anywhere within 20. Slot 0 sits
+south-west of him between the west wall (x ~2100), the tank spots and the trail, so a hard tank clearance
+found no point for 14-79% of the covered time in a six-pull replay.
 
 **Blind to the other bodies, the step was a bridge.** Over ten hard-mode wipes 125 of 452 step points
 landed in another slot's jump, and 11 of their 44 Chain Lightning deaths crossed slot to slot through a
@@ -497,11 +497,19 @@ point past 45° within 20 yd, in the arena box, ties to its slot point: clear of
 reach if any is, else inside one, since a tick is 4.3-4.9k and the cone 10-36k. Past 45° it stands, or
 it would re-step every tick against the ring's wider line.
 
-**The walk to the point is still unchecked, and slowed.** Under a zone's or Frostbolt's 65% slow a step
-runs at 2.4 yd/s, so the first round's longer points cost 4-7 s in the zones, and the straight walk can
-cross the bunny's next leg. In the five hard-mode wipes after it no step point lay on the path ahead, yet
-ring melee spent 15-36 bot-s a pull in zones, stays up to 6.8 s, and six died before the first tank death.
-Unfixed.
+**A walk across the bunny's path leaves before the bunny gets there.** Two slot points sit about 5 yd off
+the trail's west and north legs, and their near side has no chain-clear point (the camp, the next slot),
+so the step crossed to the far side with the bunny p50 ~8 yd short of the crossing and walked into its
+fresh zones at 2.4 yd/s (a zone's or Frostbolt's 65% slow). Over 49 hard-mode pulls before the first tank
+death, 341 of 1,318 step orders crossed the path ahead, for 486 ticks and 11 deaths against 7 ticks on 582
+walks clear of it, and 16 of the 20 ring Blizzard deaths came within 10 s of such a step. So the bunny's
+next `ULDUAR_THORIM_RING_BLIZZARD_LEAD` (8) yd of path counts as Blizzard for the ring: within 11 yd of it
+a slot point is covered, a ring bot steps, and no step point lies. Replayed on each bot's first step per
+bunny (the same point, 7 yd/s, 2.45 inside a zone's reach): zone time 1,128 → 147 bot-s on crossing walks,
+122 of it within 4 s of the bunny's spawn, which leaves no lead; 323 → 229 on the others; ~1.7 s more out
+of reach a step, ~26 bot-s a pull. A 10 yd lead bought 37 bot-s for 385 more out; 6 yd left 271. Kept on its
+own side instead, the step put 204 of 341 points in the camp's jump and 68 in another slot's; that side
+preferred only at equal chain clearance changed 110 orders, the mildest (111 ticks).
 
 **Two holds keep it.** `thorim ring blizzard step` blocks `Reach` and `Charge` while stepped, or `reach
 melee` walks the bot straight back in, and the movement guard counts a stepped bot as settled.
@@ -1435,9 +1443,10 @@ navprobes, not a nudge, and each new point needs the hazard check navprobe does 
 - `--blizzard`: per Sif Blizzard (its bunny's first snapshot to its last plus a zone's 10 s, cut at the
   next bunny), each slot point's covered seconds; ring bots within the 9.8 yd damage reach (seconds,
   stays, longest, ticks, damage); deaths; step moves, those whose point lay under 11 yd off the bunny's
-  walk ahead or under a zone's 9.8 yd reach within 8 s, stepped bot-seconds and those past 9.0 yd of him;
-  the walk back from a step's end to within 9.0 yd, ticks on the way. Traces without `thorim.ringstep`
-  read all but the steps.
+  walk ahead or under a zone's 9.8 yd reach within 8 s, those whose walk crossed that walk ahead (the
+  bunny's p50 path yards short of the crossing, ticks until the bot's next order), stepped bot-seconds and
+  those past 9.0 yd of him; the walk back from a step's end to within 9.0 yd, ticks on the way. Traces
+  without `thorim.ringstep` read all but the steps.
 - `--chains`: each Chain Lightning hop by hop as groups (tank, camp, a ring slot, marked stepped on its
   step point or within 3 s of leaving it), the yards between groups, `(lust)` when both bodies carried
   Heroism or Bloodlust (8.9 yd jump), deaths per group; then deaths by the crossing that reached them,

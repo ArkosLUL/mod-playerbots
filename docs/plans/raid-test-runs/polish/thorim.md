@@ -2,7 +2,7 @@
 
 Reader: `tools/botobs/bosses/thorim.py` (`--deaths`, `--phase2`, `--blizzard`, `--chains`, `--shelters`,
 `--ringcone`, `--colossus`, `--chainwait`; `raidtest.py report` runs `--summary` on every counted pull). Rounds
-1-25: `history/thorim.md`.
+1-26: `history/thorim.md`.
 
 ## State
 
@@ -21,38 +21,38 @@ Chain Lightning every 15 s with a 0.5-0.6 s cast bar naming its first target, th
 after the lit stamp and landing p50 1.05 s after it, a third of the events casting nothing; 8 targets at ×1.5 a hop,
 hop 8 yd (8.9 when both carry Heroism/Bloodlust); hard mode adds Sif's Frostbolt Volley (−50% speed), Frostbolt
 (−65%), Blizzard (−65% in a zone) and Frost Nova (root). Blizzard's bunny walks the core's fixed path once at ~7 yd/s
-(west, then north of the tank spot, then round the camp), dropping a 10 s zone every 2 s.
+(west, then north of the tank spot, then round the camp), dropping a 10 s zone every 2 s; two ring slot points sit
+~5 yd off its west and north legs, so those slots step out on every Blizzard.
 
 **Rosters.** From window 34 every pool carries all eleven professions at 450 with their perks and enchants (DC
 `.dc test roster professions`): compare only windows from 35 on.
 
 **What kills raids.** Hard mode at ilvl 226 is a race: the raid takes him ~0.4-0.55 %/s, and the tanks fall to his
 melee, which grows with the Lightning Charge stacks (14-18k a swing by +140 s), plus Blizzard and Sif's Volley on both
-tanks; most deaths come after, with Thorim loose. The first tank death decides it: over the hard-mode pulls since 11-23
-its p50 is +119 s, and the kills held the tanks to +167-191 s or past the kill. A gauntlet healer lost in phase 1 (the
-Colossus' Smash until R25, the Rune Giant hold in w39) costs the most: first tank death +45-137 s (p50 77) in hard
-mode, or a late phase 2 in normal mode. Normal mode: kills with 0-4 deaths.
+tanks; most deaths come after, with Thorim loose. The first tank death decides it: over the 49 hard-mode pulls since
+11-24 18:00 its p50 is +118 s, and the kills held the tanks to +147-191 s or past the kill. A gauntlet healer lost in
+phase 1 costs the most: first tank death +45-137 s (p50 77) in hard mode, or a late phase 2 in normal mode. Normal
+mode: kills with 0-4 deaths.
 
-**Compositions on build 6694fb83e (window 39, round 25).** A (uld1, uld4): uld4 a hard-mode kill with 0 deaths (phase
-2 at 2:50.7); uld1 wipe at 14.0%, first tank death +155.6 s. B (uld2, uld5): uld2 a normal-mode kill, 1 death (phase 2
-at 3:29.3); uld5 wipe at 39.0%, first tank death +78.4 s (Volley, then melee). C (uld3, uld6): normal-mode kills, 2 and
-4 deaths (phase 2 at 3:26.2 / 3:18.0), each after a gauntlet healer died at the Giant hold. B has never killed in hard
-mode; C last did on the window 35 build. Not polished on any one build.
+**Compositions on build 229335cd3 (window 44, round 26), hard mode in all six.** A (uld1, uld4): uld1 a kill, 12
+deaths (phase 2 at 2:58.2, first tank death +147.1 s); uld4 wipe at 2.1% (+156.5 s). B (uld2, uld5): wipes at 33.2%
+(+114.0 s) and 19.1% (+119.9 s). C (uld3, uld6): uld3 wipe at 23.2% (+67.1 s); uld6 a kill, 11 deaths (+187.5 s, six
+to Chain Lightning). Filler 43 (round 25's code, the build before): uld4 a hard-mode kill with 4 deaths, uld5 a
+normal-mode kill with 2, the rest hard-mode wipes. Not polished on any one build.
 
-**Open failures, ranked** (window 39, 71 deaths):
-1. The race: Thorim melee 46 and Unbalancing Strike 3, nearly all after the first tank death. Not a bug; the user
+**Open failures, ranked** (window 44, 169 deaths):
+1. The race: Thorim melee 105 and Unbalancing Strike 11, nearly all after the first tank death. Not a bug; the user
    keeps it polishing with no end condition.
-2. Chain Lightning 11: uld1 a camp chain through orb 2's shelter walkers (+87.2 s, 5 camp hits, hop 5 dead; R26's
-   target) and tank to slot 2 (+57.3 s) before the tanks, 5 after; uld6 slot 1, tanks, slot 0 (+56.9 s, 3 dead,
-   normal); uld3 the opening under lust (+11.8 s).
-3. Gauntlet healers at the Rune Giant hold: uld3 Uldzae and uld6 Uldwae walked onto the leader's exact spot at the
-   hold (the `ThorimGauntletTrailSpot` fallback when the path is not `PATHFIND_NORMAL`; Uldwae came down the ramp
-   z 438 → 426), dead at 2:32 / 2:36 to Rune Detonation, Stomp and Honor Guard Cleave; both pulls went normal mode.
-   Next round's candidate.
-4. Lightning Charge 4: uld1 2 camp walkers before the first tank death (Uldxak row (1, 4) under Volley, 5.7 yd short;
-   Uldxag rooted by Frost Nova), 2 after.
-5. Blizzard 2, Volley 1, Frostbolt 1 (uld5's Volley on the holder began its tank deaths). Nothing to kick.
-6. Phase 1: Honor Guard melee 1 (uld2 ranged), besides the two Cleaves in 3.
+2. Chain Lightning 9, 8 before the first tank death (7 on the ring): uld6 camp ×2 (+132 s), stepped slot 2 into
+   slot 1 at 8.0 yd ×3 (+162 s), slot 0 seed (+177 s); uld1 tank to slot 0 (+132 s); uld4 and uld3 within the seed
+   slot (+117, +57 s). Over 49 hard-mode pulls the ring's 35 split slot to slot 15, tank to slot 10, seed slot 6,
+   camp to slot 4: no single cause.
+3. Blizzard 9: ring melee 6 before the first tank death, every one after a step across the bunny's path (R27's
+   target); uld2's first tank death; a uld4 healer.
+4. Lightning Charge 10 (2 before the first tank death: uld2 ring +90 s, uld4 camp +60 s).
+5. Volley 1, Frostbolt 1, Frost Nova 1.
+6. Gauntlet healers at the Rune Giant hold (`ThorimGauntletTrailSpot`'s no-path fallback, w39 uld3/uld6): not seen
+   in window 44 (no phase 1 death); filler 43 uld5 lost a ranged to corridor Runic Smash.
 7. Self-res into the hazard: shared res code; not picked.
 
 **Fixes in place** (round: fix — verdict):
@@ -84,9 +84,12 @@ mode; C last did on the window 35 build. Not polished on any one build.
 - R24: a ring walk that would cross the lit cone holds; a stepped ring bot in the lit cone with no zone-clear point
   steps past 45° anyway — held.
 - R25: gauntlet healers trail to 15 yd short of the leader along the path (`ThorimGauntletTrailSpot`) — held on the
-  Colossus (w39 Smash on healers 0 hit, 0 dead against w37's 4 hit, 3 dead); its no-path fallback is failure 3.
+  Colossus; its no-path fallback is failure 6.
 - R26: a camp shelter walk for orb 1 or 2 that passes another slot's body waits for Chain Lightning
-  (`ThorimCampChainWait`, cap 1 s, reach guard, cast hold) (user) — pending (next window).
+  (`ThorimCampChainWait`, cap 1 s, reach guard, cast hold) (user) — held (w44: 75 waits, camp chain deaths under
+  orbs 1-2 0, chains of 4+ camp hits 0, no %/s loss).
+- R27: the bunny's next 8 yd of path counts as Blizzard for the ring (`ULDUAR_THORIM_RING_BLIZZARD_LEAD`), so a step
+  across it leaves before the bunny gets there — pending (next window).
 
 **Tried and rejected:**
 - Balcony runner: the user ruled it out (phase 2 with the squad deep in the corridor).
@@ -101,6 +104,9 @@ mode; C last did on the window 35 build. Not polished on any one build.
   R23).
 - The chain wait without a reach guard or with a 1.5 s cap (R26 replay): 22 walks newly in the cone before the first
   tank death against 5 saved; 9 against 2 with the guard at 1.5 s (shipped: 5 against 5).
+- The ring step kept on its own side of the bunny's path (R27 replay): 204 of 341 crossing orders moved into the
+  camp's jump, 68 into another slot's; preferred only at equal chain clearance it changed 110 orders worth 111 ticks.
+- A 10 yd ring lookahead instead of 8 (R27 replay): 37 bot-s fewer in zones for 385 more out of reach over 49 pulls.
 
 **User answers in force:**
 - 2026-11-22: hold the arena group at the drop until Thorim is in combat; off-tank spot (2107.25, −252.65), only the
@@ -119,78 +125,82 @@ mode; C last did on the window 35 build. Not polished on any one build.
 
 **Open questions:** none.
 
-## Round 26 (window 39: build 6694fb83e with round 25)
+## Round 27 (window 44: build 229335cd3 with round 26)
 
-**Data:** `window39-thorim.md` (session scratchpad), one valid pull per pool; traces
-`603_{1,4,2,5,3,6}_thorim_{1795560092,1795560103,1795560093,1795560101,1795560098,1795560104}` (uld1, uld4, uld2,
-uld5, uld3, uld6), read with `thorim.py --colossus/--chains/--shelters` and the new `--chainwait`, `postmortem.py
---death`, and session scratchpad `thorim_r26/` scripts (`replay.py`: the wait rule over the 95 Thorim pulls on disk,
-53 of them hard mode; `healer_moves.py`).
+**Data:** `window44-thorim.md` and `filler43-thorim.md` (session scratchpad; filler 43 is six pulls of round 25's code
+on the build before); traces `603_{1,4,2,5,3,6}_thorim_{1795598584,1795598581,1795598596,1795598597,1795598596,
+1795598599}` (uld1, uld4, uld2, uld5, uld3, uld6), read with `thorim.py --chainwait/--chains/--blizzard`,
+`postmortem.py --death`, and session scratchpad `thorim_r27/` scripts over the 49 hard-mode pulls since 11-24 18:00
+(`step_walks.py`, `replay2.py`, `lookahead.py`).
 
 | Pool | Out | Deaths by mechanic |
 |---|---|---|
-| uld1 (A) | wipe, hard, 14.0% | CL 2 (tank to slot 2 +57.3 s; camp orb 2 walkers +87.2 s), LC 2 (camp walkers, Volley / Frost Nova), then tanks +155.6 s, Thorim melee 19, CL 5, LC 2, Blizzard 1, US 1 |
-| uld4 (A) | **kill, hard, 0** | none |
-| uld2 (B) | kill, normal, 1 | P1 Honor Guard melee (ranged) |
-| uld5 (B) | wipe, hard, 39.0% | none before the tanks (+78.4 s, Volley then melee); Thorim melee 24, US 2, Blizzard 1, Frostbolt 1 |
-| uld3 (C) | kill, normal, 2 | P1 gauntlet healer at the Giant hold (Cleave); CL 1 (opening under lust) |
-| uld6 (C) | kill, normal, 4 | P1 gauntlet healer at the Giant hold (Cleave); CL 3 (slot 1, tanks, slot 0, +56.9 s) |
+| uld1 (A) | **kill, hard, 12** | Blizzard 1 (ring, crossing step, +114 s), CL 1 (tank to slot 0, +132 s), then tanks +147 s, Thorim melee 8, US 2 |
+| uld4 (A) | wipe, hard, 2.1% | Blizzard 3 (ring, crossing steps, +45/+77/+79 s), LC 1 (camp +60 s), CL 1 (seed slot +117 s), then tanks +157 s, Thorim melee 21, LC 2, Blizzard 1, US 1, Frostbolt 1 |
+| uld2 (B) | wipe, hard, 33.2% | LC 1 (ring +90 s), then tanks +114 s (Blizzard, melee), Thorim melee 23, LC 2, Blizzard 1, US 2 |
+| uld5 (B) | wipe, hard, 19.1% | US 1 (ring +26 s), Blizzard 2 (Uldvak, crossing step, +115 s), then tanks +120 s, Thorim melee 25, US 1, LC 1, Frost Nova 1 |
+| uld3 (C) | wipe, hard, 23.2% | pickup swing 1, CL 1 (seed slot +57 s), then tanks +67 s, Thorim melee 25, LC 3, US 2 |
+| uld6 (C) | **kill, hard, 11** | pickup swing 1, Volley 1 (camp +24 s), CL 6 (camp ×2 +132 s, stepped slot 2 → slot 1 ×3 +162 s, slot 0 +177 s), then tanks +187.5 s, US 2, Thorim melee 1 |
 
-**Stop rules:** waived for Thorim (user, 2026-11-24). Done rule on this build: A has a hard-mode kill (uld4, 0
-deaths); B and C killed only in normal mode.
+**Stop rules:** waived for Thorim (user, 2026-11-24). Done rule on this build: no composition has a hard-mode kill
+with at most 5 deaths (uld1 12, uld6 11).
 
-**Round 25 verdict (gauntlet healers 15 yd short of the leader): held on the Smash in A, B and C.** `--colossus`:
-healers within 6 yd of his target 0, Smash hits on healers 0, deaths 0 (w37: 4 hit, 3 dead); healers 9.8 yd behind
-him at 175-177° (uld3) or 17.4-17.8 yd off his flank (uld2, uld5), none out of heal range; no Smash cast in uld1,
-uld4, uld6. Watch items: corridor Runic Smash killed no healer. The Giant hold did: uld3 Uldzae (at the Giant, 0.1 yd)
-and uld6 Uldwae, whose `thorim gauntlet positioning action` moves ran from the ramp top (z 438) to the leader's exact
-spot (2187.79, −432.78), the trail's fallback when the path is not normal; Rune Detonation, Stomp and Honor Guard
-Cleave, both pulls then normal mode. Before R25 every trail took that spot, so the fallback is what is left
-(failure 3). Hard-mode phase 2 3 of 6 (w37 5 of 6): uld3 and uld6 after the healer loss; uld2 (no loss, the Colossus
-lived through two Smashes) unexplained.
+**Round 26 verdict (camp shelter walks wait for Chain Lightning): held in A, B and C.** `--chainwait`: 75 waits on
+orbs 1-2 (A 24, B 29, C 22), released by the landing 32 and by the 1 s cap 43, wait p50 0.7-1.1 s, max 1.5; camp
+chain deaths under orbs 1-2 0 (w39 2), chains of 4+ camp hits there 0 (filler 43 1); waiters hit by the chain 2
+standing (uld5), 0 walking; cone on waiters 2 hit, 1 dead, none before the first tank death. Thorim %/s over the
+first 30 s 0.32-0.44 (filler 43 hard 0.35-0.41), whole fight 0.42-0.52 (0.43-0.55): no loss. Filler 43 had no camp
+chain death under orbs 1-2 either, so the gain is thin on one window. Watch: the cap releases more than the landing.
 
-**Failure built: the user's Q1 (a), camp Chain Lightning through shelter walkers** (failure 2's camp share).
-- uld1 +87.2 s, orb 2: Uldxas, Uldxao, Uldxav (slot 1), Uldxap (slot 2), Uldxaw; Uldxaw dead at hop 5. Uldxap's walk
-  to row (2, 2) passed 0.8 yd from another slot's body, Uldxav's 2.4 yd; the replayed chain with the held walkers standing
-  stops after four hops, none on Uldxap or Uldxaw.
-- 53 hard-mode pulls on disk, before the first tank death: camp chain deaths by orb 4, 6, 10, 0, 0, 0, 0 (orbs 0-6),
-  16 of 20 under orbs 1 and 2; chains of 4+ camp hits 5 and 6 there.
-- Timing over 395 hard-mode casts, from the lit stamp: cast start p50 506 ms, p90 995, max 1523; landing p50 1049,
-  p90 1552, max 2095. 191 of 586 lit orbs had no cast: the trace's cast hook fires after `CheckCast`, and
-  `boss_thorim.cpp:737` repeats the event in 15 s whether or not the cast goes out.
-- **Classification: plan change, answered by the user** (Q1 (a)); built as answered.
+**Failure picked: ring melee dying to Blizzard after a step across the bunny's path** (6 of w44's 21 deaths before
+the first tank death; failure 2's ring chains are larger but split over four crossing kinds with no one cause).
+- uld4 Ulduat +74.27 s: on slot 2's point (2117.0, −246.4), 5.2 yd off the bunny's P3-P4 leg, the step fired with
+  the bunny 9.0 yd away and ordered (2110.2, −229.8), across that leg; in zones from +74.4 s at 2.4 yd/s, the bunny
+  1.9 yd off at +75.5 s, 3 ticks and a Volley, dead +77.4 s. Ulduay +34.22 s the same (order (2112.2, −229.2), bunny
+  1.7 yd off at +35.5 s, 56% health), then a cone exit at +41.2 s back through the zones, dead +44.9 s.
+- 49 hard-mode pulls, before the first tank death: 341 of 1,318 step orders crossed the bunny's path ahead (the
+  bunny p50 ~8 yd short of the crossing, every order within 20 yd), taking 486 ticks and 11 deaths; 582 walks clear
+  of it took 7 ticks; 16 of the 20 ring Blizzard deaths came within 10 s of a crossing step.
+- Code: `ThorimRingBlizzardStep` and `ThorimRingBlizzardCovered` (`UldEncounter_Thorim.cpp`) act only within 11 yd
+  of a zone or the bunny, ~1 s before it reaches the slot; pass 0 (clear of camp, slots, tanks and the path ahead)
+  lies on the far side when the near side holds the camp or the next slot; the sweep checks the point, not the walk.
+- **Classification: bug.** The step exists to get covered melee out of Blizzard (user, 2026-11-24); it starts too
+  late for the walk its own passes choose. The boss doc listed the walk as unfixed.
 
-**Fix** (`UldEncounter_Thorim.cpp/.h`, `UldMultipliers_Thorim.cpp/.h`, `UldDefinition_Thorim.cpp`, Thorim only, no
-size, mode or player branch): `ThorimCampChainWait` decides once per orb on orbs 1 and 2
-(`ULDUAR_THORIM_CHAIN_WAIT_ORBS`): a camp bot whose straight walk to its row passes within 5 yd plus both reaches of
-any floor member outside its own ranged slot (a real player has no slot, so counts) stands, note `slot N orb M wait`,
-until the Chain Lightning cast bar ends (`chainLightningEndMs` from Thorim's current spell, read in `TickThorim` and
-on each call). No bar by lit + 1 s (`ULDUAR_THORIM_CHAIN_WAIT_CAP_MS`) releases it; a cast ended up to 5 s before the
-lit counts as landed. It waits only if, setting off at the bar's end or the cap, the row or a cone step is in reach,
-or it stands out of the lit cone (`ThorimCampShelterInTime` / `ThorimCampConeStep` take a set-off time).
-`ThorimChainWaitCastHoldMultiplier` zeroes cast-time and channelled spells while it waits. Beyond the answer's text,
-both from the replay: the cap and the reach guard. Reader `--chainwait`, tested in `test_thorim.py`; boss doc:
-"A walk that passes another slot's body waits for the chain" and the section. `pb-check` passes (syntax, pblint,
-codestyle, botobs).
+**Fix** (`UldEncounter_Thorim.cpp/.h`, Thorim only, no size, mode or player branch; ring bots only, so a real
+player is untouched): `ThorimRingBlizzardAhead` tests a spot against the bunny's next
+`ULDUAR_THORIM_RING_BLIZZARD_LEAD` (8) yd of path at 11 yd; it covers a slot point in `ThorimRingBlizzardCovered`,
+starts the step in `ThorimRingBlizzardStep`, and rules step points out in every pass. `ThorimBlizzardLegOf` factors
+the leg lookup out of `ThorimBlizzardPathAhead`. Reader `--blizzard` counts steps whose walk crosses the bunny's path
+ahead, the bunny's p50 path yards short of the crossing and ticks until the bot's next order (test in
+`test_thorim.py`); boss doc: "Covered melee step out" and "A walk across the bunny's path leaves before the bunny
+gets there". `pb-check` passes (syntax, pblint, codestyle, botobs).
 
-**Replay** (`replay.py`, 53 hard-mode pulls, 1,251 orb 1 and 2 walks; set-off at the landing + 150 ms or the cap;
-the chain re-run hop by hop to the nearest unhit body within 8 yd, pets included; cone hit ≤ 37.5° off its axis, the
-widest decoded hit 37.2°; a delayed walk replayed as its own track shifted, or a straight walk to the step):
-- 651 walks wait (453 before the first tank death), 548 set off later; the guard lets 63 walk (2 chain hits, 0 dead).
-- Chain: all 14 walkers a chain killed (10 before the first tank death) stand at the landing; on the 80 chains the hop
-  model reproduces, camp hits 143 → 118, at hop 5 or later 14 → 4.
-- Cone: 11 delayed walks newly end in it, 11 leave it (5 / 5 before the first tank death). Normal mode (42 pulls):
-  405 waits, 1 new cone hit, 3 chain deaths stand at the landing.
+**Replay** (`lookahead.py`: each ring bot's first step per bunny before the first tank death, 774 steps; departure
+when the bunny's next N yd come within 11 yd of the bot, the same step point, 7 yd/s, 2.45 inside a zone's 9.8 yd
+reach, against the zones the trace laid):
 
-**Next window should show** (hard-mode pulls, `--chainwait`, `--shelters`):
-- waits on orbs 1-2 with crossing walks, most released by the landing; waiters hit by the chain while walking ~0;
-  camp chain deaths under orbs 1-2 before the first tank death 0-1 a window, chains of 4+ camp hits there ≤ 1.
-- cone hits and deaths on waiters before the first tank death ≤ 1 a window; `--shelters` hits on walks no higher than
-  w39 (uld1: 2 hit, 2 dead).
-- Watch: Thorim %/s over the first 100 s not lower (the wait holds cast-time spells up to ~1 s an orb).
+| Lead | zone bot-s, crossing steps (331) | zone bot-s, other steps (443) | more out of reach, bot-s |
+|---|---|---|---|
+| shipped (none) | 1,128 | 323 | - |
+| 6 yd | 271 | 230 | 980 |
+| **8 yd** | **147** | **229** | **1,281** (~26 a pull, ~1.7 s a step) |
+| 10 yd | 110 | 229 | 1,666 |
 
-**Seen, not picked:** the Giant hold trail fallback (failure 3, next); tank to ring chains (uld1 +57.3 s, uld6 +56.9
-s); the opening chain under lust (uld3); uld5's Volley on the holder.
+Of the 147 left, 122 come from steps within 4 s of the bunny's spawn, which leaves no lead (196 such crossing steps,
+545 bot-s shipped); the later crossings fall 583 → 25. Rejected alternatives in State (own-side step, 10 yd).
+
+**Next window should show** (hard-mode pulls, `--blizzard`):
+- crossing steps with the bunny p50 ≥ ~15 yd short of the crossing (w44 6.2-10.8) and their ticks well under w44's
+  10 / 23 / 12 / 46 / 11 / 18 (uld1, uld4, uld2, uld5, uld3, uld6).
+- ring melee in a zone under w44's 25.6 / 51.0 / 20.4 / 75.6 / 44.8 / 31.2 bot-s, ring Blizzard deaths before the
+  first tank death ≤ 1 a window (w44 6).
+- the cost: stepped out of reach up ~25 bot-s a pull (w44 165-325), melee on Thorim to +100 s still ≥ 99%, Thorim
+  %/s not lower.
+
+**Seen, not picked:** failure 2's ring chains (four crossing kinds); uld6's stepped slot 2 within 8.0 yd of slot 1
+at +162 s; the cone exit walking back through live zones (uld4 Ulduay +41 s, 1 death in 49 pulls); R26's cap
+releasing more waits than the landing.
 
 **Questions for the user:** none.
 
