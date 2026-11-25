@@ -247,6 +247,7 @@ public:
         creators["new player nearby"] = &ValueContext::new_player_nearby;
         creators["ritual of souls portal"] = &ValueContext::ritual_of_souls_portal;
         creators["ritual of souls soulwell"] = &ValueContext::ritual_of_souls_soulwell;
+        creators["ritual walk wakes hostile"] = &ValueContext::ritual_walk_wakes_hostile;
         creators["already seen players"] = &ValueContext::already_seen_players;
         creators["rpg target"] = &ValueContext::rpg_target;
         creators["ignore rpg target"] = &ValueContext::ignore_rpg_target;
@@ -369,6 +370,7 @@ private:
     static UntypedValue* new_player_nearby(PlayerbotAI* botAI) { return new NewPlayerNearbyValue(botAI); }
     static UntypedValue* ritual_of_souls_portal(PlayerbotAI* botAI) { return new RitualOfSoulsPortalValue(botAI); }
     static UntypedValue* ritual_of_souls_soulwell(PlayerbotAI* botAI) { return new RitualOfSoulsSoulwellValue(botAI); }
+    static UntypedValue* ritual_walk_wakes_hostile(PlayerbotAI* botAI) { return new RitualWalkWakesHostileValue(botAI); }
     static UntypedValue* item_usage(PlayerbotAI* botAI) { return new ItemUsageValue(botAI); }
     static UntypedValue* item_upgrade(PlayerbotAI* botAI) { return new ItemUpgradeValue(botAI); }
     static UntypedValue* formation(PlayerbotAI* botAI) { return new FormationValue(botAI); }

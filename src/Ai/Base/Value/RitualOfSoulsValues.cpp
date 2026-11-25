@@ -6,11 +6,16 @@
 
 #include "RitualOfSoulsValues.h"
 
+#include "CellImpl.h"
+#include "Creature.h"
 #include "GameObject.h"
+#include "GridNotifiers.h"
+#include "GridNotifiersImpl.h"
 #include "Group.h"
 #include "Playerbots.h"
 #include "Timer.h"
 
+#include <algorithm>
 #include <mutex>
 #include <unordered_map>
 
@@ -43,7 +48,63 @@ namespace
         auto it = lastPortalSeen.find(groupGuid);
         return it != lastPortalSeen.end() && getMSTimeDiff(it->second, getMSTime()) < SOULWELL_SEARCH_WINDOW_MS;
     }
+
+    class IdleHostileCheck
+    {
+    public:
+        IdleHostileCheck(WorldObject const* centre, float range) : _centre(centre), _range(range) {}
+
+        bool operator()(Creature* creature) const
+        {
+            return _centre->IsWithinDist(creature, _range, false) && creature->IsAlive() && !creature->IsInCombat() &&
+                   creature->HasReactState(REACT_AGGRESSIVE) && !creature->IsImmuneToPC() && !creature->IsCivilian();
+        }
+
+    private:
+        WorldObject const* _centre;
+        float _range;
+    };
+
+    float SegmentDistance2d(Position const& from, Position const& to, Position const& point)
+    {
+        float const dx = to.GetPositionX() - from.GetPositionX();
+        float const dy = to.GetPositionY() - from.GetPositionY();
+        float const lengthSq = dx * dx + dy * dy;
+        float along = 0.0f;
+        if (lengthSq > 0.0f)
+            along = std::clamp(((point.GetPositionX() - from.GetPositionX()) * dx +
+                                (point.GetPositionY() - from.GetPositionY()) * dy) / lengthSq,
+                               0.0f, 1.0f);
+
+        return point.GetExactDist2d(from.GetPositionX() + along * dx, from.GetPositionY() + along * dy);
+    }
 }  // namespace
+
+std::vector<Creature*> FindIdleHostiles(WorldObject const* centre, float reach)
+{
+    float const range = reach + MAX_AGGRO_RADIUS + RITUAL_WALK_AGGRO_MARGIN;
+    std::vector<Creature*> idle;
+    IdleHostileCheck check(centre, range);
+    Acore::CreatureListSearcher<IdleHostileCheck> searcher(centre, idle, check);
+    Cell::VisitObjects(centre, searcher, range);
+    return idle;
+}
+
+bool WalkWakesIdleHostile(std::vector<Creature*> const& idle, Player* walker, Position const& to)
+{
+    Position const from = walker->GetPosition();
+    for (Creature* creature : idle)
+    {
+        if (!creature->IsHostileTo(walker))
+            continue;
+
+        float const aggro = creature->GetAggroRange(walker);
+        if (aggro > 0.0f && SegmentDistance2d(from, to, creature->GetPosition()) < aggro + RITUAL_WALK_AGGRO_MARGIN)
+            return true;
+    }
+
+    return false;
+}
 
 ObjectGuid RitualOfSoulsPortalValue::Calculate()
 {
@@ -87,4 +148,13 @@ ObjectGuid RitualOfSoulsSoulwellValue::Calculate()
     }
 
     return ObjectGuid::Empty;
+}
+
+bool RitualWalkWakesHostileValue::Calculate()
+{
+    GameObject* go = botAI->GetGameObject(AI_VALUE(ObjectGuid, qualifier));
+    if (!go || go->IsAtInteractDistance(bot))
+        return false;
+
+    return WalkWakesIdleHostile(FindIdleHostiles(bot, bot->GetExactDist2d(go)), bot, go->GetPosition());
 }

@@ -15,6 +15,7 @@ class JoinRitualOfSoulsAction : public MovementAction
 {
 public:
     JoinRitualOfSoulsAction(PlayerbotAI* botAI) : MovementAction(botAI, "join ritual of souls") {}
+    bool isUseful() override;
     bool Execute(Event event) override;
 };
 
