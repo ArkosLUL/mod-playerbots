@@ -14,9 +14,9 @@ The polish loop runs on the user's standing go ("Polish loop" below), scheduled 
 
 **Next:**
 - On each window 51 report: Flame Leviathan r3 (25n and 10n reports), Yogg-Saron r30, Thorim r31, Algalon r19; Mimiron's reports go to r26 (or to r25 if it is still running and asks).
-- Running: Anub'arak r5. Merged, not yet built: Mimiron r25 (`a938871f4`, Water Spray escape ladder to 8 and 12 yd, Frost Bomb escape fan stops at 90°; open: a healer stranded at the east edge by a detour leg needs navprobed bounds). Rebuild once enough has merged to fill a window.
+- Running: Yogg-Saron r30, Thorim r31 (from window 51). Merged, not yet built: Mimiron r25 (`a938871f4`, Water Spray escape ladder to 8 and 12 yd, Frost Bomb escape fan stops at 90°; open: a healer stranded at the east edge by a detour leg needs navprobed bounds). Rebuild once enough has merged to fill a window.
 - Flame Leviathan meets the 25n done rule on r2 (window 51: hard-mode kills uld1 A 0, uld2 B 2, uld3 C 0, all with his 268.9M four-tower health); 10n check pending in window 51.
-- Anub'arak r5 builds the user's Q2 (r4 stuck, merged `83db89f93`); its pulls need a window on the ToC pools.
+- Anub'arak r5 merged (`43ecac657`, the user's Q2: A warrior on him, paladin and DK on burrowers; B bear on him, warrior and paladin; C bear on him, paladin and DK; the main tank taunts him off the flag holder DC pulls with); next window: `"pulls": 2, "cap": 2` on the ToC pools.
 - DC lane AE (`ae-dc-mimiron-10n-spawn.PLAN.md`) stopped unneeded: Mimiron's 10n spawn was missing from the live world DB (see Mimiron's row). DC lane AC (`rt/dc-ac`, the boss kept passive until each start) stays unmerged: it would hide the ritual-walk bug the tests should catch.
 - Merges: `merge-lane.sh` refuses DC branches for argument-name and edited comments, DC's own style: merge DC lanes by hand (`git merge-tree`, then `git merge --no-ff -F`) after reading the added comment lines. During a window the server lock's owner is the window, which `merge-lane.sh` allows.
 - Next question batch: none open.
