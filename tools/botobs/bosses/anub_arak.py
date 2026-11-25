@@ -388,7 +388,10 @@ BLADESTORM_HIT_YD = BLADESTORM_RADIUS + 1.5
 EXPOSE_WEAKNESS = (67721, 67847)
 # ANUBARAK_SIDE_DEFENSIVE_STACKS, a uint32 radius() doesn't read
 DEFENSIVE_STACKS = 5
+DEFENSIVE_PCT = radius("ANUBARAK_SIDE_DEFENSIVE_PCT")
 MAGIC_ONLY_DEFENSIVES = ("anti magic shell", "cloak of shadows")
+LONG_DEFENSIVES = ("last stand", "shield wall", "divine protection", "frenzied regeneration", "survival instincts",
+                   "icebound fortitude")
 TANK_FORMS = {9634: "Dire Bear Form", 5487: "Bear Form", 71: "Defensive Stance", 25780: "Righteous Fury",
               48263: "Frost Presence"}
 # Dying strips every aura in the same tick
@@ -7872,6 +7875,19 @@ def defensive_rows(trace: Trace, samples: Samples | None = None) -> list[dict]:
     return out
 
 
+def long_defensive_rows(rows: list[dict]) -> list[dict]:
+    return [row for row in rows
+            if row["side"] is not None and row["spell"] in LONG_DEFENSIVES and row["phase"] != "P3"]
+
+
+def long_defensives_before(rows: list[dict], guid: int, when: int) -> list[tuple[str, int]]:
+    last: dict[str, int] = {}
+    for row in rows:
+        if row["guid"] == guid and row["spell"] in LONG_DEFENSIVES and row["t"] < when:
+            last[row["spell"]] = row["t"]
+    return sorted(last.items(), key=lambda item: -item[1])
+
+
 def form_drops(trace: Trace) -> list[dict]:
     """Each TANK_FORMS aura a tank lost while he was up, phase 1 or 3, not to a death: the tank's OK act row
     nearest the removal, `parent` the other action a PREREQ row just before it ran it for, `back` when the form
@@ -8172,6 +8188,12 @@ def show_tanks(trace: Trace) -> None:
               + f"{sum(1 for row in rows if row['side'] is not None and row['stacks'] >= DEFENSIVE_STACKS)} of"
                 f" {sum(1 for row in rows if row['side'] is not None)} side tank cast(s); magic only on a side tank"
                 f" outside phase 3: {sum(1 for row in rows if magic_on_side_tank(row))}")
+        long_rows = long_defensive_rows(rows)
+        high = [row for row in long_rows if row["hp"] is not None and row["hp"] >= DEFENSIVE_PCT]
+        print(f"  long defensives ({', '.join(LONG_DEFENSIVES)}) a side tank cast outside phase 3 at"
+              f" {DEFENSIVE_PCT:.0f}%+ health: {len(high)} of {len(long_rows)}"
+              + "".join(f"\n    {clock(row['t']):>9} {trace.name(row['guid'])[:14]:14} {row['spell']} {row['hp']:.0f}%"
+                        for row in high))
         per_tank: dict[int, collections.Counter] = collections.defaultdict(collections.Counter)
         for row in rows:
             per_tank[row["guid"]][row["spell"]] += 1
@@ -8190,15 +8212,19 @@ def show_tanks(trace: Trace) -> None:
     if not deaths:
         print("  no tank died")
         return
-    print(f"\n  each tank death, the {TANK_DEATH_LOOKBACK_MS / 1000:.0f} s before it:")
+    print(f"\n  each tank death, the {TANK_DEATH_LOOKBACK_MS / 1000:.0f} s before it, and a side tank's last cast of each"
+          " long defensive before it:")
     for row in deaths:
         side = f"side {row['side']}" if row["side"] is not None else "main" if row["main"] else "-"
         taken = sum(row["taken"].values())
         sources = ", ".join(f"{kind} {amount:,}" for kind, amount in row["taken"].most_common())
+        before = "" if row["side"] is None else "; long defensives: " + (", ".join(
+            f"{spell} {(row['t'] - when) / 1000:.1f} s before" for spell, when in long_defensives_before(
+                rows, row["guid"], row["t"])) or "none")
         print(f"    {clock(row['t']):>9} {trace.name(row['guid'])[:14]:14} {side:6} {row['phase']:5}"
               f" taken {taken:,}" + (f" ({sources})" if sources else "")
               + f"; healed {row['gross'] - row['overheal']:,} by {row['heals']} heal(s), {row['overheal']:,} over;"
-                f" absorbed {row['absorbed']:,}; Expose peak {row['expose']}")
+                f" absorbed {row['absorbed']:,}; Expose peak {row['expose']}" + before)
 
 
 # -------------------------------------------------------------------------------------------- scarabs
@@ -9685,8 +9711,9 @@ SECTIONS = (
     ("tanks", "Expose Weakness per wave per side tank, the main tank's with the burrowers and his area casts"
      " before it, side tank area casts per surfaced phase and anub.saoe rows, its picks against its casts and"
      " the FAILED ones, each tank defensive cast with its"
-     " stack, a tank form or stance lost while he was up with the act row that dropped it, each tank death with"
-     " the damage and heals before it",
+     " stack, a side tank's long defensives outside phase 3 at half health or more, a tank form or stance lost"
+     " while he was up with the act row that dropped it, each tank death with the damage and heals before it and"
+     " a side tank's last long defensives",
      show_tanks),
     ("scarabs", "scarabs alive after each emerge and their targets, the main tank's Mandibles stack then, scarab"
      " lives per phase, Mandibles peak stack and damage per player per phase", show_scarabs),
