@@ -777,6 +777,28 @@ class FlameLeviathanReader(unittest.TestCase):
         self.assertEqual(flame_leviathan.seat_stays(track, "6"), [(1000, 5000, "9"), (9500, 9900, "-")])
         self.assertEqual(flame_leviathan.seat_stays(track, "9"), [(5000, 8000, "8")])
 
+    def test_seat_label_reads_his_frame_whichever_way_he_faces(self):
+        boss = (100.0, 50.0, math.pi / 2)
+        ahead, left = flame_leviathan.his_frame(boss, (100.0, 53.0))
+        self.assertAlmostEqual(ahead, 3.0)
+        self.assertAlmostEqual(left, 0.0)
+        rider = flame_leviathan.his_frame(boss, (97.0, 49.4))
+        self.assertEqual(flame_leviathan.seat_label(rider, rider=True), "rear-left")
+        self.assertEqual(flame_leviathan.seat_label((2.8, -1.6), rider=True), "front-right")
+        self.assertEqual(flame_leviathan.seat_label((4.0, 1.6), rider=False), "front-left")
+
+    def test_a_rear_rider_sees_every_turret_and_a_front_rider_neither_rear_one(self):
+        bands = {seat: {aim: flame_leviathan.bearing_band(flame_leviathan.seat_bearing(seat, aim))
+                        for aim in flame_leviathan.TURRET_SPOTS} for seat in flame_leviathan.TURRET_SPOTS}
+        self.assertEqual(bands["rear-left"], {"rear-left": "ahead", "front-left": "ahead",
+                                              "front-right": "ahead", "rear-right": "flank"})
+        self.assertEqual(bands["front-right"], {"front-right": "ahead", "front-left": "flank",
+                                                "rear-left": "behind", "rear-right": "behind"})
+
+    def test_concurrent_max_counts_overlapping_stays(self):
+        self.assertEqual(flame_leviathan.concurrent_max([(0, 10), (5, 20), (10, 30), (25, 40)]), 2)
+        self.assertEqual(flame_leviathan.concurrent_max([]), 0)
+
     def test_lift_shots_keep_the_earliest_note_per_lift(self):
         notes = [
             {"t": 500, "txt": "7 210 -40"}, {"t": 300, "txt": "7 205 -38"}, {"t": 900, "txt": "8 300 10"},

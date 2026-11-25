@@ -124,6 +124,15 @@ LAND_WINDOW_MS = 3000
 JUMP_NOTE_MS = 1000
 FIRST_AID_KIT = 64660
 
+TURRET_ENTRY = 33142
+HUNTER_CLASS = 3
+TURRET_SPOTS = {"rear-left": (0.6, 3.0), "rear-right": (0.6, -3.0),
+                "front-left": (4.0, 1.6), "front-right": (4.0, -1.6)}
+RIDER_BEHIND_TURRET = 1.2
+SET_FACING_DEG = 45.0
+RIDER_ARC_DEG = 90.0            # keep at half of ULDUAR_FL_RIDER_ARC
+RIDER_CAP = {True: 2, False: 1}  # keep in step with ULDUAR_FL_RIDER_CAP_25 and _10
+
 
 def pick(seq, quantile):
     return seq[min(int(len(seq) * quantile), len(seq) - 1)]
@@ -1807,6 +1816,125 @@ def seat_stays(track, value: str) -> list[tuple[int, int, str]]:
     return out
 
 
+def his_frame(boss: tuple[float, float, float], point: tuple[float, float]) -> tuple[float, float]:
+    dx, dy = point[0] - boss[0], point[1] - boss[1]
+    return (dx * math.cos(boss[2]) + dy * math.sin(boss[2]), -dx * math.sin(boss[2]) + dy * math.cos(boss[2]))
+
+
+def seat_label(local: tuple[float, float], rider: bool) -> str:
+    shift = RIDER_BEHIND_TURRET if rider else 0.0
+    return min(TURRET_SPOTS, key=lambda seat: math.hypot(local[0] - TURRET_SPOTS[seat][0] + shift,
+                                                         local[1] - TURRET_SPOTS[seat][1]))
+
+
+def bearing_deg(origin: tuple[float, float], facing: float, point: tuple[float, float]) -> float:
+    off = math.atan2(point[1] - origin[1], point[0] - origin[0]) - facing
+    return abs(math.degrees((off + math.pi) % (2 * math.pi) - math.pi))
+
+
+def seat_bearing(rider_seat: str, turret_seat: str) -> float:
+    ahead, left = TURRET_SPOTS[rider_seat]
+    return bearing_deg((ahead - RIDER_BEHIND_TURRET, left), 0.0, TURRET_SPOTS[turret_seat])
+
+
+def bearing_band(degrees: float) -> str:
+    if degrees <= SET_FACING_DEG:
+        return "ahead"
+    return "flank" if degrees <= RIDER_ARC_DEG else "behind"
+
+
+def concurrent_max(stays: list[tuple[int, int]]) -> int:
+    edges = sorted([(start, 1) for start, _ in stays] + [(stop, -1) for _, stop in stays])
+    best = held = 0
+    for _when, step in edges:
+        held += step
+        best = max(best, held)
+    return best
+
+
+def rider_stays(trace: Trace, fl: Fight) -> list[dict]:
+    tracks = holder_spans(trace, "fl.seat", fl.end)
+    classes = {member["g"]: member.get("c", 0) for member in trace.header.get("roster", [])}
+    jumps = collections.defaultdict(list)
+    for rec in trace.of("note"):
+        if rec.get("k") == "fl.jump":
+            jumps[rec.get("g", 0)].append((rec["t"], str(rec.get("txt", ""))))
+
+    stays = []
+    for member, track in tracks.items():
+        for start, stop, _after in seat_stays(track, ON_HIS_SEAT):
+            why = next((txt for t, txt in jumps.get(member, ()) if abs(t - stop) <= JUMP_NOTE_MS), "ejected")
+            stays.append({"g": member, "cls": classes.get(member, 0), "start": start, "stop": stop, "end": why,
+                          "seat": None, "dealt": collections.Counter(), "secs": collections.Counter()})
+    stays.sort(key=lambda stay: stay["start"])
+
+    samples: dict[int, list[tuple[int, int, str | None]]] = collections.defaultdict(list)
+    seats: dict[int, collections.Counter] = collections.defaultdict(collections.Counter)
+    for snap in trace.of("snap"):
+        when = snap["t"]
+        live = [index for index, stay in enumerate(stays) if stay["start"] <= when < stay["stop"]]
+        if not live:
+            continue
+        rows = {row[0]: row for row in snap.get("u", [])}
+        boss = next((row for guid, row in rows.items() if trace.entries.get(guid) == BOSS_ENTRY), None)
+        if not boss:
+            continue
+        frame = (boss[1], boss[2], boss[4])
+        for index in live:
+            row = rows.get(stays[index]["g"])
+            if not row or len(row) <= 11:
+                continue
+            seats[index][seat_label(his_frame(frame, (row[1], row[2])), rider=True)] += 1
+            target = rows.get(row[7]) if trace.entries.get(row[7]) == TURRET_ENTRY else None
+            aim = seat_label(his_frame(frame, (target[1], target[2])), rider=False) if target else None
+            samples[index].append((when, row[11], aim))
+
+    for index, stay in enumerate(stays):
+        if not seats[index]:
+            continue
+        stay["seat"] = seats[index].most_common(1)[0][0]
+        for (t0, dealt0, aim), (t1, dealt1, _next) in zip(samples[index], samples[index][1:]):
+            if aim is None or not 0 < t1 - t0 <= 3000:
+                continue
+            band = bearing_band(seat_bearing(stay["seat"], aim))
+            stay["dealt"][band] += max(dealt1 - dealt0, 0)
+            stay["secs"][band] += (t1 - t0) / 1000.0
+    return stays
+
+
+def show_riders(trace: Trace) -> int:
+    fl = fight(trace)
+    stays = rider_stays(trace, fl)
+    cap = RIDER_CAP[trace.header.get("diff") in (1, 3)]
+    print("His seats: who rode, which seat, how each stay ended, and the damage each rider dealt by where\n"
+          f"its turret sat against his heading (ahead <= {SET_FACING_DEG:.0f} deg, flank <= {RIDER_ARC_DEG:.0f},"
+          " behind)\n")
+    if not stays:
+        print("  nobody rode his seats")
+        return 0
+    for stay in stays:
+        rates = "  ".join(f"{band} {stay['dealt'][band] / stay['secs'][band]:6.0f}/s"
+                          for band in ("ahead", "flank", "behind") if stay["secs"][band] >= 1.0)
+        print(f"     {trace.name(stay['g']):14s} c{stay['cls']:<2d} {stay['seat'] or '?':11s}"
+              f" {clock(stay['start']):>9s} for {(stay['stop'] - stay['start']) / 1000:5.1f} s"
+              f"  {stay['end']:10s} {rates}")
+
+    totals = {band: (sum(s["dealt"][band] for s in stays), sum(s["secs"][band] for s in stays))
+              for band in ("ahead", "flank", "behind")}
+    print("\n  riders at once: max " + str(concurrent_max([(s["start"], s["stop"]) for s in stays]))
+          + f" (cap {cap}); hunters seated {sum(1 for s in stays if s['cls'] == HUNTER_CLASS)} (want 0)")
+    print("  damage dealt at a turret " + ", ".join(
+        f"{band} {dealt / secs:,.0f}/s over {secs:.0f} s" for band, (dealt, secs) in totals.items() if secs))
+    print("  seats " + ", ".join(f"{seat} {n}" for seat, n in
+                                 collections.Counter(s["seat"] or "?" for s in stays).most_common())
+          + "; ended " + ", ".join(f"{why} {n}" for why, n in
+                                   collections.Counter(s["end"] for s in stays).most_common()))
+    unloads = collections.Counter(str(rec.get("txt", "")) for rec in trace.of("note") if rec.get("k") == "fl.unload")
+    print("  catapult unloads (fl.unload): " + (", ".join(f"{why} {n}" for why, n in unloads.most_common())
+                                                 or "none"))
+    return 0
+
+
 def show_mechanics(trace: Trace) -> int:
     fl = fight(trace)
     print("Catapult, his turrets and the stun: throws, landings, turret kills, Systems Shutdowns, jumps,\n"
@@ -1850,7 +1978,7 @@ def show_mechanics(trace: Trace) -> int:
     jumps = collections.defaultdict(list)
     for rec in trace.of("note"):
         if rec.get("k") == "fl.jump":
-            jumps[rec.get("g", 0)].append(rec["t"])
+            jumps[rec.get("g", 0)].append((rec["t"], str(rec.get("txt", ""))))
     jumped = ejected = picked = dead = 0
     on_foot: list[float] = []
     print("\n  off his back (fl.seat 6 -> on foot), then on foot until a chopper or a gun took them:")
@@ -1858,7 +1986,8 @@ def show_mechanics(trace: Trace) -> int:
         for start, stop, after in seat_stays(track, ON_HIS_SEAT):
             if after != ON_FOOT:
                 continue
-            own = any(abs(t - stop) <= JUMP_NOTE_MS for t in jumps.get(member, ()))
+            why = next((txt for t, txt in jumps.get(member, ()) if abs(t - stop) <= JUMP_NOTE_MS), None)
+            own = why is not None
             jumped += own
             ejected += not own
             walk = next(((s, e, nxt) for s, e, nxt in seat_stays(track, ON_FOOT) if s == stop), None)
@@ -1872,9 +2001,20 @@ def show_mechanics(trace: Trace) -> int:
                     dead += 1
                 fate += f" after {(walk[1] - walk[0]) / 1000:.1f} s"
             print(f"     {trace.name(member):14s} seated {clock(start):>9s} for {(stop - start) / 1000:5.1f} s,"
-                  f" {'jumped' if own else 'ejected'}, then {fate}")
+                  f" {'jumped (' + why + ')' if own else 'ejected'}, then {fate}")
     print(f"     jumped {jumped}, ejected {ejected}; off their feet {picked}"
           + (f" (median {statistics.median(on_foot):.1f} s on foot)" if on_foot else "") + f", died on foot {dead}")
+    stays = rider_stays(trace, fl)
+    if stays:
+        rates = []
+        for band in ("ahead", "flank", "behind"):
+            secs = sum(s["secs"][band] for s in stays)
+            if secs:
+                rates.append(f"{band} {sum(s['dealt'][band] for s in stays) / secs:,.0f}/s")
+        print(f"     riders at once max {concurrent_max([(s['start'], s['stop']) for s in stays])}"
+              f" (cap {RIDER_CAP[trace.header.get('diff') in (1, 3)]}), hunters seated"
+              f" {sum(1 for s in stays if s['cls'] == HUNTER_CLASS)}; rider damage at a turret "
+              + ", ".join(rates) + " (--riders)")
 
     pickups = holder_spans(trace, "fl.pickup", fl.end)
     assigned = sum(1 for track in pickups.values() for held, _s, _e in track if held not in ("0", ""))
@@ -1907,6 +2047,8 @@ def show_mechanics(trace: Trace) -> int:
 SECTIONS = (
     ("mechanics", "catapult throws, his turrets, Systems Shutdowns, jumps, pickups, heals, crate grabs",
      show_mechanics),
+    ("riders", "his seats: who rode which seat, how each stay ended, rider damage by turret bearing",
+     show_riders),
     ("hulls", "why the vehicles died, crews on foot, drive branches, Pursued escapes", show_hulls),
     ("pyrite", "Blue Pyrite stacks per demolisher, and the crate ledger", show_pyrite),
     ("ram", "Battering Ram exposure only", show_ram),

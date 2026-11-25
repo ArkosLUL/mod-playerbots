@@ -45,7 +45,7 @@ are read by spec, since `IsTank` flickers. First by role, then whoever is left, 
 
 | Kind (N each: 10-man 2, 25-man 5) | By role | Why |
 |---|---|---|
-| Demolisher gunner | ranged DPS | catapulted onto him to kill his turrets with class spells; ranged reach the partner seat's turret |
+| Demolisher gunner | ranged DPS, hunters last | riders come from here (below); hunters never ride |
 | Siege driver | tanks, then melee DPS | any role can; it keeps the ranged free for the catapult |
 | Demolisher driver | healers | vehicle spells only, and no seat a healer can take casts class spells |
 | Chopper driver | healers left | First Aid Kit is a vehicle spell, so the role decides nothing |
@@ -269,7 +269,21 @@ The core chain, read from `boss_flame_leviathan.cpp`, the DBC and `conditions`:
   rider immune to Flame Vents, Missile Barrage, Battering Ram, the Fury stun and the Inferno, and
   activates the seat's **Leviathan Defense Turret 33142** and its partner's (25-man seat ^ 2; 10-man
   keeps seats 2 and 3 only, seat ^ 1), which shoot the rider (Searing Flame 62402, ~500). A turret has
-  ~64k health (HealthModifier 5.08) and takes damage only from players on his seats.
+  70.8k health and takes damage only from players on his seats, and only once activated: until then
+  it is `NOT_SELECTABLE`. Seats 0-3 are rear-left, rear-right, front-left, front-right (VehicleSeat
+  3043, 3065, 3071, 3072), so a 25-man pair is one **side**, and all four take a rider on each side.
+- **A rider sees his turrets at fixed bearings**: every seat faces his heading, a rider sits 1.2 yd
+  behind its own turret and cannot turn (each move of his resets its orientation). From a rear seat
+  they sit at 0°, 17° (same-side front), 45° and 79° (other-side rear); from a front seat at 0°,
+  69° (other front), 116° and 148°. The core's facing check is ±90°, but `set facing` fires past
+  ±45° and outranks the rotation, so on a target past 45° it re-turned the rider every tick and
+  nothing was cast: window48 riders dealt ~3.3k/s at a turret ≤45°, ~370/s at 69-79°, ~340/s
+  behind, and the fight stalled 3-14 min whenever only such turrets were left. Hence riders block
+  `set facing`, and a rear rider can reach all four turrets, a front rider only the two fronts.
+- **Hunters never ride.** A shot's minimum range is `max(both combat reaches + 4/3, 5)` = 5 yd
+  (turret reach 2.0), and his own turret sits 1.2 yd from every seat, its partner 2.6 or 4.8 yd:
+  a hunter can shoot one or two turrets of the other side, never its own pair. Seated hunters fell
+  back to Raptor Strike at 0.6-1.7k/s.
 - **A turret's death** makes its seat's device cast Overload Circuit 62399 on him, and the 4th (10-man
   2nd) casts **Systems Shutdown 62475**: stunned 20 s, +50% damage taken from every school, Gathering
   Speed removed. Stunned, he casts no Flame Vents, Battering Ram or Pursued (Missile Barrage is
@@ -279,18 +293,28 @@ The core chain, read from `boss_flame_leviathan.cpp`, the DBC and `conditions`:
 
 What the bots do, each seat's job done by whoever sits there, human or bot:
 
-- **Gunner loads** (`FlameLeviathanWantsCatapult`) while seats with a live turret and no rider
-  outnumber `fl.claim` (gunners loaded or in flight), its demolisher has a usable driver, is not
-  Pursued or the ram target, stands within 78 yd of him and he is not shut down. Healers never load.
+- **Gunner loads** (`FlameLeviathanWantsCatapult`), ranged DPS only and never a hunter, while riders
+  on his seats plus `fl.claim` (gunners loaded or in flight) stay under the **rider cap**
+  (`ULDUAR_FL_RIDER_CAP_25` 2, `_10` 1; human riders count) and seats with a live turret and no rider
+  outnumber the claims; its demolisher has a usable driver, is not Pursued or the ram target, stands
+  within 78 yd of him, and he is neither shut down nor down to one turret with a rider aboard. The
+  other gunners stay on their guns for the Mechanolifts and crates.
 - **Driver throws** any loaded passenger, human too: stop, face the aim within ±15°, cast; out of
   70 yd it drives to 55 yd of the aim (`fl.drive` `catapult`), and it holds the hull through the cast.
-  Never while Pursued, the ram target or he is shut down. A passenger left unthrown 10 s (Pursued and
-  shutdown time not counted) leaves seat 3 and clicks back onto the gun.
-- **Rider** (`flame leviathan seat`, an `Exclusive` rule over its movement and pickers) attacks its
-  seat's turret, then the partner's, then any live selectable one, and stays seated, immune, until
-  he shuts down, then leaves (`fl.jump`). Leaving earlier lands it on foot under 15k Flame Vents
-  ticks. Vehicle 341's exit launches and knocks back the rider; Smoke Trail's Parachute 61242
-  feather-falls it.
+  Never while Pursued, the ram target or he is shut down. A passenger left unthrown 10 s (Pursued time
+  not counted), or still loaded when he shuts down, leaves seat 3 and clicks back onto its gun
+  (`fl.unload` `wait` or `shutdown`).
+- **Rider** (`flame leviathan seat`, an `Exclusive` rule over its movement and pickers, plus a block on
+  `set facing`, Frost Nova, Blink, Disengage and charges: a gnome mage Blinked off within 2-6 s of
+  every landing) attacks the activated turret nearest its heading within ±90°
+  (`ULDUAR_FL_RIDER_ARC`), and stays seated, immune, until he shuts down, then leaves (`fl.jump`
+  `shutdown`). It leaves early only when **stranded** (no turret to attack while a live one sits
+  outside its arc and no other rider's, which only happens on a front seat) or **stalled** (its target
+  lost no health for `ULDUAR_FL_RIDER_STALL_MS`, 15 s). Either frees the cap, and the hookshot skips a
+  seat whose turret died (its device channels Overload Circuit), so the next throw lands where the
+  work is. Off his back a rider is
+  on foot under 15k Flame Vents ticks. Vehicle 341's exit launches and knocks back the rider; Smoke
+  Trail's Parachute 61242 feather-falls it.
 - **Pickup**: each raider on foot in the arena — not in hookshot flight, not claimed, not within 15 yd
   of a gunnerless demolisher — gets the nearest chopper with a usable driver and an empty rear seat
   (`fl.pickup`, kept 20 s). The driver parks 2 yd off them; they walk to it and click (65030 seats a
@@ -634,18 +658,22 @@ so the next silent election failure is visible.
   every load, landing, jump, pickup and return is a change there, humans included. `fl.throw` is
   `<passenger> <yd> <his yd/s>` from the driver; a throw landed if the passenger reads 6 within 3 s.
   `fl.turrets` is a bitmask of seats with a live turret, `fl.shutdown` the stun; `fl.jump` marks a
-  rider leaving on its own, so 6 → 9 without it is his eject. Also `fl.load`, `fl.claim`, `fl.origin`,
-  `fl.pickup`, `fl.heal`, `fl.regun` and `fl.crate`; First Aid Kit heals are `heal` rows of 64660.
+  rider leaving on its own, with why, so 6 → 9 without it is his eject. Also `fl.load`, `fl.claim`,
+  `fl.origin`, `fl.unload`, `fl.pickup`, `fl.heal`, `fl.regun` and `fl.crate`; First Aid Kit heals are
+  `heal` rows of 64660. `--riders` names each stay's seat and end, and splits the rider's damage (the
+  snapshot's dealt column) by its target's bearing: ahead ≤45°, flank ≤90°, behind.
 
 ## Known gaps
 
-- **The catapult cycle is unverified in the field**: whether a bot throw lands (the passenger reads 6
-  in `fl.seat`), whether class rotations fire from his seat, whether a melee rider reaches the
-  partner turret, how long a turret lasts, the pickup walk under hazards, and whether the stun pays
-  for the gunners' lost Mortar, crate grabs and Increased Speed (a Pursued demolisher whose gunner is
-  away has none). Load into Catapult's 30 s cooldown floors the cycle.
-- **A rider waits out a shutdown that never comes.** Seated it is safe and useless; if no gunner is
-  left to cover his other seat pair, it sits there until he dies.
+- **Unverified rider reach**: that with `set facing` blocked a rider hits a flank turret (69-79°;
+  `--riders` flank should near ahead's rate), and whether a cast-time spell at a turret behind it
+  completes. Whether the stun pays for the riders' lost Mortar, crate grabs and Increased Speed (a
+  Pursued demolisher whose gunner is away has none) is open too. Load into Catapult's 30 s cooldown
+  floors the cycle.
+- **Nothing picks the landing seat**: the hookshot takes the free seat nearest the passenger in
+  flight. In window48, throws from his front half landed 37 front, 31 rear and missed 14; from
+  behind him 18 rear, 6 front and missed 27. Two front riders kill only the fronts and are then
+  stranded.
 - **A crewless bot walks to its pickup**, on foot under Missile Barrage and, outside a stun, Flame Vents
   (500 yd), which killed 22 of 26 bots in one wipe before pickups. With every chopper's rear seat
   full it gets no pickup and walks to any open seat.

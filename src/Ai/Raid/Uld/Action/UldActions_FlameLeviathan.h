@@ -66,6 +66,14 @@ public:
 
     FlameLeviathanSeatAction(PlayerbotAI* botAI) : AttackAction(botAI, Name) {}
     bool Execute(Event event) override;
+
+private:
+    bool Leave(char const* why);
+
+    ObjectGuid _target;
+    uint32 _targetHealth = 0;
+    uint32 _progressMs = 0;
+    uint32 _seenMs = 0;
 };
 
 class FlameLeviathanEnterVehicleAction : public MovementAction
