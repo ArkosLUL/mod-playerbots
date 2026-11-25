@@ -176,10 +176,13 @@ brings a held one in.
   a melee bot (no tank, not phased) on him, out of his melee range, whose straight way in the walk guard holds,
   gets the nearest of 16 points 3 yd inside his melee range (`ULDUAR_ALGALON_MELEE_SPOT_INSET`) in the room and
   8 yd clear of holes, a straight walk first; the raid position action walks it (detour round holes as a slot).
-  Back in reach, the branch ends and the generic melee takes over.
+  Back in reach, or once its straight way in clears, the branch ends and the generic melee takes over.
 - `FinishHandOverHp`: the margin is at most the finisher alone's work by 3 s before the cast (the bulk's closing
   speed, `BulkClosingPctPerSec` split out of `BulkWorkMs`, over the team's size); none under 3 s. uld6 1865 by hand:
-  hand-off ~3:17 at ~5% over its line, 9 s before the cast, done by ~3:22 at the finisher's 1.2 %/s.
+  at r16's hand-off, 3:18.8, it stood ~11.7% over its line with 7.9 s to the cast, where the finisher
+  alone closes at most ~4.9% (5 %/s capped closing over 5) by cast − 3 s, so the team keeps it; at the team's
+  +3.1 %/s on it (3:00-3:11) the hand-off comes ~3:22.3 with under 1% left. A team slower than that (+0.5 %/s
+  3:15-3:18, back from the deadline kill) still leaves it above its band at the cast.
 - Reader `--melee` (per melee bot and phase: in reach / blocked / out, melee-spot seconds) and a verdict at 10 s
   blocked in a phase; tests `MeleeWayIn`. `docs/raids/ulduar/algalon.md`: walk guard, Bulk bullet, the trace.
 
