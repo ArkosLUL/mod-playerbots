@@ -438,7 +438,6 @@ GUARDIAN_WEAKENED_PCT = 10.0
 BURN_PCT = 12.0
 BURN_LOOK_MS = 60000
 NPC_MARKED_IMMORTAL_GUARDIAN = 36064
-WEAKENED_PCT = 1.0
 FACING_REACH = 12.0
 # Deafening Roar: 2.3 s cast, then 4 s of silence within 50 yd. Aura Mastery with the caster's own
 # Concentration Aura up puts 64364, silence immunity, on the raiders carrying that aura.
@@ -5961,7 +5960,7 @@ def show_facing(trace: Trace) -> None:
         rows = {row[0]: row for row in snap.get("u", [])}
         for guid in guardians:
             row = rows.get(guid)
-            if not row or len(row) < 8 or row[7] not in samples or row[5] < WEAKENED_PCT:
+            if not row or len(row) < 8 or row[7] not in samples or row[5] < GUARDIAN_WEAKENED_PCT:
                 continue
             tank = rows.get(row[7])
             if tank and math.hypot(tank[1] - row[1], tank[2] - row[2]) <= FACING_REACH:
@@ -5976,7 +5975,7 @@ def show_facing(trace: Trace) -> None:
             continue
         rows = {row[0]: row for row in frames[index].get("u", [])}
         tank, guardian = rows.get(rec["d"]), rows.get(rec["s"])
-        if tank and guardian and guardian[5] >= WEAKENED_PCT:
+        if tank and guardian and guardian[5] >= GUARDIAN_WEAKENED_PCT:
             hits[rec["d"]].append((gazing(rec["t"]), in_front((tank[1], tank[2]), tank[4], (guardian[1], guardian[2])),
                                    rec.get("a", 0) + rec.get("ab", 0)))
 

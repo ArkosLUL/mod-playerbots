@@ -33,7 +33,7 @@ earlier compare unlike rosters.
   Army of the Dead lands +107-127 s in (18 of 24 pulls on windows 44-49, two more at +170-180 s) and its ghouls hold
   9-14 Guardians for their 40 s, through the third beacon. Under 12% ranged burn Yogg (r25): his fall goes from
   0.09-0.14 to 0.13-0.19%/s; the race is then the tanks' life against ~70 s to the kill. Tanks die under the pile:
-  bot tanks faced only their target, leaving live Guardians behind them 40% of their time (46% in gazes), where a
+  bot tanks faced only their target, leaving live Guardians behind them 38% of their time (45% in gazes), where a
   player gets no dodge, parry or block and each landed twice as often (r29).
 
 **Compositions on 06854755f (window 49, one pull per pool, r28).** C meets the done rule (uld3 kill, 1 death).
@@ -81,7 +81,7 @@ say 8 (round 18); a Diminish Power claim has no timeout, and no tank breaks a ch
 a Guardian gone unkillable (round 20); back-line Guardians the DK's Dark Command cannot reach (round 21); a phase 3
 tank keeps its platform target and chases back to it while its forced walk to the spot reads `wait` (uld5 7:07-7:13);
 r29 retargets for facing only while every lead is past 1.5, so a thin-lead target still caps the pile in front at
-~68% out of gazes (any target 86%).
+~73% out of gazes (any target 87%).
 
 **Fixes in place.**
 
@@ -175,20 +175,20 @@ Guardians stay the top failure, but r29 picks a new mechanism.
 
 **Picked: Guardians behind the tanks.** `Unit::RollMeleeOutcomeAgainst` (core `Unit.cpp:3068-3106`) rolls no
 dodge for a player hit from behind and no parry or block for anyone. `--facing`, six pulls to the first tank death,
-live (sampled 1%+) Guardians within 12 yd of their tank:
+live (sampled 10%+, not Weakened, as the code counts them) Guardians within 12 yd of their tank:
 
 | | behind, share of Guardian-s | landed a second behind / front | damage a Guardian-second behind / front |
 |---|---|---|---|
-| out of gazes | 41% (1277 of 3126 s) | 0.31 / 0.15 | 3.1k / 1.8k |
-| gazes | 47% (499 of 1068 s) | 0.33 / 0.17 | 3.7k / 1.8k |
+| out of gazes | 38% (995 of 2624 s) | 0.32 / 0.17 | 3.9k / 2.0k |
+| gazes | 45% (396 of 887 s) | 0.35 / 0.19 | 4.5k / 2.1k |
 
-Every bot tank of every pull shows it (behind 22-59%); 0.31-0.33 a second sits near the 0.41 swing ceiling
+Every bot tank of every pull shows it (behind 24-54%); 0.32-0.35 a second sits near the 0.41 swing ceiling
 (Guardians swing every 2.4 s). Cause: a tank faces only its target (`set facing` at ±45°, `AttackAction` at
 ±60°), control step 3 (`UldActions_YoggSaron.cpp` `ControlPhaseThree`) targets the thinnest lead, mostly the
 newest Guardian from wherever it walked in, and in a gaze a tank with its target under 65° from Yogg faces straight
 away (`away` / `tankfree`), which covers 39-41% of its pile. A replay of headings: keeping the target inside ±40°
-covers 68% out of gazes (now 60%) and, with Yogg behind, 66% in gazes (now 54%); any target 86% / 72%; any
-heading 90% / 79%. A bug: the strategy holds the pile on the tank and the tank throws its avoidance away.
+covers 73% out of gazes (now 62%) and, with Yogg behind, 67% in gazes (now 55%); any target 87% / 75%; any
+heading 89% / 76%. A bug: the strategy holds the pile on the tank and the tank throws its avoidance away.
 
 **Fix.**
 
@@ -197,19 +197,21 @@ heading 90% / 79%. A bug: the strategy holds the pile on the tank and the tank t
   heading.
 - `yogg-saron tank pile facing` (`ACTION_RAID + 2.75`, returns false): a still phase 3 bot tank, not dragging,
   outside a gaze, turns there when it covers more live Guardians swinging at it (`yogg.pileface` before, after).
-- Gaze: such a tank takes `pile` (target kept, Yogg behind) where a heading exists, else `tankfree` / `away` turn it
-  to the pile's best heading with Yogg behind instead of straight away.
+- Gaze: such a tank takes `pile` (target kept, Yogg behind) where a heading exists, turning again once its target
+  sits past ±40° (review: the 0.1 rad tolerance alone let `set facing` turn it to the target, Yogg in front), else
+  `tankfree` / `away` turn it to the pile's best heading with Yogg behind instead of straight away.
 - Control step 3: while every Guardian in reach and the current one lead past 1.5, attack the one letting the tank
   face most of its pile (`yogg.tankhold` `pile attack`); a thin lead keeps the old rule.
-- Reader `--facing` (tests `in_front`, `facing_split`); boss doc: tanks in phase 3, gaze `pile`, probe table.
+- Reader `--facing` (tests `in_front`, `facing_split`), live at 10%+ like the code (review; was 1%+, 41% / 47%
+  behind); boss doc: tanks in phase 3, gaze `pile`, probe table.
 
 Same code at 10 and 25, normal and hard mode; a human tank is never turned. No shared code.
 
 **Next window must show:**
 
-- `--facing` per composition: behind under 32% out of gazes (now 41%) and under 40% in gazes (now 47%);
+- `--facing` per composition: behind under 28% out of gazes (now 38%) and under 38% in gazes (now 45%);
   `yogg.pileface` on every bot tank, `yogg.gaze` `pile` rows, some `pile attack`.
-- Landed a second per side near window 49's (0.31 / 0.15): front rising toward behind means the turn bought nothing.
+- Landed a second per side near window 49's (0.32 / 0.17): front rising toward behind means the turn bought nothing.
 - First tank death after 12% later than window 49 per composition (A +19-56 s, B +22, C +48 or none).
 - No threat cost: `first off a tank` with a cause other than `none` at most window 49's 3-5 a pull, fresh-on-raider
   medians as above. Back `pile attack` out if those rise.

@@ -1601,6 +1601,8 @@ quarter of one phase 3, cast starts falling from ~34 per 4 s to under 2. `yogg.g
   claiming it cost over a third of the raid's healing for every 4 s gaze.
 - **`pile`**: a still bot tank, not dragging, takes the heading with Yogg at least 100° off that puts the
   most of [its pile](#the-tanks-in-phase-3) in front with its target inside ±40°, and keeps attacking.
+  It turns again whenever its target sits past ±40°: the 0.1 rad tolerance alone lets it drift past
+  `set facing`'s ±45°, whose turn to the target (60° or more from Yogg) brings Yogg inside ±90°.
   With no such heading, `tankfree` and `away` turn it to the best one for the pile alone instead of
   straight away.
 - **`angled`**: any other still bot whose target is at least 65° from Yogg as seen from the bot
@@ -1952,12 +1954,12 @@ nothing behind it. So in phase 3 `yogg-saron guardian control` (`ACTION_RAID + 3
 
 **A bot tank faces its pile**: a player hit from outside its front 180° gets no dodge, parry or block
 (`Unit::RollMeleeOutcomeAgainst`). Facing only its target, a bot tank had its live (not Weakened) Guardians
-behind it 40% of their time on it (46% in gazes), where each landed 0.31-0.33 hits a second against
-0.15-0.17 from the front, 3.1-3.7k damage a second against 1.8k (six pulls, to the first tank death). So
+behind it 38% of their time on it (45% in gazes), where each landed 0.32-0.35 hits a second against
+0.17-0.19 from the front, 3.9-4.5k damage a second against 2.0-2.1k (six pulls, to the first tank death). So
 `yogg-saron tank pile facing` (`ACTION_RAID + 2.75`) turns a still tank, outside a gaze, to the heading
 that puts more of the live Guardians swinging at it inside ±80°, its target kept inside ±40° (`set
 facing` turns at ±45°): `YoggSaronPile`, native test; `yogg.pileface` (covered before, after). Replayed
-on those pulls, that target limit covers 68% out of gazes, any target 86%, any heading 90%.
+on those pulls, that target limit covers 73% out of gazes, any target 87%, any heading 89%.
 
 `yogg-saron dps target guard multiplier` zeroes `TankAssist` for tanks in phase 3 while a Guardian that can
 still be held lives within 70 yd, or the picker hands Yogg straight back; 70 yd covers the Guardian spawn
@@ -2193,9 +2195,9 @@ count, so skip `r:1` rows when taking a minimum or every bot reads as Insane.
 - A Guardian's spawn is a Simple Teleport (64195) within 3 s of its first sample, else that sample; every
   Guardian casts it again at the wipe.
 - A Weakened Guardian's 1 HP reads 0%, so presence is a fresh row, not health; Thorim's casts never reach
-  the recorder, so a Guardian leaving at 10% or less counts as the Storm's kill. A Weakened one still
-  swings, so `--facing` counts as live only those sampled at 1% or more, on a tank within 12 yd, and
-  sides each landed hit by the snapshot before it.
+  the recorder, so a Guardian leaving at 10% or less counts as the Storm's kill. `--facing` counts as
+  live, as the tank code does, only those sampled at 10% or more (not Weakened), on a tank within 12 yd,
+  and sides each landed hit by the snapshot before it.
 - A removal row counts as evidence of a buff's holder, since a buff put up before the pull shows only when
   it comes off.
 - A failed taunt never reaches a cast row, so taunts are read as attempts off the action rows — the failures

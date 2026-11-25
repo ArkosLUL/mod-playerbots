@@ -1621,7 +1621,8 @@ bool YoggSaronLunaticGazeAction::Execute(Event /*event*/)
             if (RaidObs::Active())
                 RaidObs::NoteDerived(bot, "yogg.gaze", "pile");
 
-            if (YoggSaronHeadingGap(bot->GetOrientation(), heading) > ULDUAR_YOGG_SARON_FACING_TOLERANCE)
+            if (YoggSaronHeadingGap(bot->GetOrientation(), heading) > ULDUAR_YOGG_SARON_FACING_TOLERANCE ||
+                YoggSaronHeadingGap(bot->GetOrientation(), bot->GetAngle(target)) > YoggSaronPile::TARGET_ARC)
                 bot->SetFacingTo(heading);
 
             return false;
