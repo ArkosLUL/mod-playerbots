@@ -93,6 +93,7 @@ void DefineYoggSaron(EncounterBuilder& e)
     e.Node<YoggSaronPhase3PositioningTrigger, YoggSaronPhase3PositioningAction>(ACTION_RAID);
     e.Node<YoggSaronGuardianControlTrigger, YoggSaronGuardianControlAction>(ACTION_RAID + 3);
     e.Node<YoggSaronVigilanceTrigger, YoggSaronVigilanceAction>(ACTION_RAID + 2.5f);
+    e.Node<YoggSaronGuardianMisdirectTrigger, YoggSaronGuardianMisdirectAction>(ACTION_RAID + 2);
     e.Node<YoggSaronBeaconDragTrigger, YoggSaronBeaconDragAction>(ACTION_RAID + 4);
     e.Node<YoggSaronBeaconStageTrigger, YoggSaronBeaconStageAction>(ACTION_RAID + 3.5f);
     e.Node<YoggSaronBeaconBearFormTrigger, YoggSaronBeaconBearFormAction>(ACTION_RAID + 4.5f);
@@ -204,6 +205,8 @@ void DefineYoggSaron(EncounterBuilder& e)
 
     e.Block("yogg-saron beacon hunter hold", Role::Any, YoggSaronBeaconHunterHold, 0,
             {"feign death", "deterrence"});
+
+    e.Block("yogg-saron misdirection hold", Role::Any, YoggSaronInPhase3, 0, {"misdirection on main tank"});
 
     e.Block("yogg-saron beacon bear hold", Role::Any, YoggSaronBeaconBearHeld, 0, {"cat form", "caster form"});
 

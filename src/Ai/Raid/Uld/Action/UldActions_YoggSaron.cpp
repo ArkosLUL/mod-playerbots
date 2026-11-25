@@ -1712,7 +1712,7 @@ bool YoggSaronBeaconDragAction::HunterDrag(Unit* guardian)
     bool const due = mark && mark->GetDuration() >= 0 &&
                      static_cast<uint32>(mark->GetDuration()) <= ULDUAR_YOGG_SARON_BEACON_SHOT_LEFT_MS;
     if (due && guardian->GetVictim() != bot && !guardian->HasAura(SPELL_DISTRACTING_SHOT, bot->GetGUID()) &&
-        bot->IsWithinDistInMap(guardian, ULDUAR_YOGG_SARON_DISTRACTING_SHOT_RANGE) &&
+        bot->IsWithinDistInMap(guardian, ULDUAR_YOGG_SARON_HUNTER_SHOT_RANGE) &&
         bot->IsWithinLOSInMap(guardian) && botAI->CastSpell("distracting shot", guardian))
     {
         YoggSaronBeaconTaunted(bot);
@@ -1724,9 +1724,9 @@ bool YoggSaronBeaconDragAction::HunterDrag(Unit* guardian)
 
     Position destination = YoggSaronBeaconHunterSpot(bot);
     float const reach = guardian->GetExactDist2d(destination);
-    if (reach > ULDUAR_YOGG_SARON_DISTRACTING_SHOT_RANGE && guardian->GetVictim() != bot)
+    if (reach > ULDUAR_YOGG_SARON_HUNTER_SHOT_RANGE && guardian->GetVictim() != bot)
     {
-        float const share = (ULDUAR_YOGG_SARON_DISTRACTING_SHOT_RANGE - 2.0f) / reach;
+        float const share = (ULDUAR_YOGG_SARON_HUNTER_SHOT_RANGE - 2.0f) / reach;
         destination.Relocate(guardian->GetPositionX() + (destination.GetPositionX() - guardian->GetPositionX()) * share,
                              guardian->GetPositionY() + (destination.GetPositionY() - guardian->GetPositionY()) * share,
                              destination.GetPositionZ());
@@ -2320,6 +2320,49 @@ bool YoggSaronVigilanceAction::Execute(Event /*event*/)
         RaidObs::Note(bot, "yogg.vigilance", tank->GetName());
 
     return true;
+}
+
+bool YoggSaronGuardianMisdirectAction::Execute(Event /*event*/)
+{
+    Unit* guardian = YoggSaronMisdirectGuardian(botAI, true);
+    if (!guardian)
+        return false;
+
+    if (YoggSaronGazeActive(botAI) && !bot->HasInArc(CAST_ANGLE_IN_FRONT, guardian))
+    {
+        if (RaidObs::Active())
+            RaidObs::NoteDerived(bot, "yogg.mdshot", "gaze");
+
+        return false;
+    }
+
+    if (!bot->HasAura(SPELL_HUNTER_MISDIRECTION) && !bot->HasAura(SPELL_MISDIRECTION))
+    {
+        Player* tank = YoggSaronMisdirectTank(botAI);
+        if (!tank || !botAI->CanCastSpell("misdirection", tank) || !botAI->CastSpell("misdirection", tank))
+            return false;
+
+        if (RaidObs::Active())
+            RaidObs::NoteDerived(bot, "yogg.mdshot", "misdirect");
+
+        return true;
+    }
+
+    Player* holder = guardian->GetVictim() ? guardian->GetVictim()->ToPlayer() : nullptr;
+    char const* step = holder && PlayerbotAI::IsTank(holder) ? "dump" : "open";
+    for (char const* shot : {"arcane shot", "chimera shot", "aimed shot", "multi-shot", "steady shot"})
+    {
+        if (!YoggSaronMisdirectShotLands(botAI, shot, guardian) || !botAI->CanCastSpell(shot, guardian) ||
+            !botAI->CastSpell(shot, guardian))
+            continue;
+
+        if (RaidObs::Active())
+            RaidObs::NoteDerived(bot, "yogg.mdshot", step);
+
+        return true;
+    }
+
+    return false;
 }
 
 bool YoggSaronHealerCombatEngineAction::Execute(Event /*event*/)
