@@ -130,11 +130,10 @@ Leads, not picked:
   healers. Built r11.
 - Q5 (2026-11-24): tank druids in bear form in every boss fight: keep as is for now. Algalon's own hold stays, no
   shared change.
+- Q6 (2026-11-25, yes): on 25-man only, two more ranged join the star team (five members) from wave 3's spawn to Big
+  Bang 2's cast. Build in r15.
 
-**Open questions:**
-
-- Q6 (r8, asked again r14 with its trigger met): more ranged on the 25-man star team from wave 3's spawn to Big Bang
-  2's cast, and how many. Round 14 has the case; recommendation two (five members).
+**Open questions:** none.
 
 ## Round 14 (2026-11-25, window 38 build 008c167b4: round 13)
 
