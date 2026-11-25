@@ -99,7 +99,8 @@ public:
 
 protected:
     bool Kite(Unit* boss, char const*& branch);
-    std::optional<Position> DetourAroundFire(Unit* boss, Position const& goal, bool mayClose);
+    std::optional<Position> DetourAroundFire(Unit* boss, Position const& goal, bool mayClose,
+                                             float margin = ULDUAR_FL_TOWER_HAZARD_MARGIN);
     bool ClearHazard(Unit* hazard, Unit* keepInReachOf = nullptr);
     bool ClearBatteringRam(Unit* boss);
     bool DetourToCrate(Unit* boss);

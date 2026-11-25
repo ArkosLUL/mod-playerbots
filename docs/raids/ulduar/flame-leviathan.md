@@ -215,9 +215,7 @@ despite the name**, and never ignites anything.
   A Pursued demolisher runs 14 yd/s on Increased Speed, cast by its gunner and noted `fl.speed`
   because no instant leaves a `cast` row; the crew of his threat victim gets it too. The aura, not the
   cast's answer, says it landed (a refusal reads as success), so the speed buffs retry on
-  `ULDUAR_FL_DEMOLISHER_RAM_COOLDOWN_MS` (4 s). Neither hull
-  detours round the Inferno trail while he is in range to fire: in one pull 62% of all Ram hull damage
-  landed on `kite:detour` legs, against 0.7% of fleet health lost to the trail.
+  `ULDUAR_FL_DEMOLISHER_RAM_COOLDOWN_MS` (4 s).
 - **Nothing else opens a RaidObs trace.** He never sets `IN_PROGRESS` (only `SPECIAL` /
   `NOT_STARTED` / `DONE`) and the unit he engages is a vehicle, not a roster player, so neither obs
   opener fires. The encounter's tick (`FlameLeviathanTick`, once per instance every 200 ms, often
@@ -280,7 +278,8 @@ The core chain, read from `boss_flame_leviathan.cpp`, the DBC and `conditions`:
   ([vehicles](../../engine/raid-mechanics-lessons.md#vehicles-and-flight)); without it, in window48
   riders faced a turret behind them in 10 of 3,259 samples while he moved, dealt ~3.3k/s at a
   turret ≤45°, ~370/s at 69-79° and ~340/s behind, and the fight stalled 3-14 min whenever only
-  such turrets were left.
+  such turrets were left. With it, 96-100% faced it and riders dealt 3.0-13.6k/s at flank and behind
+  turrets against 4.4-5.7k/s ahead, a 25-man stun every 46-91 s.
 - **Hunters never ride.** A shot's minimum range is `max(both combat reaches + 4/3, 5)` = 5 yd
   (turret reach 2.0), and his own turret sits 1.2 yd from every seat, its partner 2.6 or 4.8 yd:
   a hunter can shoot one or two turrets of the other side, never its own pair. Seated hunters fell
@@ -312,7 +311,10 @@ What the bots do, each seat's job done by whoever sits there, human or bot:
   turrets are dead, the other side's wait unactivated, and the riders on him fill the cap, so no
   throw can go out; the bot aboard with the lowest guid leaves. That frees the cap, and the hookshot
   skips a seat whose turret died (its device channels Overload Circuit), so the next throw lands on
-  the other side. Off his back a rider is on foot under 15k Flame Vents ticks. Vehicle 341's exit
+  the other side. Never while its Hookshot Aura 62336 lasts: until that aura's 500 ms tick finds the
+  rider seated, Hookshot 62323 holds it at faction 1770, neutral to his turrets, so a fresh landing
+  reads as stranded, and a bot that jumped then was hooked back and jumped again for the aura's
+  whole 5 s. Off his back a rider is on foot under 15k Flame Vents ticks. Vehicle 341's exit
   launches and knocks back the rider; Smoke Trail's Parachute 61242 feather-falls it.
 - **Pickup**: each raider on foot in the arena — not in hookshot flight, not claimed, not within 15 yd
   of a gunnerless demolisher — gets the nearest chopper with a usable driver and an empty rear seat
@@ -416,9 +418,14 @@ arrival buried the vehicle in the corner while he cut the diagonal.
 **The kite steers round the Inferno trail itself**, because it outranks the hazard dodge. The trail
 loops 33–56 yd inside the ring, and every Inferno hit in one pull (1.19 M) landed on a kiting hull
 driving one straight leg across it. `DetourAroundFire` checks the next 30 yd of the leg and fans a
-25 yd detour that never closes on him (`fl.drive` `kite:detour`). Station legs take the same detour,
-free to close on him (`station:detour`): without it the trail walled the vent reserve off for 20 s
-while he drove 90 yd away, and a 10-tick channel went through.
+25 yd detour that never closes on him (`fl.drive` `kite:detour`), under fire too, since a patch tick
+(median 113-127k, up to 375k under Ram's all-school debuff) outweighs a blast (34-48k). Inside his
+Ram cast range it detours only round fire the leg enters (margin 0): with the 8 yd margin there,
+detours once took 62% of a pull's Ram hull damage while the trail cost 0.7% of fleet health.
+Holding them back for Ram's 20 s debuff instead left kiting hulls burning with him out of range, up
+to 100% of a pull's kite Inferno damage; one siege engine lost 80% in 4 s 72 yd from him. Station
+legs take the same detour, free to close on him (`station:detour`): without it the trail walled the
+vent reserve off for 20 s while he drove 90 yd away, and a 10-tick channel went through.
 
 ## Hard mode
 
@@ -644,10 +651,11 @@ so the next silent election failure is visible.
   an interrupt; a channel the pull ended under is not scored.
 - `--hulls` attributes hull loss by position, each `snap` health delta to the first matching cause, so
   its figures are shares; `dmg` covered roster players only before v13. `--inferno` reads the patches
-  (62910) from `snap.hz`. `--pyrite` reads the demolisher's v13 power column: barrels 5 energy, crate
-  credits +25. `fl.barrel` `dry` is no energy, `fail` the core refusing the cast. Traces that flap
-  `fl.pursued` get one hull's spans merged within `PURSUED_FLAP_MS` (1.5 s), and without the notes the
-  checker falls back to the boss's target column.
+  (62910) from `snap.hz` and splits kiting hulls' burns by his Ram reach and the 20 s debuff at the
+  hit; `--kite` lists kite legs aimed past him. `--pyrite` reads the demolisher's v13 power column:
+  barrels 5 energy, crate credits +25. `fl.barrel` `dry` is no energy, `fail` the core refusing the
+  cast. Traces that flap `fl.pursued` get one hull's spans merged within `PURSUED_FLAP_MS` (1.5 s),
+  and without the notes the checker falls back to the boss's target column.
 - **`fl.pursued` lands up to ~4 s after the aura**, while the reserve election drops a Pursued engine at
   once, so `--hulls` tags a span `reserve` from the 5 s before it and its `kite`/`ready` columns read
   late. `fl.lift` (`<guid> <x> <y>`, each gunner's first rocket at a lift) gives `--pyrite` its drop
@@ -657,7 +665,8 @@ so the next silent election failure is visible.
   every load, landing, jump, pickup and return is a change there, humans included. `fl.throw` is
   `<passenger> <yd> <his yd/s>` from the driver; a throw landed if the passenger reads 6 within 3 s.
   `fl.turrets` is a bitmask of seats with a live turret, `fl.shutdown` the stun; `fl.jump` marks a
-  rider leaving on its own, with why, so 6 → 9 without it is his eject. Also `fl.load`, `fl.claim`,
+  rider leaving on its own, with why, so 6 → 9 without it is his eject; a `stranded` one inside the
+  rider's 62336 window is the hookshot misread (want 0). Also `fl.load`, `fl.claim`,
   `fl.origin`, `fl.unload`, `fl.pickup`, `fl.heal`, `fl.regun` and `fl.crate`; First Aid Kit heals are
   `heal` rows of 64660. `--riders` names each stay's seat and end, and splits the rider's damage (the
   snapshot's dealt column) by its target's bearing from his heading: ahead ≤45°, flank ≤90°,
@@ -666,10 +675,13 @@ so the next silent election failure is visible.
 
 ## Known gaps
 
-- **Unverified rider turning**: that a bot rider faces a turret behind it while he moves and deals
-  near ahead's rate at flank and behind turrets (`--riders`). Whether the stun pays for the riders'
-  lost Mortar, crate grabs and Increased Speed (a Pursued demolisher whose gunner is away has none)
-  is open too. Load into Catapult's 30 s cooldown floors the cycle.
+- **The riders' cost is open**: whether the stun pays for the riders' lost Mortar, crate grabs and
+  Increased Speed (a Pursued demolisher whose gunner is away has none, at 10-man one of two). Load
+  into Catapult's 30 s cooldown floors the cycle.
+- **A kite can start toward him.** Its first node is the one nearest the hull, and the node check
+  skips only nodes within 50 yd of him, never the leg there, so a hull mid-arena can pick a node
+  across him: in 12 pulls 15 legs ran within 60° of his bearing and passed inside 30 yd of his
+  centre, 10 of them closing to 0.2-15 yd within 6 s (`--kite`).
 - **Nothing picks the landing seat**: the hookshot takes the free seat nearest the passenger in
   flight. In window48, throws from his front half landed 37 front, 31 rear and missed 14; from
   behind him 18 rear, 6 front and missed 27. Two riders on one side activate only its pair, so one

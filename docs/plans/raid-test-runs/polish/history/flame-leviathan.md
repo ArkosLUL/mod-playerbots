@@ -57,3 +57,53 @@ deaths. If flank stays low, the stall jump should show as `stalled` and a re-thr
 
 **Previous fix.** None (first round). Lane AF's catapult cycle works end to end: throws landed
 12/22-18/21, 2-4 shutdowns a pull at 1.7-6.4x damage taken (most 2.1-3.0x).
+
+## Round 2 (build 0200b8827, no new pulls)
+
+**Data.** No pulls on r1's code yet; the prompt names `window48-flame-leviathan.md` again, read in
+r1 (deaths per pull in history r1). This round acts on the user's correction of r1. Traces
+`603_13_…1795608288` (uld6 C) and `603_16_…1795608360` (uld2 B) through `--riders`; core
+`Vehicle.cpp`, `MovementHandler.cpp`, `Spell.cpp`, `boss_flame_leviathan.cpp`; Vehicle.dbc and
+VehicleSeat.dbc rows 335-338, 340-342, 345, 380, 385.
+
+**Failure picked: riders cannot keep a turn (a bot gap, not a game rule).**
+
+- The game lets a rider turn: vehicle 341 (his seat 33114) seat 0 is VehicleSeat 3044, flags
+  0xC201642B with `VEHICLE_SEAT_FLAG_ALLOW_TURNING` 0x400 and `CAN_ATTACK`, no `CAN_CONTROL`.
+- A player's turn: the client sends a movement packet with `MOVEMENTFLAG_ONTRANSPORT` and its
+  seat-relative facing in `transport.pos`; `WorldSession::HandleMoverRelocation`
+  (`MovementHandler.cpp` ~433) does `mover->m_movementInfo = movementInfo`, so the offset keeps it.
+- A bot's turn: `ServerFacade::SetFacingTo` only did `SetOrientation` (and sends no heartbeat while
+  rooted, which a passenger is). `Vehicle::RelocatePassengers` (`Vehicle.cpp` 560) rebuilds every
+  passenger's position and facing from `m_movementInfo.transport.pos` plus the base's orientation on
+  each move of his (Leviathan → seat creature → rider), so the turn snapped back to his heading.
+- Effect: `Spell::_cast` re-runs `CheckCast(false)` and `CheckRange` checks facing (±90°) for every
+  cast-time spell (`Spell.cpp` 7411), so a cast at a turret past 90° failed at completion; r1's
+  `set facing` loop came from the same snap.
+- Trace (new `--riders` line, samples whose target sits past 90° of his heading): uld6 riders
+  faced it 10 of 3,259 while he moved, 1,005 of 1,103 while he stood; uld2 25 of 66 moving.
+- Turret activation is unchanged: a rider activates its seat's turret and its partner's
+  (`ActivateTurrets`), Start the Engine reinstalls them, so a side needs a rider each cycle.
+
+**Classification.** Bug, plus the user's answer that riders can turn.
+
+**Fix.** Shared `src/Util/ServerFacade.cpp`: `SetFacingTo` also writes the seat-relative facing
+(`KeepSeatFacing`) on an `ALLOW_TURNING` seat the bot does not control, as a client's packet does.
+A rider's facing calls go through it (`set facing`, `PlayerbotAI::CastSpell` before and during a
+cast, `AttackAction`). Affected seats where bots sit in Ulduar and ToC: only his seat 3044; the other
+Ulduar vehicles' turning seats (siege engine seat 7, demolisher seats 1-2) hold creatures or no bot,
+Kologarn's arm, Ignis and the Constrictor Tentacle seats do not turn; other raids unchecked.
+`UldEncounter_FlameLeviathan.cpp`: `FlameLeviathanRiderTurret` picks the nearest activated turret;
+`FlameLeviathanRiderStranded` is true only with no activated turret left, a live one waiting, riders
+at the cap and the bot the lowest-guid bot rider (a human rider never blocks it). Seat action:
+stalled jump and its state removed. Definition: `set facing` no longer blocked. Reader: `--riders`
+and the `--summary` digest print the turned counts; `CAST_ARC_DEG` replaces `RIDER_ARC_DEG`.
+
+**Next window should show** (`--riders`, `--summary`): the turned line near 100% while he moves
+(window48 0-38%); flank and behind damage near the ahead rate (≥2k/s; window48 62-325/s); no
+`stalled` ends; `stranded` only after two riders sat on one side; riders at once ≤ 2, hunters
+seated 0; shutdowns every ~60 s or faster and shorter fights with fewer on-foot deaths. If riders
+still miss a turret behind them, check for a transport spline overwriting the offset
+(`Unit::UpdateSplinePosition`).
+
+**Previous fix.** r1: no pulls on its code yet; its heading workarounds are withdrawn here.

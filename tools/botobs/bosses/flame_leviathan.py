@@ -133,6 +133,15 @@ SET_FACING_DEG = 45.0
 CAST_ARC_DEG = 90.0
 BOSS_MOVED_YD = 0.5
 RIDER_CAP = {True: 2, False: 1}  # keep in step with ULDUAR_FL_RIDER_CAP_25 and _10
+HOOKSHOT_AURA = 62336
+RAM_DEBUFF_MS = 20000
+KITE_GATES = ("in his Ram range", "out of range, Ram debuff on", "out of range, no debuff")
+KITE_WALL_INSET = geometry.radius("ULDUAR_FL_KITE_WALL_INSET")
+KITE_CORNER_CHAMFER = geometry.radius("ULDUAR_FL_KITE_CORNER_CHAMFER")
+KITE_NODE_YD = 0.6
+KITE_TOWARD_DEG = 60.0
+KITE_PASS_YD = 30.0
+KITE_WATCH_MS = 6000
 
 
 def pick(seq, quantile):
@@ -1207,6 +1216,14 @@ def show_fury(trace: Trace) -> int:
 
 # ------------------------------------------------------------------------------------------ --inferno
 
+def kite_burn_gate(gap: float, since_ram_ms: int | None) -> str:
+    if gap <= RAM_CAST_RANGE:
+        return KITE_GATES[0]
+    if since_ram_ms is not None and since_ram_ms <= RAM_DEBUFF_MS:
+        return KITE_GATES[1]
+    return KITE_GATES[2]
+
+
 def show_inferno(trace: Trace) -> int:
     fl = fight(trace)
     bands = [(-1e9, 0.0, "inside its reach"), (0.0, 8.0, "0-8 yd past it"),
@@ -1284,6 +1301,29 @@ def show_inferno(trace: Trace) -> int:
         for (name, branch, window), amount in by_branch.most_common():
             print(f"     {name:10s} {branch:18s} {window:4s} {100 * amount / burned:5.1f}%")
 
+        rams: dict[int, list[int]] = collections.defaultdict(list)
+        for rec in trace.of("dmg"):
+            if rec.get("sp") == RAM_SPELL and rec.get("d") in life:
+                rams[rec["d"]].append(rec["t"])
+        gates: collections.Counter = collections.Counter()
+        for rec in hits:
+            if not branch_at(rec["d"], rec["t"]).startswith("kite"):
+                continue
+            frame = fl.frame_at(rec["t"], 600)
+            hull = frame.hulls.get(rec["d"]) if frame else None
+            if not hull:
+                continue
+            times = sorted(rams.get(rec["d"], []))
+            index = bisect.bisect_right(times, rec["t"]) - 1
+            since = rec["t"] - times[index] if index >= 0 else None
+            gates[kite_burn_gate(edge_gap(hull, frame.boss), since)] += rec.get("a", 0)
+        kited = sum(gates.values())
+        if kited:
+            print(f"\n  Inferno on kiting hulls ({100 * kited / burned:.0f}% of it) by his Battering Ram reach at the"
+                  f" hit (a blast's debuff lasts {RAM_DEBUFF_MS // 1000} s):")
+            for gate in KITE_GATES:
+                print(f"     {gate:30s} {100 * gates[gate] / kited:5.1f}%")
+
     # DriveTo replaces its own legs, so a dodge that re-plans off whichever patch is nearest can flip
     # sides of the trail every tick. A non-hazard leg in between ends the run.
     hull_of = {bot: hull for hull, bot in fl.drivers().items()}
@@ -1311,6 +1351,88 @@ def show_inferno(trace: Trace) -> int:
         for name in VEHICLE_NAME.values():
             if legs[name]:
                 print(f"     {name:12s} {flips[name]:4d} of {legs[name]:4d}")
+    return 0
+
+
+def kite_ring() -> list[tuple[float, float]]:
+    centre = arena_centre()
+
+    def towards(origin, to, step):
+        dx, dy = to[0] - origin[0], to[1] - origin[1]
+        length = math.hypot(dx, dy) or 1.0
+        return (origin[0] + dx / length * step, origin[1] + dy / length * step)
+
+    inset = [towards(corner, centre, KITE_WALL_INSET) for corner in ARENA_CORNERS]
+    ring = []
+    for index, corner in enumerate(inset):
+        ring.append(towards(corner, inset[index - 1], KITE_CORNER_CHAMFER))
+        ring.append(towards(corner, inset[(index + 1) % len(inset)], KITE_CORNER_CHAMFER))
+    return ring
+
+
+def leg_against_him(hull: tuple[float, float], goal: tuple[float, float],
+                    boss: tuple[float, float]) -> tuple[float, float]:
+    dx, dy = goal[0] - hull[0], goal[1] - hull[1]
+    off = math.atan2(dy, dx) - math.atan2(boss[1] - hull[1], boss[0] - hull[0])
+    degrees = abs(math.degrees((off + math.pi) % (2 * math.pi) - math.pi))
+    length_sq = dx * dx + dy * dy
+    along = 0.0
+    if length_sq:
+        along = max(0.0, min(1.0, ((boss[0] - hull[0]) * dx + (boss[1] - hull[1]) * dy) / length_sq))
+    return degrees, math.hypot(hull[0] + along * dx - boss[0], hull[1] + along * dy - boss[1])
+
+
+def show_kite(trace: Trace) -> int:
+    fl = fight(trace)
+    ring = kite_ring()
+    branch_at = drive_branch_at(fl)
+    drivers = fl.drivers()
+    hull_of = {bot: hull for hull, bot in drivers.items()}
+    life = fl.hull_life()
+    legs = []
+    last_node: dict[int, int] = {}
+    for rec in sorted(trace.of("move"), key=lambda row: row["t"]):
+        hull = hull_of.get(rec.get("g"))
+        if rec.get("by") != DRIVE_ACTION or rec.get("ok") != 1 or hull not in life:
+            continue
+        if not branch_at(hull, rec["t"]).startswith("kite"):
+            last_node.pop(hull, None)
+            continue
+        node = next((index for index, (x, y) in enumerate(ring)
+                     if math.hypot(rec["x"] - x, rec["y"] - y) <= KITE_NODE_YD), None)
+        if node is None or last_node.get(hull) == node:
+            continue
+        start = hull not in last_node
+        last_node[hull] = node
+        frame = fl.frame_at(rec["t"], 600)
+        ride = frame.hulls.get(hull) if frame else None
+        if not ride:
+            continue
+        degrees, passes = leg_against_him((ride[0], ride[1]), ring[node], frame.boss)
+        gap = math.hypot(ride[0] - frame.boss[0], ride[1] - frame.boss[1])
+        closest = gap
+        index = bisect.bisect_left(fl.times, rec["t"])
+        while index < len(fl.frames) and fl.frames[index].t <= rec["t"] + KITE_WATCH_MS:
+            later = fl.frames[index]
+            now = later.hulls.get(hull)
+            if now and now[2] > 0:
+                closest = min(closest, math.hypot(now[0] - later.boss[0], now[1] - later.boss[1]))
+            index += 1
+        legs.append((rec["t"], hull, start, node, math.hypot(ring[node][0] - ride[0], ring[node][1] - ride[1]),
+                     degrees, passes, gap, closest))
+
+    print("Kite legs: each ring node a kiting hull drove for, against his bearing, and how close the straight\n"
+          "leg passes his centre\n")
+    if not legs:
+        print("  no kite legs to a ring node in this trace")
+        return 0
+    past = [leg for leg in legs if leg[5] < KITE_TOWARD_DEG and leg[6] < KITE_PASS_YD]
+    print(f"  legs {len(legs)} ({sum(leg[2] for leg in legs)} starts); aimed past him (within"
+          f" {KITE_TOWARD_DEG:.0f} deg of his bearing, passing inside {KITE_PASS_YD:.0f} yd of his centre): {len(past)}")
+    for when, hull, start, node, length, degrees, passes, gap, closest in past:
+        print(f"     {clock(when):>9s}  {VEHICLE_NAME[life[hull]['entry']]:10s} {trace.name(drivers.get(hull, 0)):14s}"
+              f" {'start' if start else 'next '} node {node} {length:4.0f} yd, {degrees:3.0f} deg off him,"
+              f" passes {passes:4.1f} yd; gap {gap:5.1f}, closest in {KITE_WATCH_MS // 1000} s {closest:5.1f}")
     return 0
 
 
@@ -1966,6 +2088,25 @@ def show_riders(trace: Trace) -> int:
     return 0
 
 
+def aura_windows(records, spell: int, end: int) -> dict[int, list[tuple[int, int]]]:
+    opened: dict[int, int] = {}
+    windows: dict[int, list[tuple[int, int]]] = collections.defaultdict(list)
+    for rec in sorted((row for row in records if row.get("sp") == spell), key=lambda row: row["t"]):
+        guid = rec.get("d", 0)
+        if rec.get("r") == 0:
+            opened.setdefault(guid, rec["t"])
+        elif guid in opened:
+            windows[guid].append((opened.pop(guid), rec["t"]))
+    for guid, start in opened.items():
+        windows[guid].append((start, end))
+    return dict(windows)
+
+
+def hooked_strandings(jumps: list[tuple[int, int, str]], hooked: dict[int, list[tuple[int, int]]]) -> int:
+    return sum(1 for member, when, why in jumps
+               if why == "stranded" and any(start <= when <= stop for start, stop in hooked.get(member, ())))
+
+
 def show_mechanics(trace: Trace) -> int:
     fl = fight(trace)
     print("Catapult, his turrets and the stun: throws, landings, turret kills, Systems Shutdowns, jumps,\n"
@@ -2011,6 +2152,7 @@ def show_mechanics(trace: Trace) -> int:
         if rec.get("k") == "fl.jump":
             jumps[rec.get("g", 0)].append((rec["t"], str(rec.get("txt", ""))))
     jumped = ejected = picked = dead = 0
+    own_jumps: list[tuple[int, int, str]] = []
     on_foot: list[float] = []
     print("\n  off his back (fl.seat 6 -> on foot), then on foot until a chopper or a gun took them:")
     for member, track in sorted(tracks.items(), key=lambda kv: trace.name(kv[0])):
@@ -2021,6 +2163,8 @@ def show_mechanics(trace: Trace) -> int:
             own = why is not None
             jumped += own
             ejected += not own
+            if own:
+                own_jumps.append((member, stop, why))
             walk = next(((s, e, nxt) for s, e, nxt in seat_stays(track, ON_FOOT) if s == stop), None)
             fate = "-"
             if walk:
@@ -2033,7 +2177,9 @@ def show_mechanics(trace: Trace) -> int:
                 fate += f" after {(walk[1] - walk[0]) / 1000:.1f} s"
             print(f"     {trace.name(member):14s} seated {clock(start):>9s} for {(stop - start) / 1000:5.1f} s,"
                   f" {'jumped (' + why + ')' if own else 'ejected'}, then {fate}")
-    print(f"     jumped {jumped}, ejected {ejected}; off their feet {picked}"
+    hooked = hooked_strandings(own_jumps, aura_windows(trace.of("aura"), HOOKSHOT_AURA, fl.end))
+    print(f"     jumped {jumped} (stranded with the hookshot still on {hooked}, want 0), ejected {ejected};"
+          f" off their feet {picked}"
           + (f" (median {statistics.median(on_foot):.1f} s on foot)" if on_foot else "") + f", died on foot {dead}")
     stays = rider_stays(trace, fl)
     if stays:
@@ -2086,6 +2232,7 @@ SECTIONS = (
     ("ram", "Battering Ram exposure only", show_ram),
     ("fury", "Hodir's Fury only", show_fury),
     ("inferno", "Mimiron's Inferno trail only", show_inferno),
+    ("kite", "kite legs to a ring node aimed past him", show_kite),
     ("adds", "Freya's Ward adds only", show_adds),
     ("corners", "corner containment per ward wave", show_corners),
     ("vents", "Flame Vents channels and interrupts only", show_vents),
