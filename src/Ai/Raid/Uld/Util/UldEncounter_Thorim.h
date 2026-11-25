@@ -165,6 +165,9 @@ inline constexpr float ULDUAR_THORIM_LIGHTNING_CHARGE_RANGED_MARGIN = 0.0436f;
 
 inline constexpr uint32 ULDUAR_THORIM_LIGHTNING_CHARGE_WARNING_MS = 4800;
 
+inline constexpr uint32 ULDUAR_THORIM_KILLING_SPREE_OPEN_MS = 5500;
+inline constexpr uint32 ULDUAR_THORIM_KILLING_SPREE_CLOSE_MS = 9000;
+
 inline constexpr uint32 ULDUAR_THORIM_LIGHTNING_CHARGE_DAMAGE = 27000;
 
 inline constexpr RaidDefensiveScope ULDUAR_THORIM_DEFENSIVE_SCOPE = {ULDUAR_MAP_ID, "thorim.cover",
@@ -302,6 +305,7 @@ struct ThorimEncounterState
     RaidObs::ObsValue<ObjectGuid> lightningOrbGuid{"thorim.lightningorb"};
     uint32 lightningOrbScanMs = 0;
     uint32 lightningOrbLitMs = 0;
+    uint32 lightningOrbLastLitMs = 0;
 
     std::vector<Position> blizzardSpots;
     std::vector<Position> blizzardBunnies;
@@ -574,6 +578,7 @@ void ThorimTickChainLightning(PlayerbotAI* botAI);
 bool ThorimCampWaitingOnChain(PlayerbotAI* botAI, Player* bot);
 bool ThorimRingChainWait(PlayerbotAI* botAI, Player* bot, Position const& destination, bool step);
 bool ThorimRingWaitingOnChain(PlayerbotAI* botAI, Player* bot);
+bool ThorimKillingSpreeHeld(PlayerbotAI* botAI, Player* bot);
 
 Unit* ThorimChargedThunderOrb(PlayerbotAI* botAI, uint32 markerSpell);
 

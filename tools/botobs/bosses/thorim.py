@@ -31,6 +31,9 @@
     thorim.py <file> --ringwait  each lit orb against the melee ring: walks and steps held until Chain Lightning
                                  landed, released by the landing or the cap, how long, and what the chain and the
                                  cone did to the waiters
+    thorim.py <file> --spree     each Killing Spree from a ring bot in phase 2: how long after the lit orb it
+                                 started, whether a Chain Lightning hit the rogue while it blinked or walked back,
+                                 crossed groups through it and killed past it, and whether the cone hit it
 """
 from __future__ import annotations
 
@@ -102,7 +105,6 @@ CHAIN_POSITION_MS = 1000
 CHAIN_STEP_BACK_MS = 3000
 SLOWS = {62580: "Volley", 62604: "Volley", 62583: "Frostbolt", 62601: "Frostbolt", 62576: "Blizzard",
          62602: "Blizzard", 62597: "Frost Nova", 62605: "Frost Nova"}
-LIT_GAP_MS = 3000
 CONE_LEAD_MS = (3000, 7000)
 SHELTER_LEAD_MS = 200
 SHELTER_ARRIVED = 2.0
@@ -125,6 +127,9 @@ CHAIN_LOOK_MS = (-1000, 3000)
 CAMP_CHAIN_BRIDGE = 4
 RELEASE_SLACK_MS = 500
 RING_CHAIN_WAIT = "thorim.ringchainwait"
+KILLING_SPREE = 51690
+SPREE_LOOK_MS = (-300, 5100)
+SPREE_WINDOW_MS = (5500, 9000)
 
 
 def mine(trace: Trace) -> bool:
@@ -1061,8 +1066,10 @@ def cone_casts(trace: Trace, start: int) -> list[int]:
 
 def lit_orbs(trace: Trace, start: int) -> list[int]:
     lit: list[int] = []
+    dark = True
     for note in notes(trace, "thorim.lightningorb"):
-        if note["t"] >= start and str(note.get("txt")) not in ("", "0") and (not lit or note["t"] - lit[-1] > LIT_GAP_MS):
+        was_dark, dark = dark, str(note.get("txt")) in ("", "0")
+        if note["t"] >= start and was_dark and not dark:
             lit.append(note["t"])
     return lit
 
@@ -1451,6 +1458,73 @@ def show_ringwait(trace: Trace) -> None:
           f"{total['cone hit']}, dead {total['cone dead']} ({total['early cone dead']} before the first tank death)")
 
 
+def spree_read(trace: Trace, bridges: ChainBridges, rogue, begin: int, lits: list[int], cones: list[dict]) -> dict:
+    prior = [lit for lit in lits if lit <= begin]
+    since = begin - prior[-1] if prior else None
+    read = {"since": since, "window": since is not None and SPREE_WINDOW_MS[0] <= since <= SPREE_WINDOW_MS[1],
+            "hop": None, "hops": 0, "crossing": False, "dead past": 0,
+            "cone": any(rec["d"] == rogue and 0 <= rec["t"] - begin <= SPREE_LOOK_MS[1] for rec in cones)}
+    for cast in bridges.casts:
+        if not SPREE_LOOK_MS[0] <= cast[0]["t"] - begin <= SPREE_LOOK_MS[1]:
+            continue
+        guids = [rec["d"] for rec in cast]
+        if rogue not in guids:
+            continue
+        index = guids.index(rogue)
+        groups = [bridges.group(rec["d"], rec["t"])[0] for rec in cast]
+        own = groups[index]
+        read.update(hop=index + 1, hops=len(cast),
+                    crossing=(index > 0 and groups[index - 1] != own) or (index + 1 < len(cast) and
+                                                                         groups[index + 1] != own),
+                    **{"dead past": sum(1 for rec, group in zip(cast[index + 1:], groups[index + 1:])
+                                        if group != own and any(rec["t"] <= t <= rec["t"] + CHAIN_DEATH_MS
+                                                                for t in bridges.died.get(rec["d"], [])))})
+        break
+    return read
+
+
+def show_spree(trace: Trace) -> None:
+    print("KILLING SPREE")
+    if not mine(trace):
+        return
+    start = phase2_start(trace)
+    if start is None:
+        print("  phase 2 never started")
+        return
+    ring = {note.get("g") for note in notes(trace, "thorim.ringspot")}
+    sprees = [(rec["d"], rec["t"]) for rec in trace.of("aura")
+              if rec.get("sp") == KILLING_SPREE and not rec.get("r") and rec.get("d") in ring and rec["t"] >= start]
+    if not sprees:
+        print("  no Killing Spree from a ring bot in phase 2")
+        return
+    bridges = ChainBridges(trace, start)
+    lits = lit_orbs(trace, start)
+    cones = [rec for rec in trace.of("dmg") if rec.get("sp") == LIGHTNING_CHARGE]
+    first_tank = first_tank_death(trace, start)
+    total = collections.Counter()
+    for rogue, begin in sprees:
+        read = spree_read(trace, bridges, rogue, begin, lits, cones)
+        early = first_tank is None or begin < first_tank
+        total["sprees"] += 1
+        total["before a lit"] += read["since"] is None
+        total["window"] += read["window"]
+        total["chain"] += read["hop"] is not None
+        total["crossing"] += read["crossing"]
+        total["dead past"] += read["dead past"]
+        total["early dead past"] += read["dead past"] if early else 0
+        total["cone"] += read["cone"]
+        since = "before the first lit orb" if read["since"] is None else f"{read['since'] / 1000.0:.1f} s after the lit"
+        chain = ("no chain" if read["hop"] is None else
+                 f"chain hop {read['hop']} of {read['hops']}{', at a crossing' if read['crossing'] else ''}, "
+                 f"{read['dead past']} dead past it")
+        print(f"  +{(begin - start) / 1000.0:.1f} s {trace.name(rogue)}: {since}; {chain}; cone "
+              f"{'hit' if read['cone'] else 'no'}")
+    print(f"  all: sprees {total['sprees']} (before the first lit orb {total['before a lit']}, "
+          f"{SPREE_WINDOW_MS[0] / 1000.0:.1f}-{SPREE_WINDOW_MS[1] / 1000.0:.1f} s after the lit {total['window']}); "
+          f"in a chain {total['chain']} (at a crossing {total['crossing']}, {total['dead past']} dead past it, "
+          f"{total['early dead past']} before the first tank death); in the cone {total['cone']}")
+
+
 def rows_before(trace: Trace, when: int) -> dict:
     last = None
     for snap in frames(trace):
@@ -1530,6 +1604,8 @@ SECTIONS = (
      "the chain's camp hops, and what the chain and the cone did to the waiters", show_chainwait),
     ("ringwait", "each lit orb against the melee ring: walks and steps held for Chain Lightning, how they were "
      "released, how long, and what the chain and the cone did to the waiters", show_ringwait),
+    ("spree", "each Killing Spree from a ring bot: how long after the lit orb, whether a Chain Lightning crossed "
+     "groups through the rogue, and the cone", show_spree),
 )
 SUMMARY = ("deaths", "phase2")
 

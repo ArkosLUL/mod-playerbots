@@ -2879,3 +2879,73 @@ the chain lands ~1.05 s after the lit and the cone at ~4.9 s, so a ring walk can
 the cone, as R26's camp wait does. Recommended (a).
 
 **Shared code touched:** none (Thorim files and the Thorim reader).
+
+## Round 29 (no new pulls; R28 merged after window 48's build)
+
+**Data:** no pull on R28's code yet; window 46 (`window46-thorim.md`) was read in round 28. Replay of the user's Q1
+over the 58 hard-mode 25-man pulls since 11-24 18:00 (73 Thorim traces on disk, 15 normal mode) with session
+scratchpad `thorim_r29/replay.py` (`summary.py`, `deaths.py`, `delta.py`, `mismatch.py` read its output).
+
+**Stop rules:** waived for Thorim (user, 2026-11-24). **Round 28 verdict:** pending, no pull on its code.
+
+**Built: the user's Q1 (a) of round 28, ring moves on the lit orb wait for Chain Lightning** (failure 2's lit-orb
+share and failure 5's lit-orb tank bridges). Classification: plan change, answered by the user.
+
+**Found on the way: Chain Lightning never hits pets.** The replay's hop model (nearest unhit body within 8 yd)
+reproduced the group order of 281 of 446 hard-mode chains with pets as bodies and 360 without, the model running on
+through pets where the real chain stopped. The core says why: 62131/64390 carry AttributesEx3 0x100,
+`SPELL_ATTR3_ONLY_ON_PLAYER` (`spell.reference.csv`), so `Spell::GetSearcherTypeMask` (`Spell.cpp:2161`) searches
+players only and `SpellInfo::CheckTarget` (`SpellInfo.cpp:1813`) fails a non-player, including a seed
+`SelectTarget(Random)` picks off the threat list (`boss_thorim.cpp:738`; `CheckCast`, `Spell.cpp:6115`). The boss
+doc said pets chain ("totems and nothing else"); corrected there and in `docs/systems/observability.md`, whose
+Thorim hypothesis (pets explain 7-8 hop chains) it refutes. R26's camp replay included pets.
+
+**Replay** (per lit orb: a cast that starts by lit + 1 s holds until it lands, else the cap; a ring order from
+`thorim phase 2 positioning action` or `thorim sif blizzard action` while due, ending within 8.5 yd of another
+group's living floor player or another slot's point, holds; a bot inside the ring's cone line holds only if its
+destination is in reach at its speed by lit + 4.3 s; a held bot stands where ordered, then walks straight; the chain
+re-run hop by hop over players at the landing):
+
+| Rule | Holds | Bot-s a pull | Hop 5+ hits | Group crossings | Chains grew / shrank | Deaths gone (reproduced chains) |
+|---|---|---|---|---|---|---|
+| as fought | - | - | 48 | 96 | - | - |
+| destination only (the answer's text) | 996 | 13.9 | 38 | 71 | 7 / 27 | 15 of 44 (12 of 29 early) |
+| **plus a clear spot (shipped)** | **703** | **10.3** | **31** | **74** | **1 / 20** | **12 of 44 (9 of 29 early)** |
+
+Shipped rule: wait p50 0.86 s, p90 1.15, max 1.6; 591 holds before the first tank death; 587 ring walks, 77 steps, 39
+walks back; bridged by a tank 314, another slot's body 301 or point 212, the camp 98; 71 start out of reach, 42 find the
+bot already walking (not stopped in code); the cone test lets 16 walk; at the cone 2 held walks newly inside, 8
+newly out; no held bot stands in a zone. Normal mode: 159 holds over 15 pulls. Early chains (before the first tank
+death): hop 5+ hits 33 → 22.
+
+**Fix** (`UldEncounter_Thorim.cpp/.h`, `UldTriggers_Thorim.cpp`, `UldActions_Thorim.cpp`, `UldMultipliers_Thorim.cpp`,
+`UldDefinition_Thorim.cpp`; Thorim only, no size, mode or player branch, a human is a body): `ThorimRingChainWait`
+gates the ring positioning walk (trigger and action, after `ThorimRingWantsMove`, no arrival latch) and the ring
+Blizzard step; `RingSpotInOtherGroupJump` tests the destination (bodies and other slots' points) and the bot's spot
+(bodies); `ThorimChainWaitSetOff` is shared with the camp wait; `ThorimCampConeReach` / `ThorimCampShelterInTime`
+renamed `ThorimConeReach` / `ThorimWalkBeatsCone`. Per bot per lit stamp the hold releases once (`ringChainHolds`,
+also in `TickThorim`), note `thorim.ringchainwait` `wait walk|step` / `none`. While waiting: the movement guard
+counts the bot settled, new rule `thorim ring chain wait` blocks Reach and Charge, the chain-wait cast hold covers it.
+Reader `--ringwait` (tested in `test_thorim.py`); boss doc "A ring move under the lit orb waits for the chain",
+"Pets never chain". `pb-check` passes.
+
+**Review fix:** nothing kept a held bot out of Blizzard. The replay checked zones only at the hold's start (0 of 703),
+but a step fires on the bunny's 8 yd lead, which it walks in about a second, so a zone can land on a bot held for a
+step. `ThorimRingChainWait` now releases a bot carrying a zone's aura (62576/62602), at the start or mid-wait; boss
+doc bullet "outside Blizzard".
+
+**Next window with R29 should show** (hard-mode pulls; R28's window comes first):
+- `--ringwait`: ~12 waits a pull, p50 ~0.9 s, most released by the landing; waiters hit by the chain while walking
+  ~0; cone hits on waiters ≤ 1 a window.
+- `--chains`: ring-crossing chain deaths before the first tank death down about a third on R28's window, hop 5+ ring
+  hits down; R27 and R28 holding.
+- Watch: melee in reach and %/s before the first tank death not lower (most waits stand in reach).
+
+**Seen, not picked:** `ThorimPetsOffRingSlot` now guards hops pets cannot take (harmless, no uptime cost; a cleanup
+candidate); walks already under way at the lit are not stopped (6% of holds); the opening chain; `--phase2`'s
+"bodies within 8 yd of the waiting tank" still counts pets.
+
+**Questions for the user:** none.
+
+**Shared code touched:** none (Thorim files and the Thorim reader); shared doc `docs/systems/observability.md`
+(one bullet: Thorim's chain is player-only).
