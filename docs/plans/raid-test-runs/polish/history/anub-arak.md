@@ -162,3 +162,78 @@ near 20%.
 second wave in A 3 of 4 (r1 4 of 4), B 2 of 4 (r1 4 of 4), C 1 of 4 (r1 3 of 4);
 on the first wave after a submerge in A 0, B 2, C 3 (r1: C 1). A gained (3 of 4
 to phase 3), C lost (1 of 4); one build, so no call.
+
+## Round 3 (build 37cc72a94, window 46, no new pulls)
+
+**Data.** `window46-anub-arak.md` as r2 (12 valid pulls; r2 changed only the
+reader). Kill references CT, CU, CV. New `--tanks` facing split over all 15;
+scratch reads: walks behind by mover, hold walk start distance and hold kind,
+burrower hit size per Expose Weakness stack, gaps between landed hits.
+
+**Deaths.** As r2: burrower melee 337 of 388, Anub'arak melee 18, Penetrating
+Cold 12; every wipe began with a side tank death (first ones r2's table).
+
+**Avoidance comparison (Q1).** The trace carries no stats and reading gear needs
+the database (Docker), so this compares what the stats do to burrower swings:
+
+- Per swing standing with the burrower in front (gaps up to 6 s between one
+  burrower's landed hits, 1.22 s a swing): test 0.55 (614 gaps), user 0.55
+  (139). Paladins Tocvaz 0.54, Tocyaz 0.51 vs Bulwark 0.57; DKs Tocuam 0.56,
+  Tocwaz 0.45, Tocxam 0.51, Toczaz 0.56 vs Felesta 0.50; bears 0.51-0.63,
+  warriors 0.59-0.62 (no counterpart).
+- Defense: burrowers are level 83, so a tank under 540 would take crits; no
+  tank's hits, scaled by 1 + 0.25 a stack, cluster at twice its median (the
+  few at 1.62-1.81 are on paladins, Bulwark too, and one bear). Median scaled hit: pool paladins 3.89k
+  vs Bulwark 3.66k, DKs 4.22-5.03k vs Felesta 4.87k.
+- So no gear gap for the roster.
+
+**Failure picked: side tank burrower hits, Q1's facing part.**
+
+| Contact (before phase 3) | Test (12) | User (CT, CU, CV) |
+|---|---|---|
+| seconds | 5036 | 1467 |
+| walking / behind share | 36% / 29% | 30% / 21% |
+| landed a second, all | 0.43 | 0.34 |
+| standing front | 0.29 | 0.23 |
+| walking behind | 0.61 | 0.51 |
+| walking front | 0.34 | 0.36 |
+| standing behind (seconds) | 66 | 12 |
+| hits from beyond 6 yd (apart) | 232 | 49 |
+
+Split rates count only hits with the burrower within 6 yd at the snapshot, as
+the contact seconds do (review fix; counting the rest read walking behind 0.70
+and 0.59, walking front 0.52 and 0.50).
+
+- Behind while walking is 95% of behind time; its mover was `anubarak assist
+  tank hold burrower` 91% (6 test pulls, 853 of 932 s) and 93% (user).
+- By hold: walks to the rim (centre to rim, rim re-issues) carry 53% of it
+  (test 696 of 1310 s, user 165 of 315), walks to the centre the rest.
+- Cause: the hold walk `MoveTo` runs forward (`ToCActions_Anubarak.cpp` hold
+  walk, `GetAnubarakSideTankHold`), so a walking unit faces its path and the
+  burrowers trail at its back, where the core rolls no dodge, parry or block.
+- Per-hit size and per-swing avoidance match, so the rest of the gap is time
+  (walking 36% vs 30%) and swings a second in front (0.29 vs 0.24 landed).
+
+**Change.** `AnubarakSideTankBacksUp`: with every burrower on the side tank on
+Permafrost and more of those within 8 yd behind the walk than ahead
+(`BackUpKeepsFront`, pure, native test), the hold walk goes backwards; the spike
+check times it at `MOVE_RUN_BACK`. `anub.backup` `back`/`fore`/`none`/`frost`.
+Reader `--tanks`: the facing split per side tank, landed a swing, `anub.backup`
+rows; tests. Boss doc: the rule and r3's facts. No shared code.
+
+**Expected size.** Backing up is 1.56 times slower (4.5 vs 7 yd/s, both under
+the slow). Rim walks are ~14% of test contact at 0.61 a second (~23% of the
+in-contact landed hits); backed up they take ~22%: at the walking-front 0.34 a
+second that saves ~13% of a rim walk's hits, ~3% of all landed burrower hits
+(~6% at the standing 0.29); at 0.39 a second it saves none. Too small to read off
+one window's deaths, so judge it by the split.
+
+**Next window should show.** `anub.backup back` rows on every bot side tank;
+`--tanks` walking-behind seconds down (test 27% of contact) and walking-front
+up; walking landed a second under 0.61; all landed a second under 0.43 per side
+tank; first side tank death later than r2's table, per composition. If walking
+hits a second sit near 0.39 and the total doesn't drop, backing up only trades
+speed: ask the rim crawl question.
+
+**Previous fix (r2) verdict.** r2 changed only the reader and no pulls ran
+since, so r1's verdict stands (works).
