@@ -16,6 +16,7 @@
 #include "UldScripts.h"
 #include "UldTriggers_FlameLeviathan.h"
 
+namespace Family = RaidEncounterRules::Family;
 namespace Role = RaidEncounterRules::Role;
 
 namespace
@@ -66,6 +67,8 @@ void DefineFlameLeviathan(EncounterBuilder& e)
                 {FlameLeviathanDriveAction::Name, FlameLeviathanEnterVehicleAction::Name, "leave vehicle"});
     e.Exclusive("flame leviathan seat rider", Role::Any, FlameLeviathanRidingSeat, 0,
                 {FlameLeviathanSeatAction::Name});
+    e.Block("flame leviathan seat hold", Role::Any, FlameLeviathanRidingSeat,
+            Family::Blink | Family::Disengage | Family::Charge, {"set facing", "frost nova"});
 
     e.Tick(FlameLeviathanTick);
 }

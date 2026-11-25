@@ -291,16 +291,28 @@ bool FlameLeviathanVehicleAction::LoadIntoCatapult()
 bool FlameLeviathanVehicleAction::CatapultPassengerAction()
 {
     uint32 const now = getMSTime();
-    bool const held = FlameLeviathanIsPursued(bot) || FlameLeviathanShutdown(FlameLeviathanBoss(botAI));
-    if (!_catapultSinceMs || held)
+    if (!_catapultSinceMs || FlameLeviathanIsPursued(bot))
         _catapultSinceMs = now;
 
+    bool const engaged = FlameLeviathanEngaged(botAI);
+    bool const stunned = FlameLeviathanShutdown(FlameLeviathanBoss(botAI));
     bool const waited = getMSTimeDiff(_catapultSinceMs, now) >= ULDUAR_FL_CATAPULT_WAIT_MS;
-    if (FlameLeviathanEngaged(botAI) && !waited)
+    if (engaged && !stunned && !waited)
         return false;
 
     _catapultSinceMs = 0;
-    return RequestVehicleExit(bot);
+    Unit* demolisher = _vehicleBase;
+    if (!RequestVehicleExit(bot))
+        return false;
+
+    if (!engaged)
+        return true;
+
+    demolisher->HandleSpellClick(bot);
+    if (RaidObs::Active())
+        RaidObs::Note(bot, "fl.unload", stunned ? "shutdown" : "wait");
+
+    return true;
 }
 
 bool FlameLeviathanVehicleAction::ChopperPassengerAction()
@@ -1335,6 +1347,18 @@ bool FlameLeviathanEnterVehicleAction::Execute(Event /*event*/)
     return true;
 }
 
+bool FlameLeviathanSeatAction::Leave(char const* why)
+{
+    _target.Clear();
+    if (!RequestVehicleExit(bot))
+        return false;
+
+    if (RaidObs::Active())
+        RaidObs::Note(bot, "fl.jump", why);
+
+    return true;
+}
+
 bool FlameLeviathanSeatAction::Execute(Event /*event*/)
 {
     Unit* seat = bot->GetVehicleBase();
@@ -1344,16 +1368,26 @@ bool FlameLeviathanSeatAction::Execute(Event /*event*/)
 
     bool const stunned = FlameLeviathanShutdown(boss);
     if (stunned || !boss->IsAlive() || !boss->IsInCombat())
-    {
-        if (!RequestVehicleExit(bot))
-            return false;
-
-        if (RaidObs::Active())
-            RaidObs::Note(bot, "fl.jump", stunned ? "shutdown" : "fight over");
-
-        return true;
-    }
+        return Leave(stunned ? "shutdown" : "fight over");
 
     Unit* turret = FlameLeviathanRiderTurret(bot);
-    return turret && Attack(turret);
+    if (!turret)
+    {
+        _target.Clear();
+        return FlameLeviathanRiderStranded(bot) && Leave("stranded");
+    }
+
+    uint32 const now = getMSTime();
+    bool const fresh = !_seenMs || getMSTimeDiff(_seenMs, now) > ULDUAR_FL_RIDER_ABSENT_MS;
+    _seenMs = now;
+    if (fresh || turret->GetGUID() != _target || turret->GetHealth() < _targetHealth)
+    {
+        _target = turret->GetGUID();
+        _targetHealth = turret->GetHealth();
+        _progressMs = now;
+    }
+    else if (getMSTimeDiff(_progressMs, now) >= ULDUAR_FL_RIDER_STALL_MS)
+        return Leave("stalled");
+
+    return Attack(turret);
 }
