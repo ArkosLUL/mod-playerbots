@@ -70,6 +70,11 @@ namespace
     }
 }  // namespace
 
+bool JoinRitualOfSoulsAction::isUseful()
+{
+    return !AI_VALUE2(bool, "ritual walk wakes hostile", "ritual of souls portal");
+}
+
 bool JoinRitualOfSoulsAction::Execute(Event /*event*/)
 {
     GameObject* portal = botAI->GetGameObject(AI_VALUE(ObjectGuid, "ritual of souls portal"));
@@ -93,7 +98,8 @@ bool JoinRitualOfSoulsAction::Execute(Event /*event*/)
 
 bool UseSoulwellAction::isUseful()
 {
-    return AI_VALUE2(std::vector<Item*>, "inventory items", "healthstone").empty();
+    return AI_VALUE2(std::vector<Item*>, "inventory items", "healthstone").empty() &&
+           !AI_VALUE2(bool, "ritual walk wakes hostile", "ritual of souls soulwell");
 }
 
 bool UseSoulwellAction::Execute(Event /*event*/)

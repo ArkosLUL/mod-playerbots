@@ -285,6 +285,17 @@ winner is: higher ritual rank (a Fel soulwell beats an improved Master one), the
 lowest GUID. Only the winner scans members' bags; the group cast reservation stays as backstop and
 must outlast the cached cast decision (8 s vs 5 s), or a stale yes recasts.
 
+**No walk wakes a mob.** The portal join and the soulwell walk are refused (`isUseful`) while the
+straight line from the bot to the object passes, in 2D (a mob a floor away counts too), within an
+idle hostile's `Creature::GetAggroRange` to the bot + 5 yd (a trailing pet, a bending path):
+`"ritual walk wakes hostile"`, qualified by the object value's name, 2 s. Idle: alive, out of
+combat, `REACT_AGGRESSIVE`, neither `IMMUNE_TO_PC` nor civilian, hostile to the walker;
+`NON_ATTACKABLE` still counts, since Anub'arak drops it for a player inside 80 yd and then pulls on
+proximity. The warlock counts only members whose walk to it passes too, else it channels for
+nothing; its grid search runs only once the plain count qualifies.
+25H 2026-11-25: a tank's walk to the portal passed 22.4 yd from Anub'arak (aggro 23) and pulled him
+early in 3 of 6 re-pulls. Not covered: a patrol walking into the line after the check.
+
 **Triggers are O(1); the scans sit behind cached values** (upstream's rule).
 `"ritual of souls portal"` and `"ritual of souls soulwell"` (`Base/Value/RitualOfSoulsValues`,
 2 s) cache `ObjectGuid`s; the warlock's `"should cast ritual of souls"` (`WarlockValues`, 5 s)

@@ -6,7 +6,10 @@
 
 #include "WarlockValues.h"
 
+#include <algorithm>
 #include <ctime>
+#include <utility>
+#include <vector>
 
 #include "Bag.h"
 #include "Group.h"
@@ -174,6 +177,13 @@ static bool IsPreferredRitualCaster(Player* bot, Group* group)
     return best == bot;
 }
 
+static bool EnoughForRitual(std::vector<std::pair<Player*, bool>> const& nearby)
+{
+    auto const missing = std::count_if(nearby.begin(), nearby.end(),
+                                       [](std::pair<Player*, bool> const& entry) { return entry.second; });
+    return nearby.size() >= RITUAL_MIN_PARTICIPANTS && static_cast<uint32>(missing) >= RITUAL_MIN_MISSING;
+}
+
 bool ShouldCastRitualOfSoulsValue::Calculate()
 {
     Group* group = bot->GetGroup();
@@ -186,8 +196,7 @@ bool ShouldCastRitualOfSoulsValue::Calculate()
     if (!IsPreferredRitualCaster(bot, group))
         return false;
 
-    uint32 nearbyMembers = 0;
-    uint32 missing = 0;
+    std::vector<std::pair<Player*, bool>> nearby;
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
@@ -196,10 +205,15 @@ bool ShouldCastRitualOfSoulsValue::Calculate()
         if (member != bot && !bot->IsWithinDistInMap(member, RITUAL_NEARBY_RANGE))
             continue;
 
-        ++nearbyMembers;
-        if (!HasAnyHealthstone(member))
-            ++missing;
+        nearby.emplace_back(member, !HasAnyHealthstone(member));
     }
 
-    return nearbyMembers >= RITUAL_MIN_PARTICIPANTS && missing >= RITUAL_MIN_MISSING;
+    if (!EnoughForRitual(nearby))
+        return false;
+
+    std::vector<Creature*> const idle = FindIdleHostiles(bot, RITUAL_NEARBY_RANGE);
+    std::erase_if(nearby, [&](std::pair<Player*, bool> const& entry)
+                  { return entry.first != bot && WalkWakesIdleHostile(idle, entry.first, bot->GetPosition()); });
+
+    return EnoughForRitual(nearby);
 }

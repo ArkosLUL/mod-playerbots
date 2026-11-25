@@ -7,16 +7,27 @@
 #ifndef PLAYERBOTS_RITUALOFSOULSVALUES_H
 #define PLAYERBOTS_RITUALOFSOULSVALUES_H
 
+#include "NamedObjectContext.h"
 #include "ObjectGuid.h"
 #include "Value.h"
 
+#include <vector>
+
+class Creature;
+class Player;
 class PlayerbotAI;
+class WorldObject;
+struct Position;
 
 constexpr uint32 SPELL_RITUAL_OF_SOULS_R1 = 29893;
 constexpr uint32 SPELL_RITUAL_OF_SOULS_R2 = 58887;
 constexpr uint32 GO_SOULWELL_R1 = 181621;
 constexpr uint32 GO_SOULWELL_R2 = 193169;
 constexpr float RITUAL_OF_SOULS_GO_RANGE = 40.0f;
+constexpr float RITUAL_WALK_AGGRO_MARGIN = 5.0f;
+
+std::vector<Creature*> FindIdleHostiles(WorldObject const* centre, float reach);
+bool WalkWakesIdleHostile(std::vector<Creature*> const& idle, Player* walker, Position const& to);
 
 // Soul Portal of another group member in range, never the bot's own.
 class RitualOfSoulsPortalValue : public CalculatedValue<ObjectGuid>
@@ -35,6 +46,14 @@ public:
     RitualOfSoulsSoulwellValue(PlayerbotAI* botAI) : CalculatedValue<ObjectGuid>(botAI, "ritual of souls soulwell", 2) {}
 
     ObjectGuid Calculate() override;
+};
+
+class RitualWalkWakesHostileValue : public BoolCalculatedValue, public Qualified
+{
+public:
+    RitualWalkWakesHostileValue(PlayerbotAI* botAI) : BoolCalculatedValue(botAI, "ritual walk wakes hostile", 2) {}
+
+    bool Calculate() override;
 };
 
 #endif

@@ -24,6 +24,8 @@ void DefineStaging(EncounterBuilder& e)
             {"return to stay position", "return"});
     e.Block("toc staging rest guard", Role::Any, IsToCStagingRestHeld, 0, {"eat", "drink"});
     e.Block("toc staging tank form guard", Role::Tank, IsToCStagingHeld, 0, {"caster form"});
+    e.Block("toc staging ritual guard", Role::Any, IsToCStagingHeld, 0,
+            {"ritual of souls", "join ritual of souls", "use soulwell"});
 }
 }
 
