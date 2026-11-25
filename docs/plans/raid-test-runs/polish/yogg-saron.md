@@ -142,10 +142,10 @@ working the next Guardian while a low one waits out its gap.
 ## Round 26 (2026-11-25, window 44 build 229335cd3: round 25)
 
 **Data.** Window report `scratchpad/window44/window44/window44-yogg-saron.md` (six pulls, one per pool). Traces
-`603_8…1795599012`, `603_11…1795599039`, `603_7…1795599001`, `603_9…1795599021`, `603_10…1795599031`,
+`603_8…1795599012`, `603_7…1795599001`, `603_10…1795599031`, `603_11…1795599039`, `603_9…1795599021`,
 `603_12…1795599050` (uld1-uld6) with `--phase3 --burn --tentacles --brain`, uld1-4 `--novas`; window 39's six with
-`--burn`; scratch reads of leftover targets and ranged damage per target, beacon claims over all 54 Yogg
-traces on disk.
+`--burn`; scratch reads of leftover targets and ranged damage per target, beacon claims over the 77 Yogg
+traces on disk with drag notes.
 
 Deaths by mechanic (phase 1 / 2 / 3):
 
@@ -174,8 +174,9 @@ pile". Window 44: both tanks dragged in uld1 10:36.9, uld2 8:58.5, uld3 10:27.9,
 (8:57.2) killed Uldyaq, Uldyas, Uldyaw, Uldyak, Uldyan, Uldyam 8:59.4-9:09.6 at 94-99%, 33-38 yd from both tanks;
 8 raiders died in the 10.7 s drag, the tanks at 9:12.8 and 9:22.0. uld5: 7 raiders died inside 15 s of the claims, both tanks
 +2.2 / +3.4 s after the heal. uld1: Uldxaa died 6.7 s after the release, the pull's first tank death. uld3: tanks
-+20-22 s. The 48 older traces had 3 such drags, each with a tank dead within 25 s of the release; one-tank and
-no-tank drags cost 0-1 raiders.
++20-22 s. The 71 older traces had 4 such drags; all 8 had a tank dead +1.9 to +21.9 s after the release. Drags by
+one tank or none with no death in the 20 s before: a tank dead within 25 s in 38 of 120, raiders dead inside them
+51 (0.4 a mark); inside a running collapse they cost more (uld4's 9:52 heal 7, uld3's 11:27 heal 13).
 
 **Fix.** `YoggSaronBeaconDraggerOrder` counts living tanks and those already dragging, and keeps at most
 `alive − dragging − 1` bot tanks (by GUID) at the head of the order, so the next marks go to non-heal paladins and
@@ -185,7 +186,7 @@ bot tank still drags beside one. 10-man (one mark) unchanged; same at normal and
 `every tank dragging`; `drag_wave` tested.
 
 **Next window should show** `dragged by` with at most one tank on every mark and `every tank dragging: 0`, raiders
-dead inside a drag 0-1 a mark (8 and 7 here), and no tank death within 20 s of a release where both had dragged.
+dead inside a drag 0-1 a mark (uld2 8, uld5 4 here), and no tank death within 20 s of a release where both had dragged.
 Back out if marks go undragged or healed marks reach the pile (`marked pairs`, `other Guardians it reached`).
 
 **Seen, not picked.** Leftovers and the phase 3 opener (open failures 2-3). uld4's ranged stood 34.5 yd from the

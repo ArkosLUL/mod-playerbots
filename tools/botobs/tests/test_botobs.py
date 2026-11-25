@@ -1469,9 +1469,15 @@ class YoggPhases(unittest.TestCase):
         self.assertEqual(who, [3, 1, 2])
         self.assertEqual(end, 12000)
         self.assertEqual(dead, [5, 6])
-        # A dragger never released holds the wave open to the cap.
-        _, end, _ = yogg_saron.drag_wave([(1000, 4)], [], [], tanks, 1000, 1000, 15000)
+
+    def test_drag_wave_holds_an_unreleased_dragger_open_to_the_cap(self):
+        _, end, _ = yogg_saron.drag_wave([(1000, 4)], [], [], {1, 2}, 1000, 1000, 15000)
         self.assertEqual(end, 16000)
+
+    def test_drag_wave_ends_each_claim_at_its_own_release(self):
+        who, end, _ = yogg_saron.drag_wave([(1000, 1), (4000, 1)], [(2500, 1), (14000, 1)], [], {1, 2}, 1000, 4000,
+                                           15000)
+        self.assertEqual((who, end), ([1, 1], 14000))
 
     def test_drag_exposure_counts_only_the_window_after_the_heal(self):
         hits = [(900, 7, 2000), (1500, 7, 9000), (4000, 7, 36000), (5000, 8, 26000), (30000, 7, 40000)]

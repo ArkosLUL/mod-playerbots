@@ -2537,12 +2537,12 @@ def show_reprisal(trace: Trace) -> None:
 
 def drag_wave(claims: list[tuple[int, int]], releases: list[tuple[int, int]], deaths: list[tuple[int, int]],
               tanks: set, first: int, last: int, cap_ms: int) -> tuple[list[int], int, list[int]]:
-    who = [guid for when, guid in claims if first <= when <= last]
-    ends = [next((when for when, guid in sorted(releases) if guid == dragger and when >= first), first + cap_ms)
-            for dragger in who]
+    wave = [(when, guid) for when, guid in claims if first <= when <= last]
+    ends = [next((done for done, guid in sorted(releases) if guid == dragger and done >= when), first + cap_ms)
+            for when, dragger in wave]
     end = min(max(ends, default=first), first + cap_ms)
     dead = [guid for when, guid in deaths if first <= when <= end and guid not in tanks]
-    return who, end, dead
+    return [guid for _, guid in wave], end, dead
 
 
 def group_runs(stamps: list[int], gap_ms: int, min_ms: int) -> list[tuple[int, int]]:
@@ -5580,7 +5580,7 @@ def show_phase3(trace: Trace) -> None:
     cut_samples = [(rec["t"], str(rec.get("txt", ""))) for rec in notes(trace, "yogg.healcut")]
     drag_notes = notes(trace, "yogg.beacondrag")
     claims = [(rec["t"], rec.get("g", 0)) for rec in drag_notes if rec.get("txt") == "claim"]
-    releases = [(rec["t"], rec.get("g", 0)) for rec in drag_notes if rec.get("txt") == "release"]
+    releases = [(rec["t"], rec.get("g", 0)) for rec in drag_notes if rec.get("txt") in ("release", "missed")]
     roster_deaths = [(rec["t"], rec.get("g", 0)) for rec in death_records(trace) if rec.get("g") in roster]
     claim_runs = group_runs([when for when, _ in claims], DRAG_CLAIM_GAP_MS, 0)
     claimed_marks = 0
@@ -5646,7 +5646,7 @@ def show_phase3(trace: Trace) -> None:
             claimed_marks += 1
             who, end, dead = drag_wave(claims, releases, roster_deaths, tanks, run[0], run[1], DRAG_CLAIM_CAP_MS)
             standing = [guid for guid in tanks if (row := row_before(rows.get(guid, []), run[0])) and row[6] > 0]
-            dragging = sum(1 for guid in who if guid in tanks)
+            dragging = len(set(who) & tanks)
             if standing and dragging >= len(standing):
                 every_tank.append(len(dead))
             print(f"      dragged by: {', '.join(f'{trace.name(guid)} {trace.role(guid)}' for guid in who)};"
