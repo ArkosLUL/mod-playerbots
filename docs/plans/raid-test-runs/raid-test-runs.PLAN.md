@@ -14,8 +14,7 @@ The polish loop runs on the user's standing go ("Polish loop" below), scheduled 
 
 **Next:**
 - Running: Thorim r27, Yogg-Saron r26, Algalon r15 (Q6); lane AD (`ad-ritual-walk.PLAN.md`, `build-toc-wt/rt-ad`, branch `rt/ritual-walk`: bots walking to a Ritual of Souls portal pulled Anub'arak during a re-pull's settle in 3 of 6 runs); DC lane AE (`ae-dc-mimiron-10n-spawn.PLAN.md`) stopped unneeded: Mimiron's 10n spawn was missing from the live world DB (see Mimiron's row). DC lane AC (`rt/dc-ac`, the boss kept passive until each start) stays unmerged: it would hide the ritual bug the tests should catch.
-- Flame Leviathan joins a group once window 44's report shows the pull; DC's log (`docker logs ac-worldserver`, `TESTRUN <run>` lines) has the board send and the staging move.
-- Once Algalon r15 has merged (AD is, `21376d9f9`): one rebuild, group 2's window (Algalon r15, Anub'arak r1 with the ritual fix), Mimiron 10n on uld1-uld3 and a 25n re-check on uld4-uld6 (restored spawn), Flame Leviathan pulls.
+- Once Algalon r15 has merged (AD is, `21376d9f9`): one rebuild, group 2's window (Algalon r15, Anub'arak r1 with the ritual fix), Mimiron 10n on uld1-uld3 and a 25n re-check on uld4-uld6 (restored spawn), Flame Leviathan 10n on uld1-uld3.
 - Merges: `merge-lane.sh` refuses DC branches for argument-name and edited comments, DC's own style: merge DC lanes by hand (`git merge-tree`, then `git merge --no-ff -F`) after reading the added comment lines. During a window the server lock's owner is the window, which `merge-lane.sh` allows.
 - Next question batch: none open. Write Yogg-Saron Q4's answer into `polish/yogg-saron.md` once r26 merges (r27 builds it).
 
@@ -50,7 +49,7 @@ Earlier per-boss detail: the old table in `windows.md`.
 | Vezax | done: 25n hard-mode kills with 0/0/0/0/1 and one wipe (window 30, r17), 10n hard-mode kills with 0/0/0/0/0/1 (window 31) |
 | Algalon | group 2, round 13 in window 38: C killed (uld3, 2 deaths), A and B wiped; window 36-37 on r12 had A (4) and B (3); r14 changed no code and asks Q6 (a bigger wave 3 star team); under the normal done rule since 2026-11-24 |
 | Anub'arak | group 2; scenario `totc-anubarak` (DC `ab1bab7`), 25h. The re-pull works (check42): 18 valid pulls on build `f863bb8b6`, all wipes, Nerubian Burrower melee 420 deaths; digest `raidtest.py report --boss anub-arak --raid toc --head f863bb8b6 --pulls 18`. r1 coding; DC lane AC fixes his engaging before a re-pull's start |
-| Flame Leviathan | unparked by the user 2026-11-25, hard mode with all four towers. First run boarded nobody: from the drop only choppers are in sight, and the fork refuses a chopper until every siege engine and demolisher has a driver. DC lane AA (`ba08cea`) sends riders to a board point (108.0, -37.0, 409.8), navprobed: floor, sight to all 10 driver slots, normal paths. One-pull check in window 44 |
+| Flame Leviathan | unparked by the user 2026-11-25, hard mode with all four towers. First run boarded nobody: from the drop only choppers are in sight, and the fork refuses a chopper until every siege engine and demolisher has a driver. DC lane AA (`ba08cea`) sends riders to a board point (108.0, -37.0, 409.8), navprobed: floor, sight to all 10 driver slots, normal paths. **25n done on first data** (build of `229335cd3`, no polish round): four-tower kills on uld1 (A, 0 deaths), uld5 (B, 2), uld3 (C, 4), uld2 (B, 9), wipes on uld4 and uld6 (windows 44, 45; the report's hard-mode column stays empty, the reader's `--fury`, `--inferno`, `--adds` show all four towers). Next: 10n check |
 
 ## Status
 
