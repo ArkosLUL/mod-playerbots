@@ -4799,6 +4799,9 @@ bool ConstellationLow(Unit const* unit)
 }
 
 bool HeldKitePossible(AlgalonEncounterState const& state, Player* bot, uint32 now);
+AlgalonTauntLine TauntLine(AlgalonEncounterState const& state, Player* bot, Unit const* constellation, uint32 now,
+                           Position& spot);
+bool KeepSpot(AlgalonEncounterState const& state, Player* bot, uint32 now, Position& spot);
 }
 
 Unit* GetAlgalonHandlerConstellation(Player* bot)
@@ -4848,11 +4851,28 @@ Unit* GetAlgalonHandlerConstellation(Player* bot)
     bool const kiteFirst = loose && heldLow && !gathering && spare && HeldKitePossible(*state, bot, now);
     char const* branch = "none";
     Unit* chosen = nullptr;
+    Position spot;
     if (loose && !kiteFirst)
     {
         chosen = loose;
-        branch = AlgalonKitingBehind(bot, loose) ? "behind" : "taunt";
+        if (AlgalonKitingBehind(bot, loose))
+            branch = "behind";
+        else
+            switch (TauntLine(*state, bot, loose, now, spot))
+            {
+                case AlgalonTauntLine::Side:
+                    branch = "side";
+                    break;
+                case AlgalonTauntLine::Blocked:
+                    branch = "blocked";
+                    break;
+                default:
+                    branch = "taunt";
+                    break;
+            }
     }
+    else if (held && (gathering || !heldLow || !spare) && KeepSpot(*state, bot, now, spot))
+        chosen = held;
     else if (held && gathering)
         branch = "gather";
     else if (heldLow && spare)
@@ -5027,6 +5047,121 @@ bool BehindAllowed(AlgalonEncounterState const& state, uint32 now)
 {
     return !state.bigBangCasting && !BigBangDueWithin(state, ULDUAR_ALGALON_GATHER_LEAD_SECONDS, now) &&
            state.holes.size() > ReservedHoles(state, now);
+}
+
+std::vector<Position> RaidShelterPoints(AlgalonEncounterState const& state, uint32 now)
+{
+    std::vector<Position> points;
+    for (AlgalonScanUnit const& hole : state.holes)
+        if (IsRaidShelterHole(state, hole.guid, now))
+            points.push_back(hole.position);
+
+    if (state.urgent.Get() && state.holes.empty())
+        if (AlgalonScanUnit const* star = LowestStar(state))
+            points.push_back(star->position);
+
+    return points;
+}
+
+bool LineNearPoints(std::vector<Position> const& points, Position const& from, float x, float y, float clearance)
+{
+    return std::any_of(points.begin(), points.end(), [&](Position const& point)
+                       { return SegmentDistance(from, x, y, point) < clearance; });
+}
+
+bool HandlerSpotClear(AlgalonEncounterState const& state, std::vector<Position> const& points, Unit const* boss,
+                      float x, float y, float keep)
+{
+    if (!AlgalonSpotInRoom(x, y) || !ClearOfHoles(state, x, y) || !ClearOfMarkers(state, x, y) ||
+        (boss && boss->GetExactDist2d(x, y) < ULDUAR_ALGALON_FORMATION_CLEARANCE))
+        return false;
+
+    return std::none_of(points.begin(), points.end(),
+                        [x, y, keep](Position const& point) { return point.GetExactDist2d(x, y) < keep; });
+}
+
+AlgalonTauntLine TauntLine(AlgalonEncounterState const& state, Player* bot, Unit const* constellation, uint32 now,
+                           Position& spot)
+{
+    std::vector<Position> const points = RaidShelterPoints(state, now);
+    Position const from = constellation->GetPosition();
+    if (!LineNearPoints(points, from, bot->GetPositionX(), bot->GetPositionY(), ULDUAR_ALGALON_HOLE_PATH_CLEARANCE))
+        return AlgalonTauntLine::Clear;
+
+    float closest = std::numeric_limits<float>::max();
+    for (Position const& point : points)
+        closest = std::min(closest, point.GetExactDist2d(from));
+
+    float const lineKeep = std::clamp(closest - ULDUAR_ALGALON_TAUNT_LINE_SLACK,
+                                      ULDUAR_ALGALON_HOLE_PATH_CLEARANCE + ULDUAR_ALGALON_TAUNT_LINE_SLACK,
+                                      ULDUAR_ALGALON_HOLE_DETOUR_RADIUS);
+    Unit* boss = Resolve(bot, state.boss);
+    float best = std::numeric_limits<float>::max();
+    for (float const reach : {ULDUAR_ALGALON_TAUNT_SPOT_NEAR, ULDUAR_ALGALON_TAUNT_SPOT_FAR})
+    {
+        for (uint8 step = 0; step < ULDUAR_ALGALON_SWEEP_BEARINGS; ++step)
+        {
+            float const angle = static_cast<float>(step) * ULDUAR_ALGALON_SWEEP_ANGLE_STEP;
+            float const x = from.GetPositionX() + std::cos(angle) * reach;
+            float const y = from.GetPositionY() + std::sin(angle) * reach;
+            float const distance = bot->GetExactDist2d(x, y);
+            if (distance >= best ||
+                !HandlerSpotClear(state, points, boss, x, y, ULDUAR_ALGALON_HANDLER_HOLE_CLEARANCE) ||
+                LineNearPoints(points, from, x, y, lineKeep))
+                continue;
+
+            best = distance;
+            spot = Position(x, y, ULDUAR_ALGALON_ROOM_CENTER.GetPositionZ());
+        }
+    }
+
+    return best == std::numeric_limits<float>::max() ? AlgalonTauntLine::Blocked : AlgalonTauntLine::Side;
+}
+
+bool KeepSpot(AlgalonEncounterState const& state, Player* bot, uint32 now, Position& spot)
+{
+    std::vector<Position> const points = RaidShelterPoints(state, now);
+    Position const from = bot->GetPosition();
+    std::vector<Position> crowding;
+    for (Position const& point : points)
+        if (point.GetExactDist2d(from) < ULDUAR_ALGALON_HANDLER_HOLE_CLEARANCE)
+            crowding.push_back(point);
+
+    if (crowding.empty())
+        return false;
+
+    Unit* boss = Resolve(bot, state.boss);
+    float const keep = ULDUAR_ALGALON_HANDLER_HOLE_CLEARANCE + ULDUAR_ALGALON_HANDLER_KEEP_MARGIN;
+    for (float radius = ULDUAR_ALGALON_SWEEP_STEP; radius <= keep * 2.0f; radius += ULDUAR_ALGALON_SWEEP_STEP)
+    {
+        float widest = -1.0f;
+        for (uint8 step = 0; step < ULDUAR_ALGALON_SWEEP_BEARINGS; ++step)
+        {
+            float const angle = static_cast<float>(step) * ULDUAR_ALGALON_SWEEP_ANGLE_STEP;
+            float const x = from.GetPositionX() + std::cos(angle) * radius;
+            float const y = from.GetPositionY() + std::sin(angle) * radius;
+            float gap = std::numeric_limits<float>::max();
+            bool away = true;
+            for (Position const& point : crowding)
+            {
+                gap = std::min(gap, point.GetExactDist2d(x, y));
+                away = away && (x - from.GetPositionX()) * (from.GetPositionX() - point.GetPositionX()) +
+                                       (y - from.GetPositionY()) * (from.GetPositionY() - point.GetPositionY()) >=
+                                   0.0f;
+            }
+
+            if (!away || gap <= widest || !HandlerSpotClear(state, points, boss, x, y, keep))
+                continue;
+
+            widest = gap;
+            spot = Position(x, y, ULDUAR_ALGALON_ROOM_CENTER.GetPositionZ());
+        }
+
+        if (widest >= 0.0f)
+            return true;
+    }
+
+    return false;
 }
 }
 
@@ -5233,6 +5368,40 @@ bool AlgalonKitingBehind(Player* bot, Unit* constellation)
     auto const kite = state->kites.find(bot->GetGUID());
     return kite != state->kites.end() && kite->second.hasSpot &&
            kite->second.looseTarget == constellation->GetGUID();
+}
+
+bool GetAlgalonKeepSpot(Player* bot, Position& spot)
+{
+    AlgalonEncounterState const* state = FindState(bot);
+    if (!state || state->handler.Get() != bot->GetGUID())
+        return false;
+
+    uint32 const now = getMSTime();
+    bool const gathering =
+        state->bigBangCasting || BigBangDueWithin(*state, ULDUAR_ALGALON_GATHER_LEAD_SECONDS, now);
+    bool const spare = state->holes.size() > ReservedHoles(*state, now);
+    bool held = false;
+    bool heldLow = false;
+    for (AlgalonScanUnit const& constellation : state->constellations)
+    {
+        Creature* unit = constellation.active ? Resolve(bot, constellation.guid) : nullptr;
+        if (!unit || unit->GetVictim() != bot)
+            continue;
+
+        held = true;
+        heldLow = heldLow || ConstellationLow(unit);
+    }
+
+    return held && (gathering || !heldLow || !spare) && KeepSpot(*state, bot, now, spot);
+}
+
+AlgalonTauntLine GetAlgalonTauntLine(Player* bot, Unit* constellation, Position& spot)
+{
+    AlgalonEncounterState const* state = FindState(bot);
+    if (!state || !constellation || constellation->GetVictim() == bot)
+        return AlgalonTauntLine::Clear;
+
+    return TauntLine(*state, bot, constellation, getMSTime(), spot);
 }
 
 Unit* GetAlgalonLooseDarkMatter(Player* bot)
@@ -5533,7 +5702,11 @@ bool AlgalonMayDamage(Player* bot, Unit* target)
         case PB_NPC_COLLAPSING_STAR:
             return guid == StarFocusOf(*state, bot->GetGUID()) && IsAlgalonStarTeam(bot);
         case PB_NPC_LIVING_CONSTELLATION:
-            return handler;
+        {
+            Position side;
+            return handler && (target->GetVictim() == bot ||
+                               TauntLine(*state, bot, target, getMSTime(), side) == AlgalonTauntLine::Clear);
+        }
         case PB_NPC_UNLEASHED_DARK_MATTER:
             return handler || state->handler.Get().IsEmpty();
         default:

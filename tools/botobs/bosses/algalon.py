@@ -339,7 +339,7 @@ STAR_BANG_MS = 60000
 PARKED_MS = 3000
 PARKED_HOLE_YD = 10.0
 EATEN_SLACK_MS = HOLE_MATCH_MS
-KITE_STAGES = frozenset(("taunt", "behind", "stage", "wait", "cross", "parked", "hole"))
+KITE_STAGES = frozenset(("taunt", "behind", "side", "clear", "stage", "wait", "cross", "parked", "hole"))
 
 
 def secs(ms: int) -> str:
@@ -3787,6 +3787,45 @@ def empty_before(trace: Trace, counts: list[int], when: int) -> int:
                if counts[index] == 0)
 
 
+def raid_holes_lost(trace: Trace) -> list[dict]:
+    """Per hole a constellation closed while it was one of the raid's (the KITE_RESERVED_HOLES nearest the hold
+    spot in the KITE_RESERVE_MS before a Big Bang's cast; in the cast the handler hides last on purpose): the
+    eater's last victim and its yards from the hole, the eater's height over the floor, and the handler's yards
+    and `algalon.kite` just before."""
+    samples = samples_of(trace)
+    end = pull_end(trace)
+    holes = hole_guids(trace)
+    casts = [cast["start"] for cast in big_bang_casts(trace)]
+    handlers = latch_spans(trace, "algalon.handler", end)
+    kite = holder_spans(trace, "algalon.kite", end)
+    out = []
+    for row in constellation_rows(trace):
+        if row["how"] != "hole" or not row["spent"] or row["removed"] is None:
+            continue
+        when, hole = row["removed"], row["spent"][0]
+        if not any(0 < start - when <= KITE_RESERVE_MS for start in casts):
+            continue
+        spot = samples.row(hole, samples.seen(hole)[1])[1:3]
+        up = sorted(set(holes_at(samples, holes, when - 1)) | {hole})
+        ranked = sorted(up, key=lambda guid: (dist2(samples.row(guid, samples.seen(guid)[1])[1:3], HOLD_SPOT[:2]),
+                                              guid))
+        if hole not in ranked[:KITE_RESERVED_HOLES]:
+            continue
+        last = samples.row(row["guid"], when)
+        victim = row["last_victim"]
+        victim_at = position_at(samples, victim, when) if victim else None
+        handler = as_guid(value_at(handlers, when))
+        handler_at = position_at(samples, handler, when) if handler else None
+        out.append({
+            "t": when, "hole": hole, "up": len(up), "hold": dist2(spot, HOLD_SPOT[:2]),
+            "victim": victim, "victim_yd": dist2(victim_at, spot) if victim_at else None,
+            "height": last[3] - ROOM_CENTER[2] if last and len(last) > 3 else None,
+            "handler": handler, "handler_yd": dist2(handler_at, spot) if handler_at else None,
+            "kite": value_at(kite.get(handler, []), when - 1) if handler else None,
+        })
+    return sorted(out, key=lambda item: item["t"])
+
+
 def show_holes(trace: Trace) -> None:
     print("HOLES")
     holes = hole_guids(trace)
@@ -3822,6 +3861,18 @@ def show_holes(trace: Trace) -> None:
     if urgent:
         print(f"  algalon.urgent: {len(urgent)} span(s), {sum(b - a for a, b in urgent) / 1000:.1f} s: "
               + ", ".join(f"{clock(a)}..{clock(b)}" for a, b in urgent))
+    lost_raid = raid_holes_lost(trace)
+    if lost_raid:
+        print(f"  raid holes a constellation closed, Big Bang due: {len(lost_raid)}")
+    for row in lost_raid:
+        victim = (f"on {who(trace, row['victim'])}" + (f" {row['victim_yd']:.1f} yd off" if row["victim_yd"] is not None
+                                                        else "")) if row["victim"] else "on nobody"
+        height = f", {row['height']:.1f} yd up" if row["height"] is not None else ""
+        handler = (f"; handler {trace.name(row['handler'])}"
+                   + (f" {row['handler_yd']:.1f} yd off" if row["handler_yd"] is not None else "")
+                   + f" ({row['kite'] or '-'})") if row["handler"] else "; no handler"
+        print(f"    {clock(row['t'])} hole {row['hold']:.1f} yd from the hold spot, {row['up']} up:"
+              f" eater {victim}{height}{handler}")
 
 
 # ------------------------------------------------------------------------------------- constellations

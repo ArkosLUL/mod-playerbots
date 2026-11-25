@@ -71,7 +71,9 @@ bool AlgalonHandlerKiting(PlayerbotAI* botAI)
         return false;
 
     Unit* constellation = GetAlgalonHandlerConstellation(bot);
-    return constellation && (constellation->GetVictim() == bot || AlgalonKitingBehind(bot, constellation));
+    Position side;
+    return constellation && (constellation->GetVictim() == bot || AlgalonKitingBehind(bot, constellation) ||
+                             GetAlgalonTauntLine(bot, constellation, side) != AlgalonTauntLine::Clear);
 }
 
 bool AlgalonFormationHolds(PlayerbotAI* botAI)

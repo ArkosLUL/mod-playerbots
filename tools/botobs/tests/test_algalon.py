@@ -11,6 +11,7 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import math
 import pathlib
 import sys
 import tempfile
@@ -466,6 +467,19 @@ class SyntheticPull(unittest.TestCase):
         self.assertEqual((row["active"], row["removed"], row["how"], row["spent"]), (36000, 70000, "hole", [HOLE_1]))
         self.assertEqual(row["victims"], [(36000, AGONY), (38000, AEGIS)])
         self.assertEqual((row["last_victim"], row["handler"]), (AEGIS, AEGIS))
+
+    def test_a_raid_hole_closed_with_big_bang_due_names_the_eater_and_the_handler(self):
+        (row,) = al.raid_holes_lost(self.trace)
+        hole = spot(-20, 30)
+        aegis = math.dist(spot(*HOME[AEGIS]), hole)
+        self.assertEqual((row["t"], row["hole"], row["up"], row["victim"], row["handler"], row["kite"]),
+                         (70000, HOLE_1, 2, AEGIS, AEGIS, "hole"))
+        self.assertAlmostEqual(row["hold"], math.dist(hole, al.HOLD_SPOT[:2]), places=1)
+        self.assertAlmostEqual(row["victim_yd"], aegis, places=1)
+        self.assertAlmostEqual(row["handler_yd"], aegis, places=1)
+        self.assertAlmostEqual(row["height"], 417.3 - al.ROOM_CENTER[2], places=2)
+        self.assertIn(f"1:10.000 hole {row['hold']:.1f} yd from the hold spot, 2 up: eater on Aegis (tank)"
+                      f" {aegis:.1f} yd off", render(self.trace, "holes"))
 
     def test_one_that_drops_out_with_the_hole_and_comes_back_was_not_removed_through_it(self):
         row = {row["guid"]: row for row in al.constellation_rows(self.trace)}[DORMANT]

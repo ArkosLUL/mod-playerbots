@@ -388,6 +388,20 @@ bool AlgalonConstellationTauntAction::Execute(Event /*event*/)
                       false, false, MovementPriority::MOVEMENT_COMBAT, true);
     }
 
+    Position side;
+    AlgalonTauntLine const line = fromBehind ? AlgalonTauntLine::Clear : GetAlgalonTauntLine(bot, constellation, side);
+    if (line != AlgalonTauntLine::Clear)
+    {
+        Position next;
+        if (line == AlgalonTauntLine::Blocked || bot->GetExactDist2d(side) <= ULDUAR_ALGALON_SLOT_TOLERANCE ||
+            !AlgalonWalkAround(bot, side, next))
+            return false;
+
+        ReleaseStalledWalk(botAI, bot);
+        return MoveTo(bot->GetMapId(), next.GetPositionX(), next.GetPositionY(), next.GetPositionZ(), false, false,
+                      false, false, MovementPriority::MOVEMENT_COMBAT, true);
+    }
+
     if (CastClassTaunt(botAI, constellation))
         return true;
 
@@ -436,7 +450,9 @@ bool AlgalonConstellationKiteAction::Execute(Event /*event*/)
     if (!constellation)
         return false;
 
-    if (!GetAlgalonKiteSpot(bot, constellation, spot, stage))
+    if (GetAlgalonKeepSpot(bot, spot))
+        stage = "clear";
+    else if (!GetAlgalonKiteSpot(bot, constellation, spot, stage))
     {
         if (RaidObs::Active())
             RaidObs::NoteDerived(bot, "algalon.kite", "nohole");
