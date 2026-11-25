@@ -111,16 +111,19 @@ float ThorimChainWaitCastHoldMultiplier::GetValue(Action* action)
     if (!action || !ThorimCampWaitingOnChain(botAI, bot))
         return 1.0f;
 
-    auto cached = spellIds.find(action);
-    if (cached == spellIds.end())
+    auto const classify = [action]
     {
-        CastSpellAction* spellAction = dynamic_cast<CastSpellAction*>(action);
-        uint32 const spellId =
-            spellAction ? context->GetValue<uint32>("spell id", spellAction->getSpell())->Get() : 0;
-        cached = spellIds.emplace(action, spellId).first;
-    }
+        Facts facts;
+        facts.cast = dynamic_cast<CastSpellAction*>(action);
+        return facts;
+    };
 
-    SpellInfo const* info = cached->second ? sSpellMgr->GetSpellInfo(cached->second) : nullptr;
+    Facts& facts = _facts.Get(action, classify);
+    if (!facts.cast)
+        return 1.0f;
+
+    uint32 const spellId = facts.spellId.Get(botAI, facts.cast);
+    SpellInfo const* info = spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
     if (!info)
         return 1.0f;
 

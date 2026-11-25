@@ -9,8 +9,7 @@
 
 #include "Define.h"
 #include "Multiplier.h"
-
-#include <unordered_map>
+#include "RaidCombatHelpers.h"
 
 class ThorimRunicBarrierMultiplier : public Multiplier
 {
@@ -40,7 +39,13 @@ public:
     float GetValue(Action* action) override;
 
 private:
-    std::unordered_map<Action*, uint32> spellIds;
+    struct Facts
+    {
+        CastSpellAction* cast = nullptr;
+        RaidSpellIdRef spellId;
+    };
+
+    RaidActionCache<Facts> _facts;
 };
 
 #endif
