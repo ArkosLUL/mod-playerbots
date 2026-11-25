@@ -446,6 +446,8 @@ ROAR_CAST_MS = 2300
 SPELL_DISTRACTING_SHOT = 20736
 SPELL_FEIGN_DEATH = 5384
 DRAG_WATCH_MS = 20000
+DRAG_CLAIM_GAP_MS = 6000
+DRAG_CLAIM_CAP_MS = 15000
 # Roster class ids. A paladin's, DK's or druid's taunt matches top threat for good, so only a tank's taunt
 # takes a healed Guardian off them. A hunter's shot wears off by itself.
 CLASS_HUNTER = 3
@@ -2531,6 +2533,16 @@ def show_reprisal(trace: Trace) -> None:
         if regroup:
             print(f"  regroup walks    : bots per reason {({reason: len(bots) for reason, bots in regroup.items()})}"
                   f"  (sight = out of the healer's sight, walked to 4 yd of it)")
+
+
+def drag_wave(claims: list[tuple[int, int]], releases: list[tuple[int, int]], deaths: list[tuple[int, int]],
+              tanks: set, first: int, last: int, cap_ms: int) -> tuple[list[int], int, list[int]]:
+    wave = [(when, guid) for when, guid in claims if first <= when <= last]
+    ends = [next((done for done, guid in sorted(releases) if guid == dragger and done >= when), first + cap_ms)
+            for when, dragger in wave]
+    end = min(max(ends, default=first), first + cap_ms)
+    dead = [guid for when, guid in deaths if first <= when <= end and guid not in tanks]
+    return [guid for _, guid in wave], end, dead
 
 
 def group_runs(stamps: list[int], gap_ms: int, min_ms: int) -> list[tuple[int, int]]:
@@ -5566,6 +5578,13 @@ def show_phase3(trace: Trace) -> None:
     kick_notes = [(rec["t"], str(rec.get("txt", ""))) for rec in notes(trace, "yogg.markkick")]
     # How much of the Guardians' healing ran under Mortal Strike's -50%.
     cut_samples = [(rec["t"], str(rec.get("txt", ""))) for rec in notes(trace, "yogg.healcut")]
+    drag_notes = notes(trace, "yogg.beacondrag")
+    claims = [(rec["t"], rec.get("g", 0)) for rec in drag_notes if rec.get("txt") == "claim"]
+    releases = [(rec["t"], rec.get("g", 0)) for rec in drag_notes if rec.get("txt") in ("release", "missed")]
+    roster_deaths = [(rec["t"], rec.get("g", 0)) for rec in death_records(trace) if rec.get("g") in roster]
+    claim_runs = group_runs([when for when, _ in claims], DRAG_CLAIM_GAP_MS, 0)
+    claimed_marks = 0
+    every_tank: list[int] = []
     print(f"\n  Shadow Beacons     : {len(beacons)}")
     classes = {row["g"]: row.get("c") for row in trace.header.get("roster", [])}
     handbacks: list[tuple[str, float | None]] = []
@@ -5622,6 +5641,17 @@ def show_phase3(trace: Trace) -> None:
                 spot = at(trace, by_name[name], mark_at) if name in by_name else None
                 stood.append((name, spot[:2] if spot else None))
             print(f"      staged at the mark: {', '.join(stage_gaps(stood)) or 'nobody'}")
+        run = next(((first, last) for first, last in claim_runs if mark_at - 1000 <= first <= group[0]), None)
+        if run:
+            claimed_marks += 1
+            who, end, dead = drag_wave(claims, releases, roster_deaths, tanks, run[0], run[1], DRAG_CLAIM_CAP_MS)
+            standing = [guid for guid in tanks if (row := row_before(rows.get(guid, []), run[0])) and row[6] > 0]
+            dragging = len(set(who) & tanks)
+            if standing and dragging >= len(standing):
+                every_tank.append(len(dead))
+            print(f"      dragged by: {', '.join(f'{trace.name(guid)} {trace.role(guid)}' for guid in who)};"
+                  f" tanks dragging {dragging} of {len(standing)} up; raiders dead to the last release"
+                  f" (+{(end - run[0]) / 1000:.1f} s): {len(dead)}")
         reserve = next((text for when, text in kick_notes
                         if mark_at - 1000 <= when <= mark_at + 3000 and text.startswith("reserve")), None)
         if reserve is not None:
@@ -5674,7 +5704,10 @@ def show_phase3(trace: Trace) -> None:
                     + (f", {never} never" if never else ""))
     if back:
         print(f"    back on a tank   : {'; '.join(back)}")
-    drags = collections.Counter(str(rec.get("txt", "")) for rec in notes(trace, "yogg.beacondrag"))
+    if claimed_marks:
+        print(f"    every tank dragging: {len(every_tank)} of {claimed_marks} marks, raiders dead inside those"
+              f" {sum(every_tank)}")
+    drags = collections.Counter(str(rec.get("txt", "")) for rec in drag_notes)
     if drags:
         print(f"    yogg.beacondrag  : {dict(drags)}")
     sides = collections.Counter(str(rec.get("txt", "")) for rec in notes(trace, "yogg.beaconspot"))
