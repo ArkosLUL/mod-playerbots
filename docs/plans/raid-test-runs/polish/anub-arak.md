@@ -149,8 +149,8 @@ warrior (5.1k) while the paladin (3.5k) sat on him in A and C.
 
 - `ToCHelpers_Anubarak.cpp` `AnubarakMainTank`: heroic, a flagged human tank
   keeps him; else the tank-strategy bots, alive and in the map, rank paladin, DK,
-  warrior, druid, then assistants, and the one ranked third takes him (second of
-  two, the only one), latched in `state.mainTank` for the pull
+  warrior, druid, assistants first within a class, and the one ranked third
+  takes him (second of two, the only one), latched in `state.mainTank` for the pull
   (`ClearPullLatches` clears it), so a side tank's death never moves him. Normal
   keeps the flag, else the first living tank.
 - `RankSideTanks`: heroic ranks bots before humans as before, then tank-strategy

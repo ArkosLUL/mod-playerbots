@@ -177,13 +177,13 @@ spec, the main tank the explicit one, else the first living tank: `IsTank` can r
 and a re-read index swaps the sides. A side tank that dies is remembered for the battle res.
 
 **In heroic the class picks the jobs** (user call, 2026-11-25: the bear takes the most burrower
-damage, the class read below). Bots rank paladin, death knight, warrior, druid, then assistants; for
-a side, tank-strategy bots go before tank-by-spec ones (a cat with Thick Hide). A flagged human tank
-keeps him; else the tank-strategy bot ranked third takes him (second of two, the only one), latched
-for the pull, and the flag on a bot, or none, decides nothing. The sides then rank as above, the
-class after bots first, so an unflagged human still takes only a side no bot can. DC's aggro start
-engages him on the flag holder, by then a side tank, so the pickup tank also taunts him off a bot
-side tank.
+damage, the class read below). Bots rank paladin, death knight, warrior, druid, assistants first
+within a class; for a side, tank-strategy bots go before tank-by-spec ones (a cat with Thick Hide).
+A flagged human tank keeps him; else the tank-strategy bot ranked third takes him (second of two,
+the only one), latched for the pull, and the flag on a bot, or none, decides nothing. The sides then
+rank as above, the class after bots first, so an unflagged human still takes only a side no bot
+can. DC's aggro start engages him on the flag holder, by then a side tank, so the pickup tank also
+taunts him off a bot side tank.
 
 **A human side tank's side is the tank spot he stands at**, since no bot can tell him one: standing
 within 8 yd of the other side's spot and 4 yd nearer it than his own, he swaps sides with the bot side
