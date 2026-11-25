@@ -8,13 +8,13 @@ The polish loop runs on the user's standing go ("Polish loop" below), scheduled 
 
 **Done** (polished at 25 plus the 10-man check): Jaraxxus, Twin Val'kyr, Northrend Beasts, Faction Champions, Kologarn, Ignis, Razorscale, Auriaya, Iron Assembly, XT-002, Hodir, Freya, Vezax ("Bosses" below).
 
-**Bosses in the loop** (one window per build, every lane starts from it): Yogg-Saron (r30 merged), Thorim (r31 coding done, merge pending), Mimiron (r25 merged, 25n and 10n; 10n check passed on r24), Algalon (r19 coding), Anub'arak (r5 merged, the user's Q2), Flame Leviathan (25n done rule met on r2; r3 coding A's 10n; polish log `polish/flame-leviathan.md`).
+**Bosses in the loop** (one window per build, every lane starts from it): Yogg-Saron (r30 merged), Thorim (r31 merged), Mimiron (r25 merged, 25n and 10n; 10n check passed on r24), Algalon (r19 coding), Anub'arak (r5 merged, the user's Q2), Flame Leviathan (25n done rule met on r2; r3 coding A's 10n; polish log `polish/flame-leviathan.md`).
 
 **Window 52 running** (2026-11-25, rebuild of Custom `f306fd18b` with DC `d8859c6`): Anub'arak r5 (`"pulls": 2, "cap": 2`, ToC pools), Yogg-Saron r30, Mimiron r25 25n and 10n re-check; jobs `scratchpad/window52-jobs.json`, reports `scratchpad/window52/window52/window52-<boss>*.md`. Earlier: `scratchpad/window51/` (Flame Leviathan r2 25n and 10n, Yogg-Saron r29, Thorim r30, Algalon r18, Mimiron r24 25n and 10n), `scratchpad/window50/`. If the scratchpad is gone, rerun the windows. Windows 29-52 and fillers: `windows.md`.
 
 **Next:**
 - On each window 52 report: Anub'arak r6, Yogg-Saron r31, Mimiron r26 (with window 51's and 52's Mimiron reports; C's 25n wiped at 10:16-10:18 on r24).
-- Running: Algalon r19, Flame Leviathan r3 (from window 51). Thorim r31 done (stalled phase 2 walks released after 500 ms, a tank bound for the off-tank spot doesn't Feral Charge), merge once the rebuild releases the lock. Rebuild once enough has merged to fill a window.
+- Running: Algalon r19, Flame Leviathan r3 (from window 51). Merged, not yet built: Thorim r31 (`567c6ca23`, stalled phase 2 walks released after 500 ms, a tank bound for the off-tank spot doesn't Feral Charge). Rebuild once enough has merged to fill a window.
 - Next question batch: Yogg-Saron Q5 (polish log, r30: a mark with no free dragger heals on the pile; recommend (b), the bot tank holding fewer Guardians drags it, only when no other bot can).
 - Done rule on the newest build per boss: Flame Leviathan 25n A, B, C (r2) and 10n B, C; Mimiron 25n A, B (r24) and 10n A, B, C (r24 with the warlock); Thorim A, B (r30); Yogg-Saron A (r29); Algalon A (r18); Anub'arak none.
 - Mimiron r25 left open: a healer stranded at the east edge by a detour leg needs navprobed bounds (orchestrator's job if it recurs).
