@@ -183,6 +183,7 @@ struct YoggSaronEncounterState
         uint32 markEndedMs = 0;
         uint8 lane = 0;
         uint32 tauntMs = 0;
+        uint32 hiddenMs = 0;
     };
     std::unordered_map<ObjectGuid, BeaconDrag> beaconDrags;
     uint32 beaconClockMs = 0;
@@ -1707,9 +1708,16 @@ Unit* YoggSaronBeaconDragGuardian(PlayerbotAI* botAI, bool claim)
 
         int32 const channelMs = done ? -1 : YoggSaronDrainLifeElapsed(guardian);
         uint32 const sinceTaunt = getMSTimeDiff(it->second.tauntMs, now);
+        bool const switchHidden = it->second.tauntMs && channelMs >= 0 &&
+                                  sinceTaunt <= static_cast<uint32>(channelMs) + ULDUAR_YOGG_SARON_BEACON_TAUNT_LAND_MS;
+        if (switchHidden)
+            it->second.hiddenMs = now;
+
+        bool const victimSettled =
+            !switchHidden && (!it->second.hiddenMs ||
+                              getMSTimeDiff(it->second.hiddenMs, now) >= ULDUAR_YOGG_SARON_BEACON_TAUNT_LAND_MS);
         if (!done && it->second.tauntMs && guardian->GetVictim() != dragger &&
-            sinceTaunt >= ULDUAR_YOGG_SARON_BEACON_TAUNT_CHECK_MS &&
-            (channelMs < 0 || sinceTaunt > static_cast<uint32>(channelMs) + ULDUAR_YOGG_SARON_BEACON_TAUNT_LAND_MS))
+            sinceTaunt >= ULDUAR_YOGG_SARON_BEACON_TAUNT_CHECK_MS && victimSettled)
         {
             if (RaidObs::Active())
                 RaidObs::NoteDerived(dragger, "yogg.beacondrag", "missed");
@@ -1829,7 +1837,10 @@ void YoggSaronBeaconTaunted(Player* bot)
 {
     for (auto& [guid, drag] : YoggSaronStateFor(bot).beaconDrags)
         if (drag.dragger == bot->GetGUID())
+        {
             drag.tauntMs = getMSTime();
+            drag.hiddenMs = 0;
+        }
 }
 
 bool YoggSaronBeaconDragging(Player* bot)

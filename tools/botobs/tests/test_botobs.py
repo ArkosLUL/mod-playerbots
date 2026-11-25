@@ -1484,6 +1484,15 @@ class YoggPhases(unittest.TestCase):
         self.assertEqual(yogg_saron.taunt_outcome(rows, 3000, 5), "-")
         self.assertEqual(yogg_saron.taunt_outcome(rows, 9000, 5), "-")
 
+    def test_missed_verdicts_tell_a_taunt_that_took_at_a_channel_end_from_a_real_miss(self):
+        taunts = [(1000, 5, 56222, 70), (20000, 6, 6795, 71), (40000, 5, 56222, 72)]
+        swings = [(3200, 70, 5), (21600, 71, 9), (43000, 72, 5)]
+        channels = [(500, 70, 2500), (19000, 71, 5000)]
+        missed = [(3000, 5), (21500, 6), (41500, 5), (60000, 8)]
+        self.assertEqual(yogg_saron.missed_verdicts(missed, taunts, swings, channels), (4, 1, 1))
+        self.assertEqual(yogg_saron.missed_verdicts([(3000, 5)], taunts, swings, channels, look_ms=100), (1, 0, 1))
+        self.assertEqual(yogg_saron.missed_verdicts([], taunts, swings, channels), (0, 0, 0))
+
     def test_mark_drains_clips_channels_to_the_mark(self):
         channels = [(500, 7, 5000), (4000, 7, 1200), (2000, 8, 5000), (12000, 7, 5000)]
         seconds, count, cut = yogg_saron.mark_drains(channels, 7, 1000, 10000)

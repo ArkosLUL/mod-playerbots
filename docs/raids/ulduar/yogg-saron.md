@@ -1772,9 +1772,11 @@ every 5 s until it lands, and a Guardian it hits reschedules the next 45 s out
 - **A taunt that didn't take hands the mark on** (`tauntMs`, `missed`): the victim is not the dragger 1.5 s
   after its taunt (`…_BEACON_TAUNT_CHECK_MS`; Distracting Shot flies 40 yd/s, all land by 1 s) and the
   claim goes to the next bot with a taunt ready, rather than sitting out an 8 s cooldown after a `MISS`.
-  Not under a Drain Life already running when the taunt landed: the Guardian's `UpdateAI` returns while
-  casting, before `UpdateVictim`; a channel started later doesn't hide the switch. Death Grip is impossible
-  (immunity set −286: GRIP, PULL_TOWARDS, ROOT, SNARE).
+  Not under a Drain Life already running when the taunt landed, nor 1 s past its end (`hiddenMs`,
+  `…_BEACON_TAUNT_LAND_MS`): the Guardian's `UpdateAI` returns while casting, before `UpdateVictim`, and
+  switches 0.1-0.2 s after the channel ends. Verdicts on the tick a kick cut it handed on two taunts that
+  had taken; one of those marks one-shot its dragger, then the hunter given it. A channel started later
+  doesn't hide the switch. Death Grip is impossible (immunity set −286: GRIP, PULL_TOWARDS, ROOT, SNARE).
 - **Draggers are pre-staged, by the user's choice** (`YoggSaronTickBeacon`, `yogg-saron beacon stage`,
   `ACTION_RAID + 3.5`). 5 s before the next beacon is due (off the last first mark) the claim's rules and
   order pick `RAID_MODE(1, 3)` stagers, lanes north / south / north-east in order; the claim gives a stager
@@ -2214,7 +2216,9 @@ count, so skip `r:1` rows when taking a minimum or every bot reads as Insane.
   tanks aside, dead from the first claim until each claim's release or `missed`, at most 15 s; `every
   tank dragging` totals the marks every living tank claimed. `on their pets at the mark` counts unmarked
   Guardians whose snapshot target is a dragger's pet or summon (the trace's owner field), and `a dragger's pets
-  held Guardians` the heals those marks spread.
+  held Guardians` the heals those marks spread. `missed taunts` reads each `missed` against the dragger's last
+  drag taunt: that mark swinging at the dragger within 1 s means the taunt had taken, and `at a Drain Life's
+  end` counts verdicts within 0.2 s of the mark's channel ending.
 - A step-out that wakes the next Guardian leaves no other trace: the note says only why it moved.
 - `yogg.p1dodge` is derived, so `--novas` reads back-line dodges off the moves instead: `dodges landing
   inside the band` counts accepted phase 1 spacing moves by ranged and healers ending inside 20.5 yd, and the
