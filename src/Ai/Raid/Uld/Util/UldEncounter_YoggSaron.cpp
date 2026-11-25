@@ -2103,6 +2103,22 @@ char const* YoggSaronPhase3YoggDot(PlayerbotAI* botAI, Unit*& yogg)
     return nullptr;
 }
 
+bool YoggSaronPhase3Burn(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    if (!PlayerbotAI::IsRanged(bot) || PlayerbotAI::IsHeal(bot) || PlayerbotAI::IsTank(bot) ||
+        YoggSaronOnBrainLevel(bot) || !YoggSaronInPhase3(botAI))
+        return false;
+
+    Creature* boss = YoggSaronNearestCreature(botAI, NPC_YOGG_SARON);
+    bool const burn = boss && boss->IsAlive() && boss->GetHealthPct() < ULDUAR_YOGG_SARON_PHASE_3_BURN_PCT;
+
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "yogg.burn", burn ? "burn" : "guardians");
+
+    return burn;
+}
+
 Player* YoggSaronBeaconExternalVictim(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();

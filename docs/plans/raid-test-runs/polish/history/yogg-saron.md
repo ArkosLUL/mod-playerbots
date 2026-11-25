@@ -2195,3 +2195,65 @@ Back out if phase 1 runs longer or the focus flips between two Guardians more th
   ran out; uld4's first nova went from 10% to dead in 0.2 s, before any button.
 - Death Ray: 5 of 7 victims were on a `phase 2 spacing action` walk when it hit.
 - uld1's phase 2 lost seven (Death Ray 3, Brain Link 2) and reached phase 3 at 9:30 with 6 tentacles.
+
+## Round 24 (2026-11-25, window 37 build ce636f992: round 23)
+
+**Data.** Window report `scratchpad/window37/window37/window37-yogg-saron.md` (six pulls, one per pool), widened to
+22 pulls since ce2ffa6be with `raidtest.py report --head ce2ffa6be --pulls 8` (A 6, B 8, C 8). Traces
+`603_15…1795556061`, `603_16…1795556067`, `603_20…1795556557`, `603_17…1795556068`, `603_18…1795556073`,
+`603_19…1795556506` (uld1-uld6) with `--phases --novas --phase3`, the other 16 with `--phase3`; scratch counts of
+melee health before each nova, healing after it, pets on gap-held Guardians, focus changes per death, taunt readiness
+at Guardian swings on non-tanks and Vigilance procs.
+
+Deaths by mechanic (phase 1 / 2 / 3):
+
+- uld1 (A) kill: nova 1 / Death Ray 1 / Immortal Guardian 27, Drain Life 2; Yogg 1.56% 2 s before the kill.
+- uld4 (A) kill: nova 3 (shaman twice, rogue, from full) / Death Ray 1 / Immortal Guardian 1.
+- uld2 (B): nova 5, Sara's Blessing 1 (2:14-2:15) / — / Immortal Guardian 24, Gaze 1; Yogg 26.2%.
+- uld5 (B): nova 3 (2:11, one nova) / — / Immortal Guardian 25, Roar 1, Hand of Sacrifice 1, Drain Life 1; 14.3%.
+- uld3 (C): nova 4 (1:25) / Death Ray 2 / Immortal Guardian 26; 27.1%.
+- uld6 (C): nova 1 / Death Ray 1, Gaze 1 / Immortal Guardian 28, Roar 1; 1.65% at 12:26.
+
+**Verdict on round 23 (a free low Guardian takes the focus all phase 1): kept**, on its own target in every design:
+`focus past a free low one on the stack` A 1.1 / 1.4 s, B 0.8 / 0.5, C 3.4 / 0.7 (window 35 12.5-19.6); `lower` 4-8
+before the handover, `chain` 0 (window 35 4-6); pairs under the gap A 1 / 0, B 1 / 1, C 1 / 0; phase 1 129-149 s;
+focus changes 1.6-2.6 a death (1.8). Not met: three ticks killed three or more, and pairs killed 9 (5; target 0).
+Both pairs came from two held low Guardians side by side, not a free one. uld2 2:13.7 (handover, lowest first): the
+raid killed G68977 at 2.2% while G68976 stood ~5 yd off at 5.5%, tank-held; the nova took 3.2% off it and splash the
+rest in 1.4 s, five melee dead (they sat at 23-57% for 4 s from 2:08). uld3 1:19.2-1:22.9: G68961 (23.7%, on the
+stack) waited on the chain rule for G68940 (19.4%, 14 yd out, parked under the 35% floor); both bled ~2.5%/s with
+nobody on them, G68940 died on reaching the stack and G68961 (13.6%, 6.6% after the nova) 2.7 s later, four melee
+dead. uld5's 2:11 triple was one nova on a rogue, the shaman and a rogue at 68-70%, 8 s after a nova followed by 61k
+of healing on the melee (others 67-238k).
+
+**Stop rules.** Not polished: B and C have no kill. Phase 3 stays stuck as a race, but B's taunt starvation is a new
+root cause. Nova pairs were picked in r20 and r23, so not a third time. Q1 step 2 does not rank first.
+
+**Picked: B's tanks run out of taunts in phase 3** (Immortal Guardian, 131, and the design gap the brief asks for).
+uld5 (B) phase 3: 9 of 17 Guardians opened on a melee at +4.0 s, 9 of 15 sat on a raider before a tank held them
+(median 1.1 s, max 6.5), three raiders killed by fresh Guardians before the first tank death, when 17 of 36 swings on
+non-tanks came with no bot tank's taunt off cooldown (A's uld4 1 of 55 counting Death Grip, 18 without). Root cause:
+the warrior's Taunt and the bear's Growl are B's only phase 3 taunts (the control owns all of them,
+`UldActions_YoggSaron.cpp:88-103`), and the warrior's Vigilance, whose every hit resets Taunt (50725,
+`spell_warr_vigilance_trigger`), sits where `CastVigilanceAction::GetTarget` (`WarriorActions.cpp:101-139`) puts it:
+the highest-gear dps. uld5 kept it on hunter Uldvau all pull (29 resets in phase 3), uld2 on a melee warrior then a
+rogue (16). A bug: the control intends every loose Guardian taunted, and the warrior holds a reset it never aims at
+the tank being hit.
+
+**Fix.** `yogg-saron vigilance` (`ACTION_RAID + 2.5`, `YoggSaronVigilanceTarget`): in phase 3 a bot warrior tank
+casts Vigilance on the living tank with the most attackers within 30 yd, unless its own Vigilance is already on
+a tank or that tank carries another warrior's; `yogg.vigilance` names the tank. Only B fields a warrior tank at 25 and
+10; a human tank is a valid target, a human warrior runs nothing. Same code at 10 and 25, normal and hard mode. No
+shared code: the generic picker stays as is and stands down once the bot's Vigilance is on a group member. Reader:
+`--phase3`'s per-tank line reads each class's taunts (`every taunt it has cooling`, was Hand of Reckoning only, 0 for
+non-paladins) with Vigilance resets, plus `no bot tank with a taunt ready` before the first tank death; tested.
+
+**Next window should show** in B (uld2, uld5): `yogg.vigilance` on the bear early in phase 3; the warrior's `every
+taunt it has cooling` far under the bear's, `no bot tank with a taunt ready` under 20% of swings (25-50%); fresh
+Guardians on a raider a median under 1 s (1.1-2.7) and raiders killed by a fresh one before the first tank death under
+1 a pull (2.25). A and C unchanged. Back out if B's tanks die sooner or `first off a tank` turns onto the warrior
+or the raid more often: Vigilance moves 10% of the bear's threat to the warrior (59665).
+
+**Seen, not picked.** A's DK tank had Death Grip ready at every swing on a non-tank while the control never casts it;
+B's warrior and bear hold Challenging Shout and Roar all phase 3; uld6 lost its paladin tank to Deafening Roar at
+11:50 with Yogg near 5% and wiped at 1.65%.

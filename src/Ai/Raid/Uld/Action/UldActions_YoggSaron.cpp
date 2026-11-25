@@ -672,7 +672,9 @@ bool YoggSaronSetDpsPriorityAction::IsAllowedTarget(Unit* candidate, BrainApproa
                        YoggSaronOutsideGaze(bot, YoggSaronNearestCreature(botAI, NPC_YOGG_SARON), candidate);
             };
 
-            if (*brain.thorim)
+            if (brain.burn)
+                allowed = gazeTarget();
+            else if (*brain.thorim)
                 allowed = health > ULDUAR_YOGG_SARON_GUARDIAN_WEAKENED_PCT;
             else if (phaseThreeMelee())
             {
@@ -734,6 +736,7 @@ Unit* YoggSaronSetDpsPriorityAction::ResolveTarget(Unit* currentTarget)
     BrainApproach brain;
     brain.brainLevel = brainLevel;
     brain.phaseThreeRanged = phaseThreeRanged;
+    brain.burn = phaseThreeRanged && YoggSaronPhase3Burn(botAI);
 
     std::vector<Unit*> candidates;
     AnyUnitOfEntriesInRangeCheck check{Acore::AnyUnitInObjectRangeCheck(bot, range), entries.data(), entries.size()};

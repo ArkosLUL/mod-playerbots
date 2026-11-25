@@ -48,7 +48,7 @@ with every mover firing at once, ranged once ran in through orbits 4 and 3 as cl
 by 16 s). The spacing and control triggers, the nova covers and the focus re-pick still wait for
 `YoggSaronInPhase1Room` (outer orbit + reach, 69.3 yd), a distance read ahead of the phase read. Combat is
 no gate (every Guardian's `Reset` calls `SetInCombatWithZone`, so the instance is in combat from ~10 s),
-and it stays out of `YoggSaronPhase`, whose read writes the shared `yogg.phase` latch. `--phases` counts P1
+and it stays out of `YoggSaronPhase`, whose read writes the shared `yogg.phase` latch. `--room` counts P1
 moves begun outside the room with 2.5 yd of slack (`GetDistance2d` takes off the bot's 1.5 yd reach and the
 move lands a tick after the read), marks the station's and leash's walk in, and prints when each role got
 inside.
@@ -1710,6 +1710,10 @@ more into Guardians than Yogg, since the pile always has one.
 (`ULDUAR_YOGG_SARON_PHASE_3_GUARDIAN_FLOOR_PCT`): bringing each to Weakened spent most of the raid's damage
 on Guardians and Yogg barely moved. Under the floor a Guardian is allowed only while Lunatic Gaze (64163)
 is up and it sits 65° or more off Yogg, the arc the gaze node angles for; with Thorim the 10% rule stays.
+**Under 12% of Yogg the ranged drop the Guardians for him, by the user's choice**
+(`ULDUAR_YOGG_SARON_PHASE_3_BURN_PCT`, `YoggSaronPhase3Burn`, `yogg.burn`): with 84-86% of their damage on
+Guardians he fell ~0.12%/s, and five wipes ended at 3.6-9.7% with the tanks dead 11-93 s after he crossed 12%.
+Any Keepers; the gaze exception and the tentacle tiers above him stay.
 **A beacon-healed one (64486 / 64468) is fair game, by the user's choice**, though most of the damage heals
 back: skipped, three full ones sat on the tanks for the 20 s heal and killed a tank. Pets on the Guardian
 left are stopped so they follow the owner.
@@ -2117,7 +2121,7 @@ that the thing never happened. Two hazards go to the timeline only because nothi
 the body's knockback circle, and each Crusher's wedge carrying facing, arc and range so it can be tested by
 hand.
 
-**76 `yogg.` probe keys**, by topic:
+**77 `yogg.` probe keys**, by topic:
 
 | Topic | Keys (values) |
 |---|---|
@@ -2126,7 +2130,7 @@ hand.
 | Platform hazards | `knockback` (`inside` / `clear`), `crush` (incl. `reach`), `deathray`, `castcut` (spell), `detour` (`around` / `spot`), `stunned` (`engage` / `clear`), `petguard` (`pulled` / `held` / `clear` / `leftover`), `judgement`, `powerbreak` (`none` / `walk` / `hit` / `out`, then the Crusher), `walk` (node and branch), `walkstep` |
 | Portals and Sanity | `wave`, `portal` (`notteam` / `waiting` / `spreading` / `holding` / `late` / `clicking`), `portalslot`, `brainteam`, `benched`, `portalcancel`, `brainlink` (`none` / `closing` / `clear`), `sanity` (`low` / `topping` / `refill` / `idle`: the walk's reason, not a level), `squeeze` |
 | Brain level | `room`, `roomstate` (`walkingin` / `fighting` / `doorshut` / `tobrain` / `atbrain` / `reprisal` / `staged`), `tentacle`, `spread` (`free` / `shared` / `kept`), `share` (group name / `orphan` / `first` / `helper` / `done` / `joined` / `staged` / `lifted`), `reprisal`, `reprisalheal` (spell), `regroup` (`range` / `sight`), `skull`, `skullturn` (`angled` / `free`), `brainspot`, `brainhold` (`open` / `dots` / `hold` / `finish` / `clear`), `charge`, `dash` (`used` / `cooldown`), `nitro` (`used` / `cooldown` / `station`), `exit`, `exitcancel` |
-| Phase 3 | `station` (`walking` / `shifted` / `parked` / `released` / `unreachable`), `gaze` (above), `tankhold` (`taunt` / `chain taunt` / `defense` / `leash` / `attack` / `return taunt` / `return defense` / `swap taunt` / `swap defense`), `tankswap`, `swapdefer` (holder and health), `tankshed`, `tankloh`, `vigilance` (tank), `beacondrag` (`claim` / `taunt` / `missed` / `hold` / `shot` / `feign` / `release` / `return`), `beaconspot`, `beaconstage` (`pick` / `walk` / `ready` / `stuck` / `timeout`), `beaconbear`, `dragdef`, `dragext`, `roar` (`preswitch` / `noconc` / `claimed` / `press`), `p3area` (`few` / `fresh` / `allowed`), `p3dot` (spell), `kicknudge`, `markkick`, `mortalstrike`, `healcut`, `warlockpet`, `lust`, `lustready`, `healerengine` |
+| Phase 3 | `station` (`walking` / `shifted` / `parked` / `released` / `unreachable`), `gaze` (above), `tankhold` (`taunt` / `chain taunt` / `defense` / `leash` / `attack` / `return taunt` / `return defense` / `swap taunt` / `swap defense`), `tankswap`, `swapdefer` (holder and health), `tankshed`, `tankloh`, `vigilance` (tank), `beacondrag` (`claim` / `taunt` / `missed` / `hold` / `shot` / `feign` / `release` / `return`), `beaconspot`, `beaconstage` (`pick` / `walk` / `ready` / `stuck` / `timeout`), `beaconbear`, `dragdef`, `dragext`, `roar` (`preswitch` / `noconc` / `claimed` / `press`), `p3area` (`few` / `fresh` / `allowed`), `p3dot` (spell), `burn` (`guardians` / `burn`), `kicknudge`, `markkick`, `mortalstrike`, `healcut`, `warlockpet`, `lust`, `lustready`, `healerengine` |
 
 **Do not add a Sanity level probe.** 63050 is already in the aura stream, with 63752 low-sanity and 63120
 Insane beside it, as are Grim Reprisal 64039 and Lunatic Gaze 64168 in `dmg`. A removal row carries no stack
@@ -2186,6 +2190,9 @@ count, so skip `r:1` rows when taking a minimum or every bot reads as Insane.
 - The damage split is by each bot's target, so a melee bot on Yogg cleaving the pile reads as all Yogg (38%
   there against 22% in the combat log). `yogg.p3area` is by centre distance, a lower bound: the module takes
   off each unit's size, several yards on an Empowered Guardian.
+- Yogg crossing 12% is his first phase 3 snapshot under it. `--burn` (in `--summary`) reads his fall in the
+  60 s before and after it up to the first tank death, each tank's first death after it (else its last
+  before), the ranged bots' targets and the Guardians' share at 90%+ after.
 
 **Three views exist because this fight keeps failing in ways no per-mechanic view sees**: **vetoes** by
 multiplier and action, since a zeroed walk with nothing walking in its place is a bot standing still and

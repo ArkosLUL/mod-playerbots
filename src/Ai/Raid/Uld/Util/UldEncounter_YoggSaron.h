@@ -308,6 +308,7 @@ inline constexpr float ULDUAR_YOGG_SARON_CONSTRICTOR_MELEE_WALK = 7.0f;
 
 inline constexpr float ULDUAR_YOGG_SARON_PHASE_3_GUARDIAN_FLOOR_PCT = 30.0f;
 inline constexpr float ULDUAR_YOGG_SARON_GUARDIAN_WEAKENED_PCT = 10.0f;
+inline constexpr float ULDUAR_YOGG_SARON_PHASE_3_BURN_PCT = 12.0f;
 
 inline constexpr float ULDUAR_YOGG_SARON_PHASE_3_AREA_RADIUS = 8.0f;
 inline constexpr uint32 ULDUAR_YOGG_SARON_PHASE_3_AREA_MIN_WORTH = 3;
@@ -729,6 +730,8 @@ Unit* YoggSaronMortalStrikeTarget(PlayerbotAI* botAI, char const*& reason);
 char const* YoggSaronWarlockSummon(PlayerbotAI* botAI);
 
 char const* YoggSaronPhase3YoggDot(PlayerbotAI* botAI, Unit*& yogg);
+
+bool YoggSaronPhase3Burn(PlayerbotAI* botAI);
 
 Player* YoggSaronTankSwapHolder(PlayerbotAI* botAI);
 void YoggSaronTankSwapTake(PlayerbotAI* botAI, Player* holder);
