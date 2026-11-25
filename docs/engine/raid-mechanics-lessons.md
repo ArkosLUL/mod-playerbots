@@ -39,6 +39,13 @@ Nothing about a bot on a vehicle behaves like a bot on the ground. Every rule be
 - **`MotionMaster::MoveForwards` has no answer for a mid-air point.** Its endpoint goes through
   `CanReachPositionAndGetValidCoords` and it returns silently — after `mm->Clear(false)` has already
   wiped what the mover was doing. The rider stops dead, permanently.
+- **A bot passenger's turn lasts until its vehicle next moves** unless it goes into the seat offset.
+  `Vehicle::RelocatePassengers` re-derives each passenger's world position and facing from
+  `m_movementInfo.transport.pos` on every move of the base. A client's turn writes that offset
+  (`HandleMoverRelocation` copies the packet's `MovementInfo`); `SetOrientation` does not, so a cast
+  past ±90° then fails its completion facing check (`Spell::CheckRange`).
+  `ServerFacade::SetFacingTo` writes the offset too on an `ALLOW_TURNING` seat the bot doesn't
+  control ([Flame Leviathan's riders](../raids/ulduar/flame-leviathan.md#the-catapult-cycle-his-turrets-and-systems-shutdown)).
 - **A moving vehicle can neither cast nor hold a facing.** `CanCastVehicleSpell` rejects on
   `CastingTime && vehicleBase->isMoving()`; `CastVehicleSpell` cancels when
   `seat->CanControl() && isMoving() && GetCastTime()`. A rider left on `MoveFollow` fires nothing all
