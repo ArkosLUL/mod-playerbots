@@ -1548,7 +1548,7 @@ personal burst is unrestricted.
 | `interrupter` | `1` while the bot holds Shadow Strike duty, `0` once the cast ends |
 | `pickup` | The pickup tank's step: `taunt` (off a non-tank), `attack`, `stepout` (out of Permafrost), `hold` (no leg), `drag` (a leg to the anchor), `submerge` (a leg to the submerge spot), `prestep` (the step round him before a leg), `subhold` (submerge window, no leg to the spot or round a patch) |
 | `subspot` | The pickup tank at each submerge-spot search: `x,y,z rN` (N the patch clearance found with) or `none` |
-| `defensive` | What a side tank or the Swarm tank cast, `covered` (one running), `none`, or `kept` (held for phase 3) |
+| `defensive` | What a side tank or the Swarm tank cast, `covered` (one running), `none`, or `kept` (a 120 s+ one held at 50%+ health) |
 | `coldself` | Phase 3 Penetrating Cold carrier's own save: the spell's name, `none` |
 | `burst` | Heroic burst gate: `hold` (40% or under), `behind` (released), `wait` (phase 3, its burrowers up), `open` |
 | `swarmheal` | Heroic phase 3 healer's pick: `self`, `risk` (a carrier at risk), `tank`, `spread` (a tank over a lower one with a heal on the way), `low`, `bare` (a carrier it can cover), `hot`, `cold`, `none` |
