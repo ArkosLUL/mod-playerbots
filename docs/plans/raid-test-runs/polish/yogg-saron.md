@@ -125,19 +125,17 @@ its stack are below, without waiting for the rest of the team (Q2, 2026-11-24). 
 re-derive phase 1 positions from the measured orbits, one navprobed position change per round, the melee core first,
 picked only when it ranks first. Phase 3 burn (Q3, 2026-11-25, built in r25): once Yogg is under 12%, ranged leave
 the Guardians and put everything on him; judged by Yogg's end and the time from 12% to the tank deaths.
+Misdirection on fresh Guardians (Q4, 2026-11-25, yes, for one window since B's fresh Guardians sat on a raider a
+median 1.5-2.0 s in window 44): a hunter puts Misdirection on a bot tank and shoots each fresh Guardian at its spawn,
+so it opens on the tank. Build in r27. The case: a hit ends the 4 s stasis and the redirected threat makes the tank
+its first victim; in window 44 most went to a melee at +4.0 s (first off a tank 5 / 14 of 8 / 20 to melee in B,
+13 / 6 of 18 / 11 in A, 14 / 13 of 20 / 20 in C), and a warrior's or bear's 30 yd taunt reaches them only as they
+walk in. Two hunters give 4 a minute against 6 spawns; hunters already cast Misdirection 5-13 times a phase 3, all
+onto one tank. Risk: a tank that leads by only three shots can still lose the Guardian to the healers' threat.
 Left alone by choice: the shaman's Reincarnation onto the stack, late Guardians woken by the back line, the raid
 working the next Guardian while a low one waits out its gap.
 
-**Open questions.**
-
-- **Q4, Misdirection on fresh Immortal Guardians** (round 24). Should a hunter put Misdirection on a bot tank and
-  shoot each fresh Guardian at its spawn, so it opens on the tank instead of the fixed melee? A hit ends the 4 s
-  stasis and the redirected threat makes the tank its first victim; today most go to a melee at +4.0 s (window 44:
-  first off a tank 5 / 14 of 8 / 20 to melee in B, 13 / 6 of 18 / 11 in A, 14 / 13 of 20 / 20 in C), and a
-  warrior's or bear's 30 yd taunt reaches them only as they walk in. Two hunters give 4 a minute against 6 spawns.
-  Hunters already cast Misdirection 5-13 times a phase 3, all onto one tank. The risk: a tank that leads by only
-  three shots can still lose the Guardian to the healers' threat. r25's condition holds: B's fresh Guardians sat on
-  a raider a median 1.5 s (uld2) and 2.0 s (uld5) in window 44. **Recommended: yes, for one window.**
+**Open questions.** None.
 
 ## Round 26 (2026-11-25, window 44 build 229335cd3: round 25)
 
